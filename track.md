@@ -211,3 +211,4 @@
 [2026-10-20 18:55] [Claude] [Remove: sidebar New chat row; top-left/right new chat button ab sirf chat hone par; phone install pass, publish baaki]
 [2026-10-20 19:08] [Claude] [Docs: ota build 29875035 AWS pe publish (new chat button change)]
 [2026-10-20 19:17] [Claude] [Init: GitHub private repo devxjitin/ultron-android banaya, description/topics set, code push]
+[2026-10-20 19:43] [Claude] [Docs: README professional rewrite (features, architecture, setup, AWS, OTA, privacy) + docs/screenshots (13 phone screenshots + hero); commit baaki]
