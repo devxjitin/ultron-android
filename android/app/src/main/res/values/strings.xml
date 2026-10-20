@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ultron</string>
+    <string name="accessibility_service_description">Lets the voice assistant press Back, Home and Recents, scroll, and, only for screen tools you switch on in Settings, read the visible screen text and tap or type when you ask. Text it reads is sent to Gemini for that request. Password fields are never read.</string>
+</resources>

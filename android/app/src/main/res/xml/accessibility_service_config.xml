@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets the voice assistant press Back/Home, scroll, and, only when a screen tool is switched on in
+     Settings, read the visible screen text and tap or type on the user's command. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/accessibility_service_description"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="100" />

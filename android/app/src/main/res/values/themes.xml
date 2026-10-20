@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Assistant" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">@color/assistant_background</item>
+        <item name="android:statusBarColor">@color/assistant_background</item>
+        <item name="android:navigationBarColor">@color/assistant_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- Shown for the cold-start window before Compose's first frame, via
+         androidx.core.splashscreen (installSplashScreen() in MainActivity). Set as the
+         activity's launch theme in the manifest, then MainActivity switches to Theme.Assistant. -->
+    <style name="Theme.Assistant.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/assistant_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
+        <item name="postSplashScreenTheme">@style/Theme.Assistant</item>
+    </style>
+</resources>

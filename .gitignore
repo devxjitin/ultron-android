@@ -1,0 +1,34 @@
+
+# Local reference frames and device verification artifacts
+.review/
+
+# Kotlin compiler crash logs and captured device-baseline logs
+.kotlin/
+baseline/
+
+# Local tool settings and generated native libraries
+.claude/
+android/app/objectbox-jni-*.dll
+
+# YouTube MCP Lambda build artifacts and secret token
+mcp/youtube-search/build/
+mcp/youtube-search/function.zip
+mcp/youtube-search/.access_token
+
+# MCP config containing secret URL
+.mcp.json
+
+mcp/google-workspace/function.zip
+mcp/google-workspace/.access_token
+
+mcp/ultron-updates/function.zip
+mcp/ultron-updates/.access_token
+
+# Built APKs and device screenshots
+*.apk
+phone_ss.png
+
+# Generated native libs and Python caches
+android/app/libobjectbox-jni-*.so
+__pycache__/
+*.pyc

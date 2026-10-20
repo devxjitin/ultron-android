@@ -1,0 +1,32 @@
+# Copy this file to local.properties (same folder) and fill in your values.
+# local.properties is gitignored and must never be committed.
+
+sdk.dir=/path/to/Android/sdk
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Release signing (needed only for `assembleRelease` / `bundleRelease`).
+# NOTE: this project's actual existing keystore is keystore/nivi-release.jks (see
+# android/local.properties, gitignored) -- do not rename it, that would break release
+# signing continuity. The example below is only for a brand-new keystore on a fresh setup.
+# Generate a new keystore with:
+#   keytool -genkeypair -v -keystore keystore/assistant-release.jks -storetype PKCS12 \
+#     -alias assistant-release -keyalg RSA -keysize 2048 -validity 10000
+# Keep the keystore file and these passwords out of git and back them up somewhere safe --
+# losing them means you can never publish an update to this app under the same signature.
+RELEASE_STORE_FILE=keystore/assistant-release.jks
+RELEASE_STORE_PASSWORD=your_store_password_here
+RELEASE_KEY_ALIAS=assistant-release
+RELEASE_KEY_PASSWORD=your_key_password_here
+
+# Public client id of a GitHub OAuth App (Device Flow enabled) for "Sign in with GitHub". Not a secret.
+GITHUB_CLIENT_ID=
+
+# Private URL (includes its access token) of your YouTube MCP server; lets the Marketplace add it in one tap.
+# Ends up inside the APK, so do not share the APK. Blank = the app asks you to paste the URL.
+YOUTUBE_MCP_URL=
+
+# Base URL (includes its access token) of your Google Workspace MCP server; the Google connectors use it.
+GOOGLE_MCP_URL=
+
+# Update server on AWS (includes its access token); lets the app update itself. See scripts/publish-update.ps1.
+UPDATE_URL=
