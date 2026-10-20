@@ -213,3 +213,5 @@
 [2026-10-20 19:17] [Claude] [Init: GitHub private repo devxjitin/ultron-android banaya, description/topics set, code push]
 [2026-10-20 19:43] [Claude] [Docs: README professional rewrite (features, architecture, setup, AWS, OTA, privacy) + docs/screenshots (13 phone screenshots + hero); commit baaki]
 [2026-10-20 19:46] [Claude] [Update: GitHub repo ultron-android public kiya (secrets scan clean, sirf bucket naam me AWS account id)]
+[2026-10-20 21:11] [Claude] [Update: AWS hardening - log retention 30d, S3 versioning+lifecycle, project tags, own role for google Lambda]
+[2026-10-20 21:11] [Claude] [Add: infra/ultron.yaml CloudFormation template for the whole backend (validated, not deployed)]

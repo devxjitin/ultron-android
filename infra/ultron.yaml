@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Ultron backend - three MCP Lambdas (Function URLs) and the private OTA update bucket.
+# Rebuild from scratch in a new account/region. Existing resources were created by hand with the same
+# settings; do not deploy this over them (names would clash). Deploy with:
+#   aws cloudformation deploy --template-file infra/ultron.yaml --stack-name ultron --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides CodeBucket=<bucket holding the zips> GoogleToken=... UpdatesToken=... YoutubeToken=...
+
+Parameters:
+  CodeBucket: { Type: String, Description: "S3 bucket that holds the three Lambda zips (google-workspace-mcp.zip, ultron-updates.zip, yt-search-mcp.zip)" }
+  GoogleToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for google-workspace-mcp" }
+  UpdatesToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for ultron-updates" }
+  YoutubeToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for yt-search-mcp" }
+
+Resources:
+  UpdatesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "ultron-app-updates-${AWS::AccountId}"
+      AccelerateConfiguration: { AccelerationStatus: Enabled }
+      VersioningConfiguration: { Status: Enabled }
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, IgnorePublicAcls: true, BlockPublicPolicy: true, RestrictPublicBuckets: true }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 }, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 } }
+      Tags: [{ Key: project, Value: ultron }]
+
+  GoogleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: google-workspace-mcp-role
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+      Tags: [{ Key: project, Value: ultron }]
+
+  YoutubeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: yt-search-mcp-role
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+      Tags: [{ Key: project, Value: ultron }]
+
+  UpdatesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ultron-updates-role
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+      Policies:
+        - PolicyName: read-releases
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: [{ Effect: Allow, Action: "s3:GetObject", Resource: !Sub "${UpdatesBucket.Arn}/*" }]
+      Tags: [{ Key: project, Value: ultron }]
+
+  GoogleFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: google-workspace-mcp
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt GoogleRole.Arn
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: google-workspace-mcp.zip }
+      Environment: { Variables: { ACCESS_TOKEN: !Ref GoogleToken } }
+      Tags: [{ Key: project, Value: ultron }]
+  GoogleLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /aws/lambda/google-workspace-mcp, RetentionInDays: 30 }
+  GoogleUrl:
+    Type: AWS::Lambda::Url
+    Properties: { TargetFunctionArn: !GetAtt GoogleFunction.Arn, AuthType: NONE }
+  GooglePermission:
+    Type: AWS::Lambda::Permission
+    Properties: { FunctionName: !Ref GoogleFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
+
+  UpdatesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ultron-updates
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt UpdatesRole.Arn
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: ultron-updates.zip }
+      Environment: { Variables: { ACCESS_TOKEN: !Ref UpdatesToken, BUCKET: !Ref UpdatesBucket } }
+      Tags: [{ Key: project, Value: ultron }]
+  UpdatesLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /aws/lambda/ultron-updates, RetentionInDays: 30 }
+  UpdatesUrl:
+    Type: AWS::Lambda::Url
+    Properties: { TargetFunctionArn: !GetAtt UpdatesFunction.Arn, AuthType: NONE }
+  UpdatesPermission:
+    Type: AWS::Lambda::Permission
+    Properties: { FunctionName: !Ref UpdatesFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
+
+  YoutubeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: yt-search-mcp
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 30
+      Role: !GetAtt YoutubeRole.Arn
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: yt-search-mcp.zip }
+      Environment: { Variables: { ACCESS_TOKEN: !Ref YoutubeToken, HOME: /tmp } }
+      Tags: [{ Key: project, Value: ultron }]
+  YoutubeLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /aws/lambda/yt-search-mcp, RetentionInDays: 30 }
+  YoutubeUrl:
+    Type: AWS::Lambda::Url
+    Properties: { TargetFunctionArn: !GetAtt YoutubeFunction.Arn, AuthType: NONE }
+  YoutubePermission:
+    Type: AWS::Lambda::Permission
+    Properties: { FunctionName: !Ref YoutubeFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
+
+Outputs:
+  GoogleMcpUrl: { Value: !Sub "${GoogleUrl.FunctionUrl}${GoogleToken}" }
+  YoutubeMcpUrl: { Value: !Sub "${YoutubeUrl.FunctionUrl}${YoutubeToken}" }
+  UpdateUrl: { Value: !Sub "${UpdatesUrl.FunctionUrl}${UpdatesToken}/latest" }
+  Bucket: { Value: !Ref UpdatesBucket }
