@@ -21,10 +21,6 @@ RELEASE_KEY_PASSWORD=your_key_password_here
 # Public client id of a GitHub OAuth App (Device Flow enabled) for "Sign in with GitHub". Not a secret.
 GITHUB_CLIENT_ID=
 
-# Private URL (includes its access token) of your YouTube MCP server; lets the Marketplace add it in one tap.
-# Ends up inside the APK, so do not share the APK. Blank = the app asks you to paste the URL.
-YOUTUBE_MCP_URL=
-
 # Base URL (includes its access token) of your Google Workspace MCP server; the Google connectors use it.
 GOOGLE_MCP_URL=
 

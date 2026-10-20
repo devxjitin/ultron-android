@@ -60,13 +60,6 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
 
     fun clearGithubToken(): Boolean = write { it.remove(KEY_GITHUB_TOKEN) }
 
-    /** Full URL of the user's YouTube MCP server; the secret access token is part of it. */
-    fun getYoutubeUrl(): String? = read(KEY_YOUTUBE_URL)
-
-    fun setYoutubeUrl(url: String): Boolean = write { it.putString(KEY_YOUTUBE_URL, url.trim()) }
-
-    fun clearYoutubeUrl(): Boolean = write { it.remove(KEY_YOUTUBE_URL) }
-
     /** Azure OpenAI settings for the typed chat; the key is encrypted like the others. */
     fun getAzureConfig(): AzureConfig {
         val mode = runCatching { AzureMode.valueOf(read(KEY_AZURE_MODE).orEmpty()) }.getOrDefault(AzureMode.OFF)
@@ -106,7 +99,6 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
         const val KEY_API_KEY = "gemini_api_key"
         const val KEY_EMBEDDING_API_KEY = "gemini_embedding_api_key"
         const val KEY_GITHUB_TOKEN = "github_token"
-        const val KEY_YOUTUBE_URL = "youtube_mcp_url"
         const val KEY_AZURE_MODE = "azure_mode"
         const val KEY_AZURE_ENDPOINT = "azure_endpoint"
         const val KEY_AZURE_KEY = "azure_api_key"

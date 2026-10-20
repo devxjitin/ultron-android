@@ -21,11 +21,11 @@ enum class ToolGroup(val label: String) {
     CONTACTS_CALENDAR("Contacts and calendar"),
     LOCATION("Location and maps"),
     NOTES("Notes"),
-    WEB("Web"),
     SEARCH("Web search"),
+    WEB("Internet"),
+    YOUTUBE("YouTube"),
     NAVIGATION("Navigation and screen control"),
     SCREEN("Screen reading and tapping (off by default)"),
-    AUTOMATION("Automation"),
     MEDIA("Photos"),
     HEALTH("Sensors and health"),
     NOTIFICATIONS("Private data (off by default)")
@@ -233,11 +233,6 @@ enum class DeviceTool(
         "Opens an installed app by its name, for example Camera, Calculator or YouTube.",
         listOf(ToolParam("name", ToolParamType.STRING, "The app name as the user said it."))
     ),
-    PLAY_MUSIC(
-        ToolGroup.APPS, "play_music", "Play music", "Play a song or artist in the music app.",
-        "Searches and plays a song, artist or album in the phone's music app.",
-        listOf(ToolParam("query", ToolParamType.STRING, "Song, artist or album."))
-    ),
 
     OPEN_CAMERA(
         ToolGroup.APPS, "open_camera", "Open camera", "Open the camera for a photo or video.",
@@ -359,6 +354,10 @@ enum class DeviceTool(
         listOf(ToolParam("id", ToolParamType.INTEGER, "Note id."))
     ),
 
+    SPEED_TEST(
+        ToolGroup.WEB, "test_internet_speed", "Internet speed test", "Measure download speed (uses about 5 MB of data).",
+        "Downloads a 5 MB test file and reports the download speed in Mbps."
+    ),
     WEB_SEARCH(
         ToolGroup.SEARCH, "web_search", "Search the web", "Look up the latest information with DuckDuckGo.",
         "Searches the web with DuckDuckGo and returns the top results with title, address and excerpt. " +
@@ -371,86 +370,56 @@ enum class DeviceTool(
                 choices = listOf("day", "week", "month", "year"))
         )
     ),
-    WEATHER(
-        ToolGroup.WEB, "get_weather", "Weather", "Tell the weather for a city or here.",
-        "Returns current weather and a short forecast for a city, or for the phone's location when no place is given.",
-        listOf(ToolParam("place", ToolParamType.STRING, "City name. Leave out for the current location.", required = false))
-    ),
-    OPEN_URL(
-        ToolGroup.WEB, "open_url", "Open a website", "Open a web address in the browser.",
-        "Opens an http or https address in the browser.",
-        listOf(ToolParam("url", ToolParamType.STRING, "Full web address."))
-    ),
-    SHARE_TEXT(
-        ToolGroup.WEB, "share_text", "Share text", "Open the share sheet with some text.",
-        "Opens the Android share sheet with the text so the user picks where to send it.",
-        listOf(ToolParam("text", ToolParamType.STRING, "Text to share."))
-    ),
-    SPEED_TEST(
-        ToolGroup.WEB, "test_internet_speed", "Internet speed test", "Measure download speed (uses about 5 MB of data).",
-        "Downloads a 5 MB test file and reports the download speed in Mbps."
-    ),
-    WEBSITE_STATUS(
-        ToolGroup.WEB, "check_website_status", "Website status", "Check if a website is up and how fast it answers.",
-        "Checks whether a website is reachable and reports the HTTP status and response time.",
-        listOf(ToolParam("url", ToolParamType.STRING, "Website address or domain."))
-    ),
-    EXCHANGE_RATE(
-        ToolGroup.WEB, "get_exchange_rate", "Currency rates", "Convert between currencies.",
-        "Returns the current exchange rate and converted amount between two currencies, for example USD to INR.",
+    YOUTUBE_SEARCH(
+        ToolGroup.YOUTUBE, "youtube_search", "Search YouTube", "Search YouTube videos.",
+        "Searches YouTube and returns the top videos with title, channel, duration, views and address.",
         listOf(
-            ToolParam("from", ToolParamType.STRING, "Three-letter source currency code."),
-            ToolParam("to", ToolParamType.STRING, "Three-letter target currency code."),
-            ToolParam("amount", ToolParamType.INTEGER, "Amount to convert. Default 1.", required = false)
+            ToolParam("query", ToolParamType.STRING, "What to search for."),
+            ToolParam("limit", ToolParamType.INTEGER, "How many videos, 1-25. Default 10.", required = false)
         )
     ),
-    NEWS(
-        ToolGroup.WEB, "get_news_headlines", "News headlines", "Read the latest news headlines.",
-        "Returns the latest news headlines, optionally about a topic.",
-        listOf(ToolParam("topic", ToolParamType.STRING, "Optional topic or keyword.", required = false))
+    YOUTUBE_INFO(
+        ToolGroup.YOUTUBE, "youtube_video_info", "Video details", "Get the details of a YouTube video.",
+        "Returns the title, channel, upload date, duration, views, likes and description of a YouTube video.",
+        listOf(ToolParam("video", ToolParamType.STRING, "YouTube link or 11-character video id."))
     ),
-    FETCH_WEBPAGE(
-        ToolGroup.WEB, "fetch_webpage", "Read a web page", "Fetch a web page's text to summarize it.",
-        "Downloads a web page and returns its plain text so it can be summarized or answered from.",
-        listOf(ToolParam("url", ToolParamType.STRING, "Full http or https address."))
+    YOUTUBE_TRANSCRIPT(
+        ToolGroup.YOUTUBE, "youtube_transcript", "Video transcript", "Read the captions of a YouTube video.",
+        "Returns the timestamped captions of a YouTube video (manual ones first, then automatic), " +
+            "so it can be summarized or answered from.",
+        listOf(
+            ToolParam("video", ToolParamType.STRING, "YouTube link or 11-character video id."),
+            ToolParam("language", ToolParamType.STRING, "Caption language code, for example en or hi. Default en.", required = false)
+        )
+    ),
+    YOUTUBE_CHANNEL(
+        ToolGroup.YOUTUBE, "youtube_list_videos", "Channel or playlist videos", "List the videos of a channel or playlist.",
+        "Lists the recent videos of a YouTube channel (@handle or address) or of a playlist (address or id).",
+        listOf(
+            ToolParam("source", ToolParamType.STRING, "@handle, channel or playlist address, or playlist id."),
+            ToolParam("limit", ToolParamType.INTEGER, "How many videos, 1-50. Default 20.", required = false)
+        )
+    ),
+    YOUTUBE_DOWNLOAD_OPTIONS(
+        ToolGroup.YOUTUBE, "youtube_download_options", "Download options", "List the formats and qualities a video can be downloaded in.",
+        "Lists what a YouTube video can be downloaded as: audio only, or video in each picture height it offers " +
+            "(for example 360p, 720p, 1080p, 4K, 8K) with size. Always call it before a download and ask the user which " +
+            "one they want, unless they already named the format and quality.",
+        listOf(ToolParam("video", ToolParamType.STRING, "YouTube link or 11-character video id."))
+    ),
+    DOWNLOAD_YOUTUBE(
+        ToolGroup.YOUTUBE, "download_youtube_video", "Download YouTube video", "Save a YouTube video or its audio to Downloads/Ultron.",
+        "Downloads a YouTube video (or only its audio) to the phone's Downloads/Ultron folder, in the format and quality " +
+            "the user chose from youtube_download_options. It runs in the background and a notification shows progress, so " +
+            "tell the user it has started rather than waiting. Use only when the user asks to download or save a video. " +
+            "Find the video first with youtube_search if the user gave a title.",
+        listOf(
+            ToolParam("video", ToolParamType.STRING, "YouTube link or 11-character video id."),
+            ToolParam("kind", ToolParamType.STRING, "video or audio. If left out, the available options are returned instead.", required = false, choices = listOf("video", "audio")),
+            ToolParam("height", ToolParamType.INTEGER, "Picture height for video, for example 360, 720, 1080, 1440, 2160 (4K) or 4320 (8K). The closest height the video has is used.", required = false)
+        )
     ),
 
-    SCHEDULE_ACTION(
-        ToolGroup.AUTOMATION, "schedule_action", "Schedule an action", "Run a tool later or repeatedly (result comes as a notification).",
-        "Schedules another tool to run later, once or repeating, even when the assistant is idle; the result arrives as a notification. " +
-            "Give either minutes or at_time. Only tools that need no screen are allowed.",
-        automationToolParams() + listOf(
-            ToolParam("minutes", ToolParamType.INTEGER, "Run after this many minutes, 1-10080.", required = false),
-            ToolParam("at_time", ToolParamType.STRING, "Run at the next HH:MM (24-hour), today or tomorrow.", required = false),
-            ToolParam("repeat_minutes", ToolParamType.INTEGER, "Repeat every this many minutes, 15-10080 (1440 is daily).", required = false)
-        )
-    ),
-    LIST_SCHEDULED(
-        ToolGroup.AUTOMATION, "list_scheduled_actions", "List scheduled actions", "Show everything that is scheduled.",
-        "Lists the scheduled actions with their ids and times."
-    ),
-    CANCEL_SCHEDULED(
-        ToolGroup.AUTOMATION, "cancel_scheduled_action", "Cancel scheduled action", "Cancel a scheduled action.",
-        "Cancels a scheduled action by id. Find the id with list_scheduled_actions.",
-        listOf(ToolParam("id", ToolParamType.INTEGER, "Scheduled action id."))
-    ),
-    ADD_RULE(
-        ToolGroup.AUTOMATION, "add_automation_rule", "Add automation rule", "Run a tool automatically when something happens.",
-        "Creates a rule that runs a tool whenever a phone event happens, for example when the charger is connected. " +
-            "It works while the assistant app is running. The result arrives as a notification.",
-        listOf(ToolParam("event", ToolParamType.STRING, "What triggers the rule.", choices =
-            listOf("charger_connected", "charger_disconnected", "battery_low", "headphones_plugged", "screen_unlocked"))) +
-            automationToolParams()
-    ),
-    LIST_RULES(
-        ToolGroup.AUTOMATION, "list_automation_rules", "List automation rules", "Show all automation rules.",
-        "Lists the automation rules with their ids."
-    ),
-    DELETE_RULE(
-        ToolGroup.AUTOMATION, "delete_automation_rule", "Delete automation rule", "Delete an automation rule.",
-        "Deletes an automation rule by id. Find the id with list_automation_rules.",
-        listOf(ToolParam("id", ToolParamType.INTEGER, "Rule id."))
-    ),
     RECENT_PHOTOS(
         ToolGroup.MEDIA, "get_recent_photos", "Recent photos", "Count recent photos and list their file names.",
         "Counts the photos taken recently and lists the newest file names with their dates. It cannot see the picture content.",

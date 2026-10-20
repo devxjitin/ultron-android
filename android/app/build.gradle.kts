@@ -20,9 +20,6 @@ val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
-// Private URL (with its access token) of the user's YouTube MCP server, so the Marketplace can add it in one tap.
-// Add: YOUTUBE_MCP_URL=https://...  to android/local.properties. Blank = the connector asks the user to paste it.
-val youtubeMcpUrl: String = localProperties.getProperty("YOUTUBE_MCP_URL", "")
 // Base URL (with its access token) of the Google Workspace MCP server on AWS that the Google connectors talk to.
 // Add: GOOGLE_MCP_URL=https://...  to android/local.properties.
 val googleMcpUrl: String = localProperties.getProperty("GOOGLE_MCP_URL", "")
@@ -65,7 +62,6 @@ android {
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
-        buildConfigField("String", "YOUTUBE_MCP_URL", "\"$youtubeMcpUrl\"")
         buildConfigField("String", "GOOGLE_MCP_URL", "\"$googleMcpUrl\"")
         buildConfigField("String", "AZURE_ENDPOINT", "\"$azureEndpoint\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
@@ -114,6 +110,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -149,6 +146,8 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("androidx.security:security-crypto:1.0.0")
     // Google's own sign-in/consent screen for the Google Workspace connectors (Calendar, Gmail, Drive...).

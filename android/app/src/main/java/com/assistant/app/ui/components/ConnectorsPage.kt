@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Favorite
@@ -125,8 +126,6 @@ private sealed interface Kind {
     /** Tools that run on this phone; [permissions] and [access] are what Android must allow. */
     data class Local(val permissions: List<String> = emptyList(), val access: Access = Access.NONE) : Kind
     data object GitHub : Kind
-    /** The user's own YouTube MCP server: connecting means pasting its private URL. */
-    data object YouTube : Kind
     /** A Google Workspace service: adding it opens Google's account picker and permission screen. */
     data class Google(val service: GoogleService) : Kind
     /** An online service that needs no sign-in: connecting just switches its tools on. */
@@ -181,10 +180,10 @@ private val GroupStyles: Map<ToolGroup, GroupStyle> = mapOf(
     ToolGroup.ALARMS to GroupStyle("Alarms & timers", "Set alarms, timers and reminders.", Icons.Outlined.Alarm, Color(0xFFFF7043)),
     ToolGroup.CALLS to GroupStyle("Calls & email", "Place phone calls straight away and prepare email drafts (you press send).", Icons.Outlined.Call, Color(0xFF66BB6A)),
     ToolGroup.NOTES to GroupStyle("Notes", "Create, search and delete quick notes kept on this device.", Icons.Outlined.EditNote, Color(0xFFFFCA28)),
-    ToolGroup.WEB to GroupStyle("Web & news", "Web search, weather, news, exchange rates, website checks and reading web pages.", Icons.Outlined.Language, Color(0xFF29B6F6)),
+    ToolGroup.WEB to GroupStyle("Internet", "Test your internet speed.", Icons.Outlined.Language, Color(0xFF29B6F6)),
+    ToolGroup.YOUTUBE to GroupStyle("YouTube", "Search videos, get details and transcripts, list a channel's videos and download videos or audio to Downloads/Ultron. Runs on the phone.", Icons.Outlined.PlayCircle, Color(0xFFFF0000)),
     ToolGroup.NAVIGATION to GroupStyle("Phone navigation", "Back, home, recents, notification shade, scrolling, lock screen and screenshots.", Icons.Outlined.Explore, Color(0xFF8D6E63), Access.ACCESSIBILITY),
     ToolGroup.SCREEN to GroupStyle("Screen control", "Read what is on screen, tap, type and wait for text. Sends screen text to Gemini.", Icons.Outlined.TouchApp, Color(0xFFEC407A), Access.ACCESSIBILITY),
-    ToolGroup.AUTOMATION to GroupStyle("Scheduled actions", "Run tools later, on repeat, or when the phone plugs in, unlocks or runs low.", Icons.Outlined.Schedule, Color(0xFF5C6BC0)),
     ToolGroup.HEALTH to GroupStyle("Sensors & health", "Step count and room light level.", Icons.Outlined.Favorite, Color(0xFFEF5350)),
     ToolGroup.NOTIFICATIONS to GroupStyle("App usage", "See which apps you use most. Sends app names to Gemini.", Icons.Outlined.QueryStats, Color(0xFF78909C), Access.USAGE_ACCESS)
 )
@@ -198,11 +197,6 @@ private val DuckDuckGoConnector = Connector(
 private val GitHubConnector = Connector(
     "github", "GitHub", "Ask about your repositories, issues, pull requests and code.",
     "Sign in with GitHub", Category.DEVELOPER, Icons.Outlined.Code, Color(0xFF6E5494), Kind.GitHub
-)
-
-private val YouTubeConnector = Connector(
-    "youtube", "YouTube", "Search YouTube, get video details and transcripts, and list a channel's or playlist's videos.",
-    "One tap, no sign-in", Category.MEDIA, Icons.Outlined.PlayCircle, Color(0xFFFF0000), Kind.YouTube
 )
 
 private fun googleConnector(service: GoogleService, description: String, category: Category, icon: ImageVector, color: Color) =
@@ -231,7 +225,7 @@ private val Catalog: List<Connector> = run {
         else Connector("group_${group.name}", style.name, style.description, PHONE, Category.AUTOMATION, style.icon, style.color,
             Kind.Local(access = style.access), tools)
     }
-    NamedConnectors + DuckDuckGoConnector + GitHubConnector + YouTubeConnector + GoogleConnectors + grouped
+    NamedConnectors + DuckDuckGoConnector + GitHubConnector + GoogleConnectors + grouped
 }
 
 @Composable
@@ -250,12 +244,6 @@ fun ConnectorsPage(
     githubTools: List<McpToolSpec>,
     enabledGithubTools: Set<String>,
     onGithubToolToggled: (String, Boolean) -> Unit,
-    youtubeHost: String,
-    youtubeTools: List<McpToolSpec>,
-    enabledYoutubeTools: Set<String>,
-    onConnectYoutube: (String) -> Unit,
-    onDisconnectYoutube: () -> Unit,
-    onYoutubeToolToggled: (String, Boolean) -> Unit,
     googleAccounts: Map<String, String>,
     googleTools: Map<String, List<McpToolSpec>>,
     enabledGoogleTools: Map<String, Set<String>>,
@@ -282,13 +270,11 @@ fun ConnectorsPage(
     var category by remember { mutableStateOf<Category?>(null) }
     var setupNeeded by remember { mutableStateOf(false) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
-    var youtubeUrlDialog by remember { mutableStateOf(false) }
 
     fun accessGranted(kind: Kind.Local): Boolean = localAccessGranted(context, kind, resumeTick)
 
     fun connected(c: Connector): Boolean = when (val kind = c.kind) {
         is Kind.GitHub -> githubLogin.isNotEmpty()
-        is Kind.YouTube -> youtubeHost.isNotEmpty()
         is Kind.Google -> kind.service.id in googleAccounts
         is Kind.Local -> c.tools.any { it in enabledTools } && accessGranted(kind)
         is Kind.Online -> c.tools.any { it in enabledTools }
@@ -300,7 +286,6 @@ fun ConnectorsPage(
     fun connect(c: Connector) {
         when (val kind = c.kind) {
             is Kind.GitHub -> if (BuildConfig.GITHUB_CLIENT_ID.isNotBlank()) onStartGithubSignIn() else setupNeeded = true
-            is Kind.YouTube -> if (BuildConfig.YOUTUBE_MCP_URL.isNotBlank()) onConnectYoutube(BuildConfig.YOUTUBE_MCP_URL) else youtubeUrlDialog = true
             is Kind.Google -> onConnectGoogle(kind.service)
             is Kind.Online -> onToolsEnabled(c.tools, true, c.name)
             is Kind.Local -> {
@@ -339,12 +324,11 @@ fun ConnectorsPage(
             subtitle = when {
                 broken -> "Sign-in stopped working"
                 c.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
-                c.kind is Kind.YouTube && youtubeHost.isNotEmpty() -> "Connected to $youtubeHost"
                 c.kind is Kind.Google && c.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[c.kind.service.id]}"
                 else -> c.subtitle
             },
             // The Marketplace only adds; per-tool switches and removal live on the Connectors page.
-            rows = if (marketplace) emptyList() else toolRows(c, enabledTools, githubTools, enabledGithubTools, youtubeTools, enabledYoutubeTools, googleTools, enabledGoogleTools),
+            rows = if (marketplace) emptyList() else toolRows(c, enabledTools, githubTools, enabledGithubTools, googleTools, enabledGoogleTools),
             connectLabel = if (marketplace) "Add" else "Connect",
             onRemove = { disconnecting = c },
             connectedLabel = if (marketplace) "Added" else "Connected",
@@ -353,7 +337,6 @@ fun ConnectorsPage(
             onRowToggled = { id, on ->
                 when (val kind = c.kind) {
                     is Kind.GitHub -> onGithubToolToggled(id, on)
-                    is Kind.YouTube -> onYoutubeToolToggled(id, on)
                     is Kind.Google -> onGoogleToolToggled(kind.service, id, on)
                     else -> DeviceTool.fromFunctionName(id)?.let { onToolToggled(it, on) }
                 }
@@ -361,7 +344,6 @@ fun ConnectorsPage(
             onAllToggled = { on ->
                 when (val kind = c.kind) {
                     is Kind.GitHub -> githubTools.forEach { onGithubToolToggled(it.name, on) }
-                    is Kind.YouTube -> youtubeTools.forEach { onYoutubeToolToggled(it.name, on) }
                     is Kind.Google -> googleTools[kind.service.id].orEmpty().forEach { onGoogleToolToggled(kind.service, it.name, on) }
                     else -> onToolsEnabled(c.tools, on, c.name)
                 }
@@ -448,7 +430,6 @@ fun ConnectorsPage(
 
     if (deviceCode != null) GithubSignInDialog(deviceCode, onCancelGithubSignIn)
     if (setupNeeded) GithubSetupDialog { setupNeeded = false }
-    if (youtubeUrlDialog) YoutubeUrlDialog(onConnect = { onConnectYoutube(it); youtubeUrlDialog = false }, onCancel = { youtubeUrlDialog = false })
     disconnecting?.let { c ->
         AlertDialog(
             onDismissRequest = { disconnecting = null },
@@ -457,7 +438,6 @@ fun ConnectorsPage(
                 Text(
                     when (c.kind) {
                         is Kind.GitHub -> "The saved sign-in is removed from this device. You can connect again any time."
-                        is Kind.YouTube -> "The saved server URL is removed from this device. You can paste it again any time."
                         is Kind.Google -> "The account is removed from this app. You can add it again from Marketplace. To fully revoke access, remove the app in your Google account's security settings."
                         is Kind.Online -> "The assistant stops using this service."
                         is Kind.Local -> "The assistant stops using these tools. Android's own permission or access stays until you remove it in the phone's settings."
@@ -468,7 +448,6 @@ fun ConnectorsPage(
                 TextButton(onClick = {
                     when (c.kind) {
                         is Kind.GitHub -> onDisconnectGithub()
-                        is Kind.YouTube -> onDisconnectYoutube()
                         is Kind.Google -> onDisconnectGoogle(c.kind.service)
                         is Kind.Local, is Kind.Online -> onToolsEnabled(c.tools, false, c.name)
                                 }
@@ -503,13 +482,10 @@ private fun toolRows(
     enabledTools: Set<DeviceTool>,
     githubTools: List<McpToolSpec>,
     enabledGithubTools: Set<String>,
-    youtubeTools: List<McpToolSpec>,
-    enabledYoutubeTools: Set<String>,
     googleTools: Map<String, List<McpToolSpec>>,
     enabledGoogleTools: Map<String, Set<String>>
 ): List<ToolRow> = when (val kind = connector.kind) {
     is Kind.GitHub -> mcpToolRows(githubTools, enabledGithubTools)
-    is Kind.YouTube -> mcpToolRows(youtubeTools, enabledYoutubeTools)
     is Kind.Google -> mcpToolRows(googleTools[kind.service.id].orEmpty(), enabledGoogleTools[kind.service.id].orEmpty())
     else -> connector.tools.map { ToolRow(it.functionName, it.label, it.hint, it in enabledTools) }
 }
@@ -699,43 +675,6 @@ private fun GithubSignInDialog(code: GithubDeviceCode, onCancel: () -> Unit) {
                 }
             }) { Text("Open GitHub again") }
         },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } }
-    )
-}
-
-/** Asks for the private URL of the user's YouTube MCP server; it is stored encrypted and never shown again. */
-@Composable
-private fun YoutubeUrlDialog(onConnect: (String) -> Unit, onCancel: () -> Unit) {
-    var url by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Connect YouTube") },
-        text = {
-            Column {
-                Text(
-                    "Paste the full https:// URL of your YouTube MCP server. It contains a private token, so do not share it.",
-                    color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 19.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                TextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    placeholder = { Text("https://...", color = AssistantTextMuted) },
-                    singleLine = true,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = AssistantFieldBackground,
-                        unfocusedContainerColor = AssistantFieldBackground,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = AssistantAccent,
-                        focusedTextColor = AssistantTextPrimary,
-                        unfocusedTextColor = AssistantTextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = { onConnect(url) }, enabled = url.isNotBlank()) { Text("Connect") } },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } }
     )
 }

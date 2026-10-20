@@ -110,10 +110,6 @@ data class AssistantSettings(
     val githubTools: List<McpToolSpec> = emptyList(),
     /** Names of [githubTools] the user has switched on. */
     val enabledGithubTools: Set<String> = emptySet(),
-    /** Host of the YouTube MCP server the user connected (never the secret URL); empty when not connected. */
-    val youtubeHost: String = "",
-    val youtubeTools: List<McpToolSpec> = emptyList(),
-    val enabledYoutubeTools: Set<String> = emptySet(),
     /** Google account each added Google service is signed in with, by [GoogleService.id]; a missing id means not added. */
     val googleAccounts: Map<String, String> = emptyMap(),
     val googleTools: Map<String, List<McpToolSpec>> = emptyMap(),
@@ -153,9 +149,6 @@ class AppSettingsStore(private val context: Context) {
     private val githubLoginKey = stringPreferencesKey("github_login")
     private val githubToolsKey = stringPreferencesKey("github_mcp_tools")
     private val githubToolOverridesKey = stringSetPreferencesKey("github_tool_overrides")
-    private val youtubeHostKey = stringPreferencesKey("youtube_host")
-    private val youtubeToolsKey = stringPreferencesKey("youtube_mcp_tools")
-    private val youtubeToolOverridesKey = stringSetPreferencesKey("youtube_tool_overrides")
     private fun googleEmailKey(s: GoogleService) = stringPreferencesKey("google_${s.id}_account")
     private fun googleToolsKey(s: GoogleService) = stringPreferencesKey("google_${s.id}_mcp_tools")
     private fun googleOverridesKey(s: GoogleService) = stringSetPreferencesKey("google_${s.id}_tool_overrides")
@@ -192,9 +185,6 @@ class AppSettingsStore(private val context: Context) {
             githubLogin = prefs[githubLoginKey].orEmpty(),
             githubTools = decodeMcpTools(prefs[githubToolsKey]),
             enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey]), prefs[githubToolOverridesKey]),
-            youtubeHost = prefs[youtubeHostKey].orEmpty(),
-            youtubeTools = decodeMcpTools(prefs[youtubeToolsKey]),
-            enabledYoutubeTools = effectiveMcpTools(decodeMcpTools(prefs[youtubeToolsKey]), prefs[youtubeToolOverridesKey]),
             googleAccounts = GoogleService.entries.mapNotNull { s -> prefs[googleEmailKey(s)]?.takeIf { it.isNotBlank() }?.let { s.id to it } }.toMap(),
             googleTools = GoogleService.entries.associate { it.id to decodeMcpTools(prefs[googleToolsKey(it)]) },
             enabledGoogleTools = GoogleService.entries.associate {
@@ -249,23 +239,6 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setGithubLogin(login: String?) {
         context.settingsDataStore.edit {
             if (login.isNullOrBlank()) it.remove(githubLoginKey) else it[githubLoginKey] = login
-        }
-    }
-
-    suspend fun setYoutubeTools(tools: List<McpToolSpec>) {
-        context.settingsDataStore.edit { if (tools.isEmpty()) it.remove(youtubeToolsKey) else it[youtubeToolsKey] = encodeMcpTools(tools) }
-    }
-
-    suspend fun setYoutubeToolEnabled(name: String, enabled: Boolean) {
-        context.settingsDataStore.edit { prefs ->
-            val others = (prefs[youtubeToolOverridesKey] ?: emptySet()).filterNot { it.startsWith("$name=") }
-            prefs[youtubeToolOverridesKey] = (others + "$name=${if (enabled) 1 else 0}").toSet()
-        }
-    }
-
-    suspend fun setYoutubeHost(host: String?) {
-        context.settingsDataStore.edit {
-            if (host.isNullOrBlank()) it.remove(youtubeHostKey) else it[youtubeHostKey] = host
         }
     }
 

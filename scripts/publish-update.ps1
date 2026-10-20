@@ -7,7 +7,11 @@ Needs: Docker running, and `aws login` done on this laptop.
 param(
     [string]$Notes = "",
     [string]$VersionName = "1.0.0",
-    [string]$Bucket = "ultron-app-updates-143920986615"
+    [string]$Bucket = "ultron-app-updates-143920986615",
+    # Local Android SDK and JDK make the build about twice as fast as Docker; Docker is the fallback.
+    [string]$Sdk = "$env:USERPROFILE\Android\Sdk",
+    [string]$Jdk = $(if ($env:JAVA_HOME) { $env:JAVA_HOME } else { "$env:USERPROFILE
+ea_tools\jdk-21.0.12.1+1" })
 )
 $ErrorActionPreference = "Stop"
 $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
@@ -16,11 +20,24 @@ $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
 $versionCode = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
 
 Write-Host "Building version $VersionName (code $versionCode)..."
-docker run --rm -v "${android}:/workspace" -v assistant-gradle-cache:/root/.gradle -v assistant-android-home:/root/.android `
-    -w /workspace assistant-android-build ./gradlew assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --console=plain -q
-if ($LASTEXITCODE -ne 0) { throw "The build failed; nothing was published." }
+if ((Test-Path "$Sdk\platforms") -and (Test-Path "$Jdk\bin\java.exe")) {
+    $env:JAVA_HOME = $Jdk; $env:ANDROID_HOME = $Sdk; $env:ANDROID_SDK_ROOT = $Sdk
+    # The phone's installed app is signed with the debug key the Docker builds use. A different key makes Android refuse
+    # the update ("conflicts with an existing package"), so local builds sign with a copy of that same key.
+    $keyHome = Join-Path $env:USERPROFILE ".ultron-android"
+    if (Test-Path (Join-Path $keyHome "debug.keystore")) { $env:ANDROID_USER_HOME = $keyHome }
+    else { throw "Missing $keyHome\debug.keystore (copy it from the Docker volume assistant-android-home); a different key would break updates." }
+    Push-Location $android
+    try { .\gradlew.bat assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --console=plain -q; $built = $LASTEXITCODE } finally { Pop-Location }
+    $apk = Join-Path $android "app\build\outputs\apk\ota\app-ota.apk"
+} else {
+    docker run --rm -v "${android}:/workspace" -v assistant-gradle-cache:/root/.gradle -v assistant-android-home:/root/.android `
+        -w /workspace assistant-android-build ./gradlew assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --console=plain -q
+    $built = $LASTEXITCODE
+    $apk = Join-Path $android ".docker-build\app\outputs\apk\ota\app-ota.apk"
+}
+if ($built -ne 0) { throw "The build failed; nothing was published." }
 
-$apk = Join-Path $android ".docker-build\app\outputs\apk\ota\app-ota.apk"
 $key = "apk/ultron-$versionCode.apk"
 $info = [ordered]@{
     versionCode = $versionCode

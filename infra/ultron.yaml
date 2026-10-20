@@ -1,15 +1,14 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Ultron backend - three MCP Lambdas (Function URLs) and the private OTA update bucket.
+Description: Ultron backend - two MCP Lambdas (Function URLs) and the private OTA update bucket.
 # Rebuild from scratch in a new account/region. Existing resources were created by hand with the same
 # settings; do not deploy this over them (names would clash). Deploy with:
 #   aws cloudformation deploy --template-file infra/ultron.yaml --stack-name ultron --capabilities CAPABILITY_NAMED_IAM \
-#     --parameter-overrides CodeBucket=<bucket holding the zips> GoogleToken=... UpdatesToken=... YoutubeToken=...
+#     --parameter-overrides CodeBucket=<bucket holding the zips> GoogleToken=... UpdatesToken=...
 
 Parameters:
-  CodeBucket: { Type: String, Description: "S3 bucket that holds the three Lambda zips (google-workspace-mcp.zip, ultron-updates.zip, yt-search-mcp.zip)" }
+  CodeBucket: { Type: String, Description: "S3 bucket that holds the two Lambda zips (google-workspace-mcp.zip, ultron-updates.zip)" }
   GoogleToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for google-workspace-mcp" }
   UpdatesToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for ultron-updates" }
-  YoutubeToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for yt-search-mcp" }
 
 Resources:
   UpdatesBucket:
@@ -30,14 +29,6 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: google-workspace-mcp-role
-      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
-      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
-      Tags: [{ Key: project, Value: ultron }]
-
-  YoutubeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: yt-search-mcp-role
       AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
       ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
       Tags: [{ Key: project, Value: ultron }]
@@ -101,31 +92,7 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties: { FunctionName: !Ref UpdatesFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
 
-  YoutubeFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: yt-search-mcp
-      Handler: lambda_function.lambda_handler
-      Runtime: python3.12
-      Architectures: [arm64]
-      MemorySize: 512
-      Timeout: 30
-      Role: !GetAtt YoutubeRole.Arn
-      Code: { S3Bucket: !Ref CodeBucket, S3Key: yt-search-mcp.zip }
-      Environment: { Variables: { ACCESS_TOKEN: !Ref YoutubeToken, HOME: /tmp } }
-      Tags: [{ Key: project, Value: ultron }]
-  YoutubeLogs:
-    Type: AWS::Logs::LogGroup
-    Properties: { LogGroupName: /aws/lambda/yt-search-mcp, RetentionInDays: 30 }
-  YoutubeUrl:
-    Type: AWS::Lambda::Url
-    Properties: { TargetFunctionArn: !GetAtt YoutubeFunction.Arn, AuthType: NONE }
-  YoutubePermission:
-    Type: AWS::Lambda::Permission
-    Properties: { FunctionName: !Ref YoutubeFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
-
 Outputs:
   GoogleMcpUrl: { Value: !Sub "${GoogleUrl.FunctionUrl}${GoogleToken}" }
-  YoutubeMcpUrl: { Value: !Sub "${YoutubeUrl.FunctionUrl}${YoutubeToken}" }
   UpdateUrl: { Value: !Sub "${UpdatesUrl.FunctionUrl}${UpdatesToken}/latest" }
   Bucket: { Value: !Ref UpdatesBucket }

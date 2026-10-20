@@ -11,7 +11,6 @@ import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.KnowledgeBaseProvider
 import com.assistant.app.data.GITHUB_TOOL_PREFIX
-import com.assistant.app.data.YOUTUBE_TOOL_PREFIX
 import com.assistant.app.data.enabledGoogleTools
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
@@ -304,10 +303,6 @@ class GeminiLiveClient(
         }
         settings.enabledGoogleTools().forEach { (service, tool) ->
             declarations.put(ToolDeclarations.mcp(tool, extendedThinking, service.toolPrefix))
-        }
-        if (settings.youtubeHost.isNotEmpty()) {
-            settings.youtubeTools.filter { it.name in settings.enabledYoutubeTools }
-                .forEach { declarations.put(ToolDeclarations.mcp(it, extendedThinking, YOUTUBE_TOOL_PREFIX)) }
         }
         return JSONObject().put("functionDeclarations", declarations)
     }

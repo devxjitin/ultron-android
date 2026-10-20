@@ -17,9 +17,6 @@ const val GITHUB_TOOL_PREFIX = "github_"
 
 const val GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/"
 
-/** Prefix for tools of the user's own YouTube search MCP server (its URL is a secret the user pastes in). */
-const val YOUTUBE_TOOL_PREFIX = "youtube_"
-
 /** The everyday read-only GitHub tools that start switched on; the rest are opt-in. */
 private val PREFERRED_GITHUB_TOOLS = setOf(
     "get_me", "search_repositories", "search_code", "search_issues", "search_pull_requests",

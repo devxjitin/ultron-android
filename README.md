@@ -50,7 +50,7 @@ The project has three parts:
 | Part | Where | What it is |
 |---|---|---|
 | **Android app** | [`android/`](android) | The assistant itself, written in Kotlin with Jetpack Compose. |
-| **Cloud connectors** | [`mcp/`](mcp) | Three small stateless AWS Lambda servers (YouTube, Google Workspace, update service). |
+| **Cloud connectors** | [`mcp/`](mcp) | Small stateless AWS Lambda servers (Google Workspace, update service). |
 | **Release tooling** | [`scripts/`](scripts) | A PowerShell script that builds a small release and publishes it for over-the-air updates. |
 
 ---
@@ -107,7 +107,7 @@ The project has three parts:
 - **Edit and resend** any of your messages (the chat after it is replaced), **copy** and **share** any reply.
 - **Auto-titles**: the model names each chat after what it was about, and refreshes the title as the topic develops.
 - **Two chat engines**: Gemini (default) or **Azure OpenAI**, switchable in Developer settings.
-- **Tools in chat**: web search, connected cloud services, knowledge-base search and memory. Phone-control tools stay voice-only on purpose.
+- **Tools in chat**: web search, connected cloud services, knowledge-base search, memory and YouTube. Other phone-control tools stay voice-only on purpose.
 
 ### Phone control (voice)
 
@@ -117,16 +117,16 @@ More than **80 device tools** let the assistant act on the phone. Each group can
 |---|---|
 | Display and sound | brightness, volume, ringer mode, vibrate, flashlight, do not disturb |
 | Phone info | time, battery, network, storage and memory, device info, Wi-Fi, Bluetooth, clipboard |
-| Apps | open an app, open app settings, play music, open the camera |
+| Apps | open an app, open app settings, open the camera |
 | Alarms and timers | set an alarm, set a timer, schedule a reminder |
 | Calls and messages | dial, search contacts, call a contact, create a contact |
 | Contacts and calendar | upcoming events, birthdays, conflict check, create an event |
 | Location and maps | current location, directions |
 | Notes | create, search and delete notes |
-| Web | weather, open a website, share text, read a web page, news headlines, currency rates, website status, internet speed test |
+| Internet | internet speed test |
+| YouTube | search videos, video details, transcripts, channel or playlist videos, and download audio only or video in any quality the video offers (144p up to 4K and 8K), after asking you which one, to Downloads/Ultron, from voice or chat; runs on the phone because YouTube blocks cloud IPs |
 | Navigation and screen control | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot, media keys |
 | Screen reading and tapping | read and tap what is on screen (accessibility service, **off by default**) |
-| Automation | schedule a tool to run later or repeatedly, or add a rule that fires on a phone event; results are posted as a notification |
 | Photos, sensors and health | recent photos, step counter, light sensor |
 | Private data | read notifications, most-used apps and app usage time (**off by default**) |
 
@@ -139,7 +139,7 @@ Connectors are added from a built-in browse view, each with per-tool switches an
 | **Phone apps** | Calendar, contacts, notifications, navigation, screen control | Local, uses Android permissions you grant |
 | **Web search** | Search the web and cite sources | Built-in client |
 | **GitHub** | Browse repositories, issues and pull requests | Sign in with GitHub (OAuth device flow) |
-| **YouTube** | Search videos, get video details, read transcripts, list a channel's videos | Private MCP server on AWS Lambda (yt-dlp) |
+| **YouTube** | Search videos, get video details, read transcripts, list a channel's videos, download video or audio | Runs on the phone with NewPipe Extractor, no sign-in |
 | **Google Calendar, Gmail, Drive, Docs, Sheets, Slides** | Read and edit your Google data, Gmail drafts are never sent automatically | Per-service Google sign-in plus a stateless Google Workspace MCP server on AWS Lambda |
 
 A connector whose sign-in expires shows *Reconnect* and *Remove* instead of failing silently.
@@ -190,7 +190,7 @@ flowchart LR
 
     Voice -- "WebSocket, audio" --> GL["Gemini Live API"]
     Chat -- "SSE streaming" --> LLM["Gemini / Azure OpenAI"]
-    Tools -- "MCP over HTTPS" --> YT["YouTube MCP<br/>AWS Lambda"]
+    Tools -- "HTTPS, on the phone" --> YT["YouTube<br/>NewPipe Extractor"]
     Tools -- "MCP over HTTPS" --> GW["Google Workspace MCP<br/>AWS Lambda"]
     Tools -- "MCP over HTTPS" --> GH["GitHub MCP"]
     VM -- "update check" --> UP["Update Lambda"]
@@ -242,7 +242,6 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 │   ├── Dockerfile                   Reproducible build environment
 │   └── local.properties.example     Template for local configuration
 ├── mcp/                             AWS Lambda servers
-│   ├── youtube-search/              YouTube MCP server (yt-dlp)
 │   ├── google-workspace/            Google Workspace MCP server (REST APIs)
 │   └── ultron-updates/              Update check and download-link service
 ├── scripts/publish-update.ps1       Build and publish an over-the-air update
@@ -321,7 +320,6 @@ All build-time values live in `android/local.properties` and are exposed to the 
 | `sdk.dir` | for local builds | Path to the Android SDK. |
 | `GEMINI_API_KEY` | recommended | Default Gemini key. Can also be entered in the app under Developer. |
 | `GITHUB_CLIENT_ID` | optional | Public client id of a GitHub OAuth App (device flow) for *Sign in with GitHub*. |
-| `YOUTUBE_MCP_URL` | optional | URL of your YouTube MCP server, so the YouTube connector adds in one tap. |
 | `GOOGLE_MCP_URL` | optional | Base URL of your Google Workspace MCP server, used by the six Google connectors. |
 | `AZURE_ENDPOINT` | optional | Azure OpenAI resource used by the *Azure API key* chat option. The key itself is entered in the app. |
 | `UPDATE_URL` | optional | Update server URL, enables in-app updates. |
@@ -333,18 +331,17 @@ Values that contain a secret token end up inside the APK, so do not share builds
 
 ## Cloud backend (AWS)
 
-The connector servers are intentionally small: no database, no third-party dependency except `yt-dlp`, and nothing is stored.
+The connector servers are intentionally small: no database, no third-party dependency, and nothing is stored.
 Each one runs as a Lambda function behind a **Function URL**, with a secret first path segment (`ACCESS_TOKEN`) that rejects
 every other request.
 
 | Server | Folder | Tools | Notes |
 |---|---|---|---|
-| **YouTube** | [`mcp/youtube-search`](mcp/youtube-search) | `search_videos`, `get_video_info`, `get_transcript`, `list_videos` | Uses `yt-dlp` bundled in the deployment package. |
 | **Google Workspace** | [`mcp/google-workspace`](mcp/google-workspace) | Calendar, Gmail, Drive, Docs, Sheets, Slides | Pure standard library. The phone sends its own Google OAuth token as a Bearer header; the server only forwards it to Google and keeps nothing. Gmail can only create drafts, never send. |
 | **Updates** | [`mcp/ultron-updates`](mcp/ultron-updates) | `GET /<token>/latest` | Returns the newest build's metadata and a short-lived download link. |
 
 Suggested runtime settings: Python 3.12, **arm64**, 128 to 512 MB depending on the server. Deploy by zipping the folder's
-`lambda_function.py` (and dependencies for YouTube), creating a Function URL with auth type `NONE`, and setting the
+`lambda_function.py`, creating a Function URL with auth type `NONE`, and setting the
 `ACCESS_TOKEN` environment variable. The update server also needs a `BUCKET` variable.
 
 All three speak MCP over streamable HTTP with JSON responses, so any MCP client can use them.
