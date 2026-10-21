@@ -22,7 +22,7 @@ P2 = meaningful reliability or feature defect, P3 = cleanup.
 
 Current checks: Kotlin compiles, `lintDebug` reports 0 errors, the new Kotlin tests (DOCX, address ranges, memory
 replace, schema, SSE, chat endings and cancel) and the 12 Python Lambda tests pass. After Round 17 the full Android unit suite (31 suites, 199 tests) and the 22 Lambda tests were re-run and pass.
-Nothing has been tried on a device or deployed.
+The google-workspace Lambda (us-east-1) was updated with the new code and smoke-tested (tool lists for all six services, structured auth error on a bad token). Nothing has been tried on a device.
 
 ## Rounds and commits
 
@@ -52,7 +52,7 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 
 | ID | P | Finding | Status | Left |
 |---|---|---|---|---|
-| F01 | P1 | New Function URLs lacked `lambda:InvokeFunction` permission | Done (R1) | Not deployed; `InvokedViaFunctionUrl` not validated with CloudFormation |
+| F01 | P1 | New Function URLs lacked `lambda:InvokeFunction` permission | Done (R1) | The live function already has the `InvokedViaFunctionUrl` statement; `infra/ultron.yaml` itself was not deployed (the live resources were created by hand, not by this stack) |
 | F02 | P1 | Reminders failed unless an unrelated connector was on | Done (R1, R12) | Device test on a fresh install plus reboot |
 | F03 | P1 | Cancelling chat did not cancel the HTTP request | Done (R3, R11) | — |
 | F04 | P1 | A cancelled reply could unlock a newer chat request | Done (R3) | No ViewModel-level test |

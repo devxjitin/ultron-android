@@ -294,3 +294,4 @@
 [2026-10-21 17:53] [Claude] [Docs: full Android unit suite (199 tests) and 22 Lambda tests re-run after round 17, all pass]
 [2026-10-21 18:12] [Claude] [Update: Gradle 8.14.6 + AGP 8.13.2; full suite and lint pass]
 [2026-10-21 18:36] [Claude] [Update: Kotlin 2.3.21, compileSdk 36, Compose BOM 2026.04.01 and other libs within AGP 8.13 limits; release (R8) builds, 199 tests pass]
+[2026-10-21 18:41] [Claude] [Update: deployed google-workspace-mcp Lambda (us-east-1) with round 7-14 code; backup zip kept in scratchpad; smoke test ok]
