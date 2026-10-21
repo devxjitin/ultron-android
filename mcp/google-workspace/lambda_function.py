@@ -13,6 +13,7 @@ import hmac
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +22,20 @@ from email.message import EmailMessage
 
 PROTOCOL_VERSION = "2025-03-26"
 MAX_TEXT = 20000
+# The app waits 25 s for an answer, so a whole operation gets less than that; every Google call uses what is left.
+OPERATION_BUDGET_S = 22.0
+_deadline = None
+
+
+def _time_left():
+    return 20.0 if _deadline is None else _deadline - time.monotonic()
+
+
+def _call_timeout():
+    left = _time_left()
+    if left < 1.0:
+        raise RuntimeError("The operation ran out of time before Google answered. Nothing more was attempted; check the result before retrying.")
+    return min(20.0, left)
 
 
 # ---------------------------------------------------------------- Google HTTP helpers
@@ -34,7 +49,7 @@ def _google(method, url, token, params=None, body=None, raw=False):
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=_call_timeout()) as resp:
             payload = resp.read(2_000_000)
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")
@@ -54,6 +69,19 @@ def _q(value):
 
 def _text(value, limit=MAX_TEXT):
     return value if len(value) <= limit else value[:limit] + f"\n... [truncated, {len(value)} chars total]"
+
+
+def _window(value, offset=0, limit=MAX_TEXT):
+    """A slice of long text; says where to continue when more is left."""
+    offset = max(0, int(offset or 0))
+    part = value[offset:offset + limit]
+    end = offset + len(part)
+    return part + (f"\n... [more text: call again with offset={end}; {len(value)} chars total]" if end < len(value) else "")
+
+
+def _paged(items, token):
+    """Plain list when everything fit; otherwise the list plus the token that fetches the next page."""
+    return items if not token else {"items": items, "next_page_token": token}
 
 
 def _json(value):
@@ -103,8 +131,9 @@ def cal_list_events(a, t):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     data = _google("GET", f"{CAL}/calendars/{_q(a.get('calendar_id', 'primary'))}/events", t, {
         "timeMin": a.get("time_min", now), "timeMax": a.get("time_max"), "q": a.get("query"),
-        "maxResults": min(int(a.get("max_results", 15)), 50), "singleEvents": "true", "orderBy": "startTime"})
-    return _json([_event_summary(e) for e in data.get("items", [])])
+        "maxResults": min(int(a.get("max_results", 15)), 50), "singleEvents": "true", "orderBy": "startTime",
+        "pageToken": a.get("page_token")})
+    return _json(_paged([_event_summary(e) for e in data.get("items", [])], data.get("nextPageToken")))
 
 
 def cal_get_event(a, t):
@@ -153,7 +182,8 @@ CALENDAR_TOOLS = [
     _tool("list_calendars", "List the user's calendars.", _obj({}), cal_list_calendars, True),
     _tool("list_events", "List upcoming events, soonest first. Times are RFC3339 like 2026-10-20T09:00:00+05:30.",
           _obj({"calendar_id": _s("Default primary"), "time_min": _s("Start of range, default now"), "time_max": _s("End of range"),
-                "query": _s("Free-text filter"), "max_results": {"type": "integer", "description": "1-50, default 15"}}), cal_list_events, True),
+                "query": _s("Free-text filter"), "max_results": {"type": "integer", "description": "1-50, default 15"},
+                "page_token": _s("next_page_token from the previous call, to get the next page")}), cal_list_events, True),
     _tool("get_event", "Get one event by id.", _obj({"event_id": S, "calendar_id": S}, ["event_id"]), cal_get_event, True),
     _tool("create_event", "Create an event. start/end are RFC3339 date-times, or YYYY-MM-DD for all-day.",
           _obj({"summary": S, "start": S, "end": S, "timezone": _s("IANA zone, e.g. Asia/Kolkata"), "description": S, "location": S,
@@ -203,22 +233,31 @@ def _body_text(payload):
 
 
 def gm_search(a, t):
-    ids = _google("GET", f"{GM}/messages", t, {"q": a.get("query"), "maxResults": min(int(a.get("max_results", 10)), 20)}).get("messages", [])
+    listing = _google("GET", f"{GM}/messages", t, {"q": a.get("query"), "maxResults": min(int(a.get("max_results", 10)), 20),
+                                                   "pageToken": a.get("page_token")})
+    ids, next_token = listing.get("messages", []), listing.get("nextPageToken")
 
     def one(m):
-        msg = _google("GET", f"{GM}/messages/{m['id']}", t, {"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]})
+        try:
+            msg = _google("GET", f"{GM}/messages/{m['id']}", t, {"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]})
+        except RuntimeError:
+            return None  # out of time or refused for this one message; the rest are still useful
         return {"id": msg["id"], "thread_id": msg.get("threadId"), "from": _header(msg, "From"), "subject": _header(msg, "Subject"),
                 "date": _header(msg, "Date"), "snippet": msg.get("snippet"), "unread": "UNREAD" in msg.get("labelIds", [])}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        return _json(list(pool.map(one, ids)))
+        found = [m for m in pool.map(one, ids) if m is not None]
+    if len(found) < len(ids):
+        return _json({"messages": found, "next_page_token": next_token,
+                      "note": f"Only {len(found)} of {len(ids)} messages could be read in time."})
+    return _json(_paged(found, next_token))
 
 
 def gm_get(a, t):
     msg = _google("GET", f"{GM}/messages/{_q(a['message_id'])}", t, {"format": "full"})
     return _json({"id": msg["id"], "from": _header(msg, "From"), "to": _header(msg, "To"), "cc": _header(msg, "Cc"),
                   "subject": _header(msg, "Subject"), "date": _header(msg, "Date"), "labels": msg.get("labelIds"),
-                  "body": _text(_body_text(msg.get("payload", {})), 8000)})
+                  "body": _window(_body_text(msg.get("payload", {})), a.get("offset"), 8000)})
 
 
 def gm_draft(a, t):
@@ -254,8 +293,9 @@ def gm_labels(a, t):
 
 GMAIL_TOOLS = [
     _tool("search_messages", "Search Gmail with Gmail search syntax (from:, subject:, is:unread, newer_than:7d...). Empty query = latest mail.",
-          _obj({"query": S, "max_results": {"type": "integer", "description": "1-20, default 10"}}), gm_search, True),
-    _tool("get_message", "Read one message (headers and text body) by id.", _obj({"message_id": S}, ["message_id"]), gm_get, True),
+          _obj({"query": S, "max_results": {"type": "integer", "description": "1-20, default 10"},
+                "page_token": _s("next_page_token from the previous call, to get the next page")}), gm_search, True),
+    _tool("get_message", "Read one message (headers and text body) by id.", _obj({"message_id": S, "offset": {"type": "integer", "description": "Start of the body text, to read a long mail in parts"}}, ["message_id"]), gm_get, True),
     _tool("create_draft", "Save an email draft. It is never sent automatically.",
           _obj({"to": S, "subject": S, "body": S, "cc": S, "thread_id": _s("Reply inside this thread")}, ["to", "subject", "body"]), gm_draft, False),
     _tool("list_labels", "List Gmail labels.", _obj({}), gm_labels, True),
@@ -269,7 +309,8 @@ FILE_FIELDS = "id,name,mimeType,modifiedTime,size,webViewLink"
 
 
 def _files(data):
-    return _json([{k: f.get(k) for k in ("id", "name", "mimeType", "modifiedTime", "size", "webViewLink")} for f in data.get("files", [])])
+    return _json(_paged([{k: f.get(k) for k in ("id", "name", "mimeType", "modifiedTime", "size", "webViewLink")} for f in data.get("files", [])],
+                        data.get("nextPageToken")))
 
 
 def dr_search(a, t):
@@ -278,12 +319,14 @@ def dr_search(a, t):
     else:
         text = a["query"].replace("\\", "\\\\").replace("'", "\\'")
         q = f"fullText contains '{text}' and trashed = false"
-    return _files(_google("GET", f"{DR}/files", t, {"q": q, "pageSize": min(int(a.get("max_results", 10)), 25), "fields": f"files({FILE_FIELDS})"}))
+    return _files(_google("GET", f"{DR}/files", t, {"q": q, "pageSize": min(int(a.get("max_results", 10)), 25), "pageToken": a.get("page_token"),
+                                    "fields": f"nextPageToken,files({FILE_FIELDS})"}))
 
 
 def dr_recent(a, t):
     return _files(_google("GET", f"{DR}/files", t, {"q": "trashed = false", "orderBy": "modifiedTime desc",
-                                                    "pageSize": min(int(a.get("max_results", 10)), 25), "fields": f"files({FILE_FIELDS})"}))
+                                                    "pageSize": min(int(a.get("max_results", 10)), 25), "pageToken": a.get("page_token"),
+                                                    "fields": f"nextPageToken,files({FILE_FIELDS})"}))
 
 
 def dr_meta(a, t):
@@ -302,7 +345,7 @@ def dr_read(a, t):
         raw = _google("GET", f"{DR}/files/{fid}", t, {"alt": "media"}, raw=True)
     else:
         return f"'{meta['name']}' is a {mime} file; only Google Docs/Sheets/Slides and text files can be read here."
-    return f"# {meta['name']}\n" + _text(raw.decode("utf-8", "replace"))
+    return f"# {meta['name']}\n" + _window(raw.decode("utf-8", "replace"), a.get("offset"))
 
 
 def dr_create(a, t):
@@ -314,7 +357,7 @@ def dr_create(a, t):
         "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=" + FILE_FIELDS, data=payload, method="POST",
         headers={"Authorization": f"Bearer {t}", "Content-Type": f"multipart/related; boundary={boundary}"})
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=_call_timeout()) as resp:
             return _json(json.load(resp))
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Google API error {e.code}: {e.read().decode('utf-8', 'replace')[:300]}")
@@ -322,10 +365,11 @@ def dr_create(a, t):
 
 DRIVE_TOOLS = [
     _tool("search_files", "Search Drive files by text (name and content).",
-          _obj({"query": S, "raw_query": _s("Optional Drive query syntax, used instead of query"), "max_results": {"type": "integer"}}, ["query"]), dr_search, True),
-    _tool("list_recent_files", "List recently modified files.", _obj({"max_results": {"type": "integer"}}), dr_recent, True),
+          _obj({"query": S, "raw_query": _s("Optional Drive query syntax, used instead of query"), "max_results": {"type": "integer"},
+                "page_token": _s("next_page_token from the previous call, to get the next page")}, ["query"]), dr_search, True),
+    _tool("list_recent_files", "List recently modified files.", _obj({"max_results": {"type": "integer"}, "page_token": _s("next_page_token from the previous call")}), dr_recent, True),
     _tool("get_file_metadata", "Get name, type, owners and link of a file.", _obj({"file_id": S}, ["file_id"]), dr_meta, True),
-    _tool("read_file_content", "Read a Google Doc/Sheet/Slides or a plain text file as text.", _obj({"file_id": S}, ["file_id"]), dr_read, True),
+    _tool("read_file_content", "Read a Google Doc/Sheet/Slides or a plain text file as text.", _obj({"file_id": S, "offset": {"type": "integer", "description": "Start of the text, to read a long file in parts"}}, ["file_id"]), dr_read, True),
     _tool("create_file", "Create a new text file in Drive.",
           _obj({"name": S, "content": S, "mime_type": _s("Default text/plain")}, ["name", "content"]), dr_create, False),
 ]
@@ -357,10 +401,10 @@ def docs_read(a, t):
     doc = _google("GET", f"{DOCS}/{_q(a['document_id'])}", t, {"includeTabsContent": "true"})
     tabs = list(_flat_tabs(doc.get("tabs", [])))
     if not tabs:
-        return f"# {doc.get('title')}\n" + _text(_doc_text(doc.get("body", {}).get("content", [])))
+        return f"# {doc.get('title')}\n" + _window(_doc_text(doc.get("body", {}).get("content", [])), a.get("offset"))
     sections = [f"## Tab: {tab.get('tabProperties', {}).get('title', '')} (tab_id {tab.get('tabProperties', {}).get('tabId')})\n"
                 + _doc_text(tab.get("documentTab", {}).get("body", {}).get("content", [])) for tab in tabs]
-    return f"# {doc.get('title')}\n" + _text("\n".join(sections))
+    return f"# {doc.get('title')}\n" + _window("\n".join(sections), a.get("offset"))
 
 
 def docs_append(a, t):
@@ -386,7 +430,7 @@ def docs_replace(a, t):
 
 
 DOCS_TOOLS = [
-    _tool("read_doc", "Read a Google Doc as text.", _obj({"document_id": S}, ["document_id"]), docs_read, True),
+    _tool("read_doc", "Read a Google Doc as text.", _obj({"document_id": S, "offset": {"type": "integer", "description": "Start of the text, to read a long document in parts"}}, ["document_id"]), docs_read, True),
     _tool("append_text", "Add text at the end of a Google Doc.", _obj({"document_id": S, "text": S, "tab_id": _s("Optional. Add to this tab (ids are shown by read_doc); default is the first tab.")}, ["document_id", "text"]), docs_append, False),
     _tool("replace_text", "Replace every occurrence of a text in a Google Doc.",
           _obj({"document_id": S, "find": S, "replace": S}, ["document_id", "find", "replace"]), docs_replace, False),
@@ -522,6 +566,8 @@ def _resp(status, body=None):
 
 
 def lambda_handler(event, context):
+    global _deadline
+    _deadline = time.monotonic() + OPERATION_BUDGET_S
     secret = os.environ.get("ACCESS_TOKEN", "")
     parts = [p for p in event.get("rawPath", "").split("/") if p]
     if len(parts) != 2 or not secret or not hmac.compare_digest(parts[0], secret) or parts[1] not in SERVICES:
