@@ -41,7 +41,7 @@ been re-run after the changes, and nothing has been tried on a device or deploye
 | 11 | `c0bc03f` | tests; fixed a cancelled call surfacing as an IOException |
 | 12 | `9d5b6cc` | F33 (release id), F32 (usage scope), F19, F35 (Repair, photos), F02 check |
 | 13 | `eddfc23` | F09 (recovery/export), F05 (forget, restore), F17 (disclosure, export), F06 (streaming parser), F18 (drafts) |
-| 14 | not committed yet | F21, F23, F28 (partly), F24, F22 (protocol tests) |
+| 14 | `9041aa4` | F21, F23, F28 (partly), F24, F22 (protocol tests) |
 
 ## Findings
 
