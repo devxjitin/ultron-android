@@ -303,9 +303,9 @@ fun ConnectorsPage(
     }
 
     val matching = Catalog.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
-    // Marketplace: what is still to add (never automation, which has its own section), filtered by category.
+    // Marketplace: every connector (never automation, which has its own section), filtered by category; the ones still to add come first.
     // Connectors: Installed (added, voice and chat) and Automation (voice only, always listed so it can be switched on).
-    val shown = if (marketplace) matching.filter { !it.automation && (category == null || it.category == category) && !connected(it) }
+    val shown = if (marketplace) matching.filter { !it.automation && (category == null || it.category == category) }
     else matching.filter { if (it.automation) true else connected(it) }
 
     val detail = detailId?.let { id -> Catalog.firstOrNull { it.id == id } }
@@ -393,11 +393,17 @@ fun ConnectorsPage(
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             if (marketplace) {
                 if (shown.isEmpty()) {
-                    Text(if (query.isBlank() && category == null) "Everything here is already added." else "No connectors match your search.",
-                        color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
+                    Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
                 } else {
-                    SectionHeading("Available")
-                    shown.forEach { Card(it) }
+                    val (added, available) = shown.partition { connected(it) }
+                    if (available.isNotEmpty()) {
+                        SectionHeading("Available")
+                        available.forEach { Card(it) }
+                    }
+                    if (added.isNotEmpty()) {
+                        SectionHeading("Added")
+                        added.forEach { Card(it) }
+                    }
                 }
             } else {
                 val installed = shown.filter { !it.automation }
