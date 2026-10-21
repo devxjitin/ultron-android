@@ -334,7 +334,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         chatAttachmentsPruned = true
                         launch(Dispatchers.IO) {
                             // An unreadable history looks empty; never delete files on that basis.
-                            if (chatHistoryStore.isReadable()) chatAttachmentStore.prune(sessions.map { it.id }.toSet())
+                            if (chatHistoryStore.isReadable()) {
+                                chatAttachmentStore.prune(sessions.map { it.id }.toSet())
+                                chatAttachmentStore.pruneUnreferenced(
+                                    sessions.flatMap { s -> s.turns.flatMap { t -> t.attachments.map { it.path } } }.toSet()
+                                )
+                            }
                         }
                     }
                 }

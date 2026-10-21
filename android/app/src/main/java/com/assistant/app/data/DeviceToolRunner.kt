@@ -271,6 +271,8 @@ class DeviceToolRunner(
                 if (scheduled.startsWith("status=ok")) "status=ok\nReminder set for $minutes minutes from now. The time can be off by a few minutes."
                 else scheduled
             }
+            DeviceTool.LIST_REMINDERS -> AutomationEngine.listScheduled(app)
+            DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelScheduled(app, number("id"))
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
             DeviceTool.READ_NOTIFICATIONS -> readNotifications(number("limit") ?: 10)
@@ -757,8 +759,13 @@ class DeviceToolRunner(
     private fun bluetooth(): String {
         val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
             ?: return "status=unavailable\nThis device has no Bluetooth."
+        // Even reading whether Bluetooth is on needs this permission on Android 12+, so it is checked first.
+        if (Build.VERSION.SDK_INT >= 31 &&
+            ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return missingPermission(Manifest.permission.BLUETOOTH_CONNECT).orEmpty()
+        }
         if (!adapter.isEnabled) return "status=ok\nBluetooth is off."
-        if (Build.VERSION.SDK_INT >= 31) missingPermission(Manifest.permission.BLUETOOTH_CONNECT)?.let { return it }
         val names = adapter.bondedDevices.map { it.name ?: "unknown device" }
         return "status=ok\nBluetooth is on. Paired devices: ${if (names.isEmpty()) "none" else names.joinToString()}."
     }

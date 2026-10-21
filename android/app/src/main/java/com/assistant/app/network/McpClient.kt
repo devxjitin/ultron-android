@@ -2,6 +2,8 @@ package com.assistant.app.network
 
 import com.assistant.app.data.McpToolSpec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -29,6 +31,8 @@ class McpClient(
         .build()
 
     private val lock = Mutex()
+    /** The request in flight; calls are serialized by [lock], so cancelling this cancels the right one. */
+    @Volatile private var activeCall: okhttp3.Call? = null
     private var sessionId: String? = null
     private var initialized = false
     private var nextId = 1
@@ -61,6 +65,7 @@ class McpClient(
     /** Runs one tool and returns its text output; throws [McpException] on protocol errors. */
     suspend fun callTool(name: String, arguments: JSONObject): Result<String> = lock.withLock {
         withContext(Dispatchers.IO) {
+            val watcher = cancelActiveCallOnCancellation()
             try {
                 ensureInitialized()
                 val result = request("tools/call", JSONObject().put("name", name).put("arguments", arguments))
@@ -76,9 +81,21 @@ class McpClient(
                 throw e
             } catch (e: Exception) {
                 Result.failure(McpException("Could not reach the server."))
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable) { watcher.cancelAndJoin() }
             }
         }
     }
+
+    /** When the calling coroutine is cancelled, the open request is dropped at once instead of waiting for the server. */
+    private suspend fun cancelActiveCallOnCancellation(): kotlinx.coroutines.Job =
+        kotlinx.coroutines.CoroutineScope(kotlin.coroutines.coroutineContext).launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            try {
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                activeCall?.cancel()
+            }
+        }
 
     private fun ensureInitialized() {
         if (initialized) return
@@ -115,7 +132,9 @@ class McpClient(
             .header("Accept", "application/json, text/event-stream")
         headers().forEach { (key, value) -> builder.header(key, value) }
         sessionId?.let { builder.header("Mcp-Session-Id", it) }
-        http.newCall(builder.build()).execute().use { response ->
+        val call = http.newCall(builder.build())
+        activeCall = call
+        call.execute().use { response ->
             response.header("Mcp-Session-Id")?.let { sessionId = it }
             val streaming = response.isSuccessful && expectBody &&
                 response.header("Content-Type").orEmpty().contains("text/event-stream")
