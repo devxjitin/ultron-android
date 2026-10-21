@@ -44,7 +44,7 @@ been re-run after the changes, and nothing has been tried on a device or deploye
 | 14 | `9041aa4` | F21, F23, F28 (partly), F24, F22 (protocol tests) |
 | 15 | `ccdfc81` | F13 (purposes, budget, opt-in titles), F14 (reply cap, older-turn digest), F15 (opt-in persona, dismissible notice) |
 | 16 | `234d975` | F10, F11, F08 (foreground service, resume), F30 (leases) |
-| 17 | not committed yet | Lint warnings that need no upgrade |
+| 17 | `241b513` | Lint warnings that need no upgrade |
 
 ## Findings
 
