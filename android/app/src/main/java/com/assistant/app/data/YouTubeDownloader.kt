@@ -216,6 +216,8 @@ class YouTubeDownloader(private val context: Context) {
     private fun mimeOf(mime: String?, fallback: String) = mime?.takeIf { it.isNotBlank() } ?: fallback
 
     /** Fails early, with a clear message, when the phone cannot hold the temporary files plus the final one. */
+    // Plain free space is deliberately the stricter measure: space the system could reclaim from other caches is not counted.
+    @Suppress("UsableSpace")
     private fun requireSpace(bytes: Long) {
         val need = (bytes * 1.1).toLong()
         val cacheFree = context.cacheDir.usableSpace

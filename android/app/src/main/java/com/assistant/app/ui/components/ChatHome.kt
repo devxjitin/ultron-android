@@ -154,6 +154,7 @@ fun ChatHome(
     onNotice: (String) -> Unit,
     onVoiceClick: () -> Unit,
     /** Id of the open saved chat; switching to another chat (or to a new one) drops the unsent draft. */
+    modifier: Modifier = Modifier,
     chatKey: String? = null,
     /** Message to bring into view once (a search result); null for the usual "stay at the bottom". */
     focusIndex: Int? = null,
@@ -163,8 +164,7 @@ fun ChatHome(
     initialFiles: List<ChatAttachment> = emptyList(),
     onDraftSaved: (String, List<ChatAttachment>) -> Unit = { _, _ -> },
     incomingShare: IncomingShare? = null,
-    onShareConsumed: (Long) -> Unit = {},
-    modifier: Modifier = Modifier
+    onShareConsumed: (Long) -> Unit = {}
 ) {
     var input by rememberSaveable { mutableStateOf(initialInput) }
     val pending = remember { mutableStateListOf<ChatAttachment>().apply { addAll(initialFiles) } }

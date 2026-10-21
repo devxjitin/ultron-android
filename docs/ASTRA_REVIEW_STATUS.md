@@ -44,6 +44,7 @@ been re-run after the changes, and nothing has been tried on a device or deploye
 | 14 | `9041aa4` | F21, F23, F28 (partly), F24, F22 (protocol tests) |
 | 15 | `ccdfc81` | F13 (purposes, budget, opt-in titles), F14 (reply cap, older-turn digest), F15 (opt-in persona, dismissible notice) |
 | 16 | `234d975` | F10, F11, F08 (foreground service, resume), F30 (leases) |
+| 17 | not committed yet | Lint warnings that need no upgrade |
 
 ## Findings
 
@@ -98,7 +99,8 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | 2 × `ProtectedPermissions` (WRITE_SETTINGS, PACKAGE_USAGE_STATS) | Done — documented and suppressed; the permissions and their Settings flows stay |
 | Optional telephony hardware | Done — `required="false"` |
 | `SelectedPhotoAccess` | Done — Android 14 partial photo access handled |
-| 25 warnings (dependency versions, backup/transfer rules, unused colours and round icon, monochrome icon, minor Compose/ABI) | Left |
+| Warnings: backup/transfer rules, unused colours and round icon, monochrome icon, obsolete icon folder, Modifier order, autoboxing, notification constant, free-space note | Done (R17) |
+| Warnings: 11 dependency versions, x86_64 ABI for ChromeOS | Left — need your approval (version upgrades change the build; x86_64 grows the APK) |
 | AGP 8.5.2 tested only up to compileSdk 34, project uses 35 | Left — upgrade as one tested unit |
 
 ## Review sections not covered by findings
@@ -109,7 +111,7 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | Import improvements (batched embeddings, dedupe by content hash, checkpoints), offline BM25 fallback, query cache, source links | Left |
 | Shared billable API keys inside the APK; release signing channel documentation | Left |
 | Feature-by-feature UX suggestions (Stop/Retry, reconnect state, reminder list UI, usage labels, TalkBack and font-scale checks) | Left |
-| Dead code and docs: `ToolGroup.WEB`, old comments, the web-extract Lambda decision | Left (README partly corrected in R10) |
+| Dead code and docs | `ToolGroup.WEB` is in use (internet speed test), so nothing to remove. Web-extract Lambda decision and rules-engine decision (F36) left for you |
 | Regression tests | Partly done in R11: DOCX cap, address ranges, memory replace, schema, SSE, chat endings and cancel, Lambda handlers. Still missing: corrupt-history quarantine, concurrent notes, Compose draft/navigation tests |
 | Device matrix (API 26/29/33/35+, denied permissions, offline, background, large history, rebooted reminders, OTA signing) | Left — needs a phone |
 | Staging deploy of both Lambdas and `infra/ultron.yaml` | Left — needs AWS access |
@@ -130,5 +132,5 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 
 | Round | Content |
 |---|---|
-| 17 | Lint warnings, AGP/compileSdk upgrade, README and dead code |
+| 17 (rest) | Dependency and AGP/compileSdk upgrade, ChromeOS ABI, web-extract and rules-engine decisions |
 | 18 | Device and deploy verification (needs a phone and AWS access) |

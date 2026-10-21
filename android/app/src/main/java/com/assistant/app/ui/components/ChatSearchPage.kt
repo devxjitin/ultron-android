@@ -81,7 +81,7 @@ private fun highlight(text: String, tokens: List<String>): AnnotatedString = bui
 @Composable
 fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String, Int?) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
-    var scopeIndex by rememberSaveable { mutableStateOf(SearchScope.ALL.ordinal) }
+    var scopeIndex by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(SearchScope.ALL.ordinal) }
     val scope = SearchScope.entries[scopeIndex]
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current

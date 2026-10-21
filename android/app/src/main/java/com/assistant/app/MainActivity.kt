@@ -216,7 +216,8 @@ class MainActivity : ComponentActivity() {
             var askedOnStart by rememberSaveable { mutableStateOf(false) }
             LaunchedEffect(notificationPermissionHandled) {
                 if (!notificationPermissionHandled) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    // The literal avoids an API 33 field reference; before Android 13 the launcher answers at once.
+                    notificationPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
                     return@LaunchedEffect
                 }
                 if (!askedOnStart && !micGranted) {

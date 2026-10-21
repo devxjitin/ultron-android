@@ -290,3 +290,4 @@
 [2026-10-21 17:23] [Claude] [Fix: audit round 14 - structured Google errors, schema notes + Azure original schema, write-timeout lookup, Gmail batch, Sheets/Slides/shared drives, MCP protocol tests]
 [2026-10-21 17:28] [Claude] [Fix: audit round 15 - token purposes + daily budget, AI titles/persona opt-in, reply cap, older-turn digest]
 [2026-10-21 17:43] [Claude] [Fix: audit round 16 - incremental Markdown, indexed chat search with scopes + jump, download foreground service + resume, cache leases]
+[2026-10-21 17:51] [Claude] [Fix: audit round 17 - lint warnings (backup rules, icons, colours, modifier order, autoboxing); deps/AGP left for approval]
