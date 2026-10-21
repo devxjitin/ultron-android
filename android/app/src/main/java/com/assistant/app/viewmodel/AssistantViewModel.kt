@@ -104,6 +104,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
         /** Most recent chat messages sent to the model as context for a typed reply. */
         private const val MAX_CHAT_CONTEXT_MESSAGES = 24
+        /** About 15k tokens of conversation text per request; older messages beyond it are left out. */
+        private const val MAX_CHAT_CONTEXT_CHARS = 60_000
         /** Attached files sent with one request stay under this many bytes (the API limit is about 20 MB with encoding). */
         private const val MAX_CHAT_ATTACHMENT_BYTES = 12 * 1024 * 1024
         private const val TITLE_REFRESH_EVERY_TURNS = 3
@@ -336,6 +338,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                     }
                 }
+        }
+        // A session that ends in an error never reaches stopSession, so its time is counted when the error appears.
+        viewModelScope.launch {
+            _uiState.map { it.voiceState }.distinctUntilChanged().collect { if (it == VoiceState.ERROR) recordVoiceUsage() }
         }
         viewModelScope.launch {
             settingsStore.settings
@@ -581,6 +587,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     recordUsage(UsageDay("", chatMessages = 1, inputTokens = usedInput, outputTokens = usedOutput))
                 }
             } catch (e: CancellationException) {
+                // Tokens already billed for a cancelled reply still count.
+                if (usedInput + usedOutput > 0) recordUsage(UsageDay("", inputTokens = usedInput, outputTokens = usedOutput))
                 throw e
             } catch (e: Exception) {
                 if (usedInput + usedOutput > 0) recordUsage(UsageDay("", inputTokens = usedInput, outputTokens = usedOutput))
@@ -595,6 +603,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (requestId == chatRequestSeq) _uiState.update { it.copy(isChatSending = false) }
             }
         }
+        return true
     }
 
     /** Status lines shown, with the delay before each, while a reply has not started: files get a longer, Claude-style progression. */
@@ -608,7 +617,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         return listOf(
             0L to "Uploading $kind…",
-        return true
             1_200L to "Analysing $kind…",
             3_500L to "Reading through the details…",
             6_000L to "Thinking…"
@@ -663,8 +671,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** The recent messages as model context; attached files are kept only while they fit the request size. */
     private fun chatContext(messages: List<ChatMessage>): List<ChatTurnMessage> {
         var budget = MAX_CHAT_ATTACHMENT_BYTES
-        val recent = messages.filter { !it.isError && (it.text.isNotBlank() || it.attachments.isNotEmpty()) }
+        var textBudget = MAX_CHAT_CONTEXT_CHARS
+        val candidates = messages.filter { !it.isError && (it.text.isNotBlank() || it.attachments.isNotEmpty()) }
             .takeLast(MAX_CHAT_CONTEXT_MESSAGES)
+        // Newest messages first within a text budget (the latest one always stays, cut if it alone is too long).
+        val withinBudget = ArrayList<ChatMessage>()
+        for (message in candidates.asReversed()) {
+            if (withinBudget.isNotEmpty() && message.text.length > textBudget) break
+            textBudget -= message.text.length
+            withinBudget += if (withinBudget.isEmpty() && message.text.length > MAX_CHAT_CONTEXT_CHARS)
+                message.copy(text = message.text.take(MAX_CHAT_CONTEXT_CHARS)) else message
+        }
+        // Start on a user message, so an answer is never kept without the question it answers.
+        val recent = withinBudget.asReversed().dropWhile { !it.fromUser }
         // Newest first, so the files of the latest messages are the ones that survive the budget.
         return recent.asReversed().map { message ->
             val kept = message.attachments.filter { file ->
@@ -812,8 +831,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      * Has the model name a saved chat after what the whole conversation was about, not its first
      * question: after the first exchange, then again every third one as the topic develops.
      */
+    private fun recordAuxiliaryUsage(inputTokens: Int, outputTokens: Int) =
+        recordUsage(UsageDay("", inputTokens = inputTokens.toLong(), outputTokens = outputTokens.toLong()))
+
+    /** Text generation for titles, personas and formatting; the tokens it uses count in Usage like chat tokens. */
+    private fun auxTextClient(apiKey: String) = GeminiTextClient(apiKey, onUsage = ::recordAuxiliaryUsage)
+
     private suspend fun updateChatTitle(sessionId: String) {
         try {
+            // Titles are written by Gemini; a chat that runs on Azure must not send its text to another provider.
+            if (_uiState.value.azure.isActive) return
             val session = chatHistoryStore.sessions.first().firstOrNull { it.id == sessionId } ?: return
             val turns = session.turns.size
             if (session.customTitle != null && turns % TITLE_REFRESH_EVERY_TURNS != 0) return
@@ -822,7 +849,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val files = it.attachments.joinToString(" ") { file -> "[file: ${file.name}]" }
                 "User: ${"$files ${it.userText}".trim().take(300)}\nAssistant: ${it.assistantText.take(300)}"
             }
-            val raw = GeminiTextClient(apiKey).generateText(
+            val raw = auxTextClient(apiKey).generateText(
                 "Write a short title (2 to 5 words) for this conversation, based on what it was about overall, " +
                     "not just the first message. Use the language of the conversation. Reply with the title only, " +
                     "no quotes or punctuation at the end.\n\n$transcript"
@@ -1714,7 +1741,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val instruction = KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
                 val draft = KnowledgeBaseProvider.validatePersonaDraft(
-                    GeminiTextClient(apiKey).generateText(instruction)
+                    auxTextClient(apiKey).generateText(instruction)
                 )
                 _uiState.update { it.copy(isGeneratingPrompt = false, generatedPromptDraft = draft) }
                 showToast("Agent prompt drafted. Review and save.")
@@ -1741,6 +1768,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isUpdatingAgentPrompt = true) }
         personaRefreshJob = viewModelScope.launch {
             try {
+                // A prompt the user wrote is theirs; only a generated (or empty) one is redrafted.
+                if (!settingsStore.canReplacePersona()) {
+                    _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
+                    return@launch
+                }
                 val docs = ragDocumentStore.documents.first()
                 if (docs.isEmpty()) {
                     settingsStore.setAutoPersona(null)
@@ -1751,7 +1783,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         // Bounded so the blocking "Updating" screen can never hang the app.
                         val draft = withTimeoutOrNull(PERSONA_REFRESH_TIMEOUT_MS) {
                             KnowledgeBaseProvider.validatePersonaDraft(
-                                GeminiTextClient(apiKey).generateText(
+                                auxTextClient(apiKey).generateText(
                                     KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
                                 )
                             )
@@ -1846,6 +1878,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     if (embeddingKey.isBlank()) throw UserMessageException("Knowledge setup is incomplete. Add the Knowledge API key in Developer settings.")
                     val formattedText = GeminiTextClient(
                         apiKey = embeddingKey,
+                        onUsage = ::recordAuxiliaryUsage,
                         documentFormatPrompt = _uiState.value.settings.documentFormatPrompt,
                         documentFormatModel = AssistantOptions.DATASET_MODEL
                     ).formatKnowledgePdf(pdfBytes, _uiState.value.settings.retrievalChunkLimit)

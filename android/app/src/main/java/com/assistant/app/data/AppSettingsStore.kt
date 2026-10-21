@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.assistant.app.util.UserInputException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "assistant_settings")
@@ -167,6 +168,8 @@ class AppSettingsStore(private val context: Context) {
     private val occupationKey = stringPreferencesKey("p_occupation")
     private val aboutMoreKey = stringPreferencesKey("p_about")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
+    /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
+    private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
     private val chatPromptKey = stringPreferencesKey("chat_prompt")
     private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val greetingKey = stringPreferencesKey("greeting")
@@ -296,8 +299,20 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setAutoPersona(persona: String?) {
         val trimmed = persona?.trim()
         context.settingsDataStore.edit {
-            if (trimmed.isNullOrBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = trimmed
+            if (trimmed.isNullOrBlank()) {
+                it.remove(systemPromptKey)
+                it.remove(systemPromptAutoKey)
+            } else {
+                it[systemPromptKey] = trimmed
+                it[systemPromptAutoKey] = true
+            }
         }
+    }
+
+    /** True when the agent prompt is empty or was generated, so a new draft may replace it; a prompt the user wrote is kept. */
+    suspend fun canReplacePersona(): Boolean {
+        val prefs = context.settingsDataStore.data.first()
+        return prefs[systemPromptKey].isNullOrBlank() || prefs[systemPromptAutoKey] == true
     }
 
     /** Applies the Developer form together so its fields never save as unrelated partial edits. */
@@ -317,6 +332,8 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit {
             if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
             if (cleanGreeting.isBlank()) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
+            // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
+            if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
             if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
             if (cleanChatPrompt.isBlank()) it.remove(chatPromptKey) else it[chatPromptKey] = cleanChatPrompt
             if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)
