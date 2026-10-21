@@ -124,6 +124,7 @@ class GeminiChatClient(
         val bodyJson = JSONObject()
             .put("contents", contents)
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
+            .put("generationConfig", JSONObject().put("maxOutputTokens", CHAT_REPLY_TOKEN_CAP))
         if (tools != null) bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", ToolDeclarations.withoutPrivateFields(tools))))
         // Key goes in a header, not the URL, so it can't leak through logged URLs.
         val request = Request.Builder()

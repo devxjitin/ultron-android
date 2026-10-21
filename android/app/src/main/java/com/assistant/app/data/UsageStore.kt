@@ -19,13 +19,16 @@ data class UsageDay(
     val outputTokens: Long = 0,
     val voiceSessions: Int = 0,
     val voiceSeconds: Long = 0,
-    val toolCalls: Int = 0
+    val toolCalls: Int = 0,
+    /** Tokens by what they were spent on (see [PURPOSE_CHAT]); already part of [inputTokens] and [outputTokens]. */
+    val purposes: Map<String, Long> = emptyMap()
 ) {
     val tokens: Long get() = inputTokens + outputTokens
 
     operator fun plus(other: UsageDay) = UsageDay(
         day, chatMessages + other.chatMessages, inputTokens + other.inputTokens, outputTokens + other.outputTokens,
-        voiceSessions + other.voiceSessions, voiceSeconds + other.voiceSeconds, toolCalls + other.toolCalls
+        voiceSessions + other.voiceSessions, voiceSeconds + other.voiceSeconds, toolCalls + other.toolCalls,
+        (purposes.keys + other.purposes.keys).associateWith { (purposes[it] ?: 0L) + (other.purposes[it] ?: 0L) }
     )
 }
 
@@ -36,6 +39,10 @@ class UsageStore(private val context: Context) {
 
     companion object {
         const val KEEP_DAYS = 120
+        const val PURPOSE_CHAT = "chat"
+        const val PURPOSE_TITLE = "title"
+        const val PURPOSE_PERSONA = "persona"
+        const val PURPOSE_PDF = "pdf"
     }
 
     /** Oldest day first. */
@@ -60,6 +67,7 @@ class UsageStore(private val context: Context) {
             root.put(
                 it.day, JSONObject().put("m", it.chatMessages).put("i", it.inputTokens).put("o", it.outputTokens)
                     .put("vs", it.voiceSessions).put("vt", it.voiceSeconds).put("t", it.toolCalls)
+                    .put("p", JSONObject().also { p -> it.purposes.forEach { (name, tokens) -> p.put(name, tokens) } })
             )
         }
         return root.toString()
@@ -71,7 +79,11 @@ class UsageStore(private val context: Context) {
             val root = JSONObject(raw)
             root.keys().asSequence().map { day ->
                 val o = root.getJSONObject(day)
-                UsageDay(day, o.optInt("m"), o.optLong("i"), o.optLong("o"), o.optInt("vs"), o.optLong("vt"), o.optInt("t"))
+                val spent = o.optJSONObject("p")
+                UsageDay(
+                    day, o.optInt("m"), o.optLong("i"), o.optLong("o"), o.optInt("vs"), o.optLong("vt"), o.optInt("t"),
+                    spent?.keys()?.asSequence()?.associateWith { name -> spent.optLong(name) } ?: emptyMap()
+                )
             }.sortedBy { it.day }.toList()
         } catch (e: Exception) {
             emptyList()

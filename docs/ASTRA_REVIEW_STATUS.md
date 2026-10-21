@@ -15,8 +15,8 @@ P2 = meaningful reliability or feature defect, P3 = cleanup.
 | | Count |
 |---|---|
 | Findings in the review | 37 |
-| Fixed (done) | 28 |
-| Partly fixed (a real piece is left) | 9 |
+| Fixed (done) | 30 |
+| Partly fixed (a real piece is left) | 7 |
 | Not started | 0 |
 | All P1 findings (F01–F09, F31) | fixed in code; only F08 (durable downloads) has a follow-up piece left |
 
@@ -42,6 +42,7 @@ been re-run after the changes, and nothing has been tried on a device or deploye
 | 12 | `9d5b6cc` | F33 (release id), F32 (usage scope), F19, F35 (Repair, photos), F02 check |
 | 13 | `eddfc23` | F09 (recovery/export), F05 (forget, restore), F17 (disclosure, export), F06 (streaming parser), F18 (drafts) |
 | 14 | `9041aa4` | F21, F23, F28 (partly), F24, F22 (protocol tests) |
+| 15 | not committed yet | F13 (purposes, budget, opt-in titles), F14 (reply cap, older-turn digest), F15 (opt-in persona, dismissible notice) |
 
 ## Findings
 
@@ -61,9 +62,9 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | F10 | P2 | Artificial text pacing and repeated Markdown parsing | Partial (R5) | Incremental Markdown rendering |
 | F11 | P2 | Chat search scanned full history on the UI thread | Partial (R8) | Indexed search, scope filters, jump to the matching turn |
 | F12 | P2 | Voice tools blocked the main thread | Done (R8) | — |
-| F13 | P2 | Token accounting missed auxiliary model work | Partial (R9) | Per-request ledger with purpose, opt-in auto-titling, daily budget |
-| F14 | P2 | Context limited by message count, not tokens | Partial (R9) | Output caps, summarising old turns, choosing tool groups per turn |
-| F15 | P2 | Knowledge edits overwrote the manual voice prompt and blocked the app | Partial (R9) | Opt-in/reviewable updates, dismissible dialog |
+| F13 | P2 | Token accounting missed auxiliary model work | Done (R9, R15) | Usage is kept per day and per purpose (chat, names, instructions, PDF), not per single request; AI chat names are now off by default; optional daily token limit |
+| F14 | P2 | Context limited by message count, not tokens | Partial (R9, R15) | Reply cap (16K tokens) and a short digest of older messages added; choosing tool groups per turn and model-written summaries are left |
+| F15 | P2 | Knowledge edits overwrote the manual voice prompt and blocked the app | Done (R9, R15) | — (redraft is opt-in on the Usage page; the notice can be dismissed) |
 | F16 | P2 | Editing or trimming turns leaked attachment files | Done (R10) | — |
 | F17 | P2 | Saved conversations silently evicted | Partial (R5, R13) | Limit is now disclosed and chats can be exported as text; moving to a database is left |
 | F18 | P2 | Composer draft cleared on rejection, not scoped to a chat | Done (R8, R13) | Typed text survives page changes; attached files do not survive the app process being killed |
@@ -128,7 +129,6 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 
 | Round | Content |
 |---|---|
-| 15 | F13, F14, F15 |
 | 16 | F10, F11, F08, F30 |
 | 17 | Lint warnings, AGP/compileSdk upgrade, README and dead code |
 | 18 | Device and deploy verification (needs a phone and AWS access) |

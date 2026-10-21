@@ -138,6 +138,10 @@ fun AssistantScreen(
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
+    onAutoTitleToggled: (Boolean) -> Unit = {},
+    onAutoPersonaToggled: (Boolean) -> Unit = {},
+    onDailyBudgetChanged: (Long) -> Unit = {},
+    onDismissAgentPromptUpdate: () -> Unit = {},
     onAddMemory: (String) -> Unit = {},
     onUpdateMemory: (String, String) -> Unit = { _, _ -> },
     onDeleteMemory: (String) -> Unit = {},
@@ -427,7 +431,12 @@ fun AssistantScreen(
                     uiState.settings.personalization, uiState.settings.assistantName, onPersonalizationChanged, pageModifier,
                     onDirtyChanged = { personalizationDirty = it }
                 )
-                AdminPage.USAGE -> UsagePage(uiState.usageDays, pageModifier)
+                AdminPage.USAGE -> UsagePage(
+                    uiState.usageDays, pageModifier,
+                    autoTitleChats = uiState.settings.autoTitleChats, onAutoTitleChange = onAutoTitleToggled,
+                    autoPersonaUpdate = uiState.settings.autoPersonaUpdate, onAutoPersonaChange = onAutoPersonaToggled,
+                    dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged
+                )
                 AdminPage.STORAGE -> {
                     val files = remember(uiState.chatSessions) { libraryItems(uiState.chatSessions) }
                     StoragePage(
@@ -546,7 +555,7 @@ fun AssistantScreen(
 
         if (uiState.isUpdatingAgentPrompt) {
             AlertDialog(
-                onDismissRequest = {},
+                onDismissRequest = onDismissAgentPromptUpdate,
                 title = { Text("Updating") },
                 text = {
                     androidx.compose.foundation.layout.Row(
@@ -558,10 +567,12 @@ fun AssistantScreen(
                             color = AssistantAccent
                         )
                         Spacer(Modifier.width(16.dp))
-                        Text("Updating your assistant with the new information. Please wait…")
+                        Text("Updating your assistant with the new information. This can take a moment.")
                     }
                 },
-                confirmButton = {},
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = onDismissAgentPromptUpdate) { Text("Continue in background") }
+                },
                 dismissButton = {}
             )
         }

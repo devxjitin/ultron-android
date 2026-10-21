@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.UsageDay
+import com.assistant.app.data.UsageStore
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantTextMuted
@@ -50,7 +51,16 @@ private fun UsageDay.value(metric: UsageMetric): Double = when (metric) {
 
 /** Usage: how much the assistant was used, from counters kept on this phone. */
 @Composable
-fun UsagePage(days: List<UsageDay>, modifier: Modifier = Modifier) {
+fun UsagePage(
+    days: List<UsageDay>,
+    modifier: Modifier = Modifier,
+    autoTitleChats: Boolean = false,
+    onAutoTitleChange: (Boolean) -> Unit = {},
+    autoPersonaUpdate: Boolean = false,
+    onAutoPersonaChange: (Boolean) -> Unit = {},
+    dailyTokenBudget: Long = 0L,
+    onDailyBudgetChange: (Long) -> Unit = {}
+) {
     var rangeIndex by rememberSaveable { mutableIntStateOf(UsageRange.WEEK.ordinal) }
     var metricIndex by rememberSaveable { mutableIntStateOf(UsageMetric.MESSAGES.ordinal) }
     val range = UsageRange.entries[rangeIndex]
@@ -105,6 +115,34 @@ fun UsagePage(days: List<UsageDay>, modifier: Modifier = Modifier) {
             }
         }
 
+        if (total.purposes.isNotEmpty()) {
+            PageLabel("Where tokens went")
+            PageCard {
+                total.purposes.entries.sortedByDescending { it.value }.forEach { (name, tokens) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Text(purposeLabel(name), color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(compactNumber(tokens), color = AssistantTextSecondary, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+
+        PageLabel("Limits and automatic extras")
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Daily token limit", color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp, end = 4.dp))
+            BUDGET_CHOICES.forEach { (label, tokens) -> ChoiceChip(label, dailyTokenBudget == tokens, onClick = { onDailyBudgetChange(tokens) }) }
+        }
+        Spacer(Modifier.height(10.dp))
+        ToggleCard(
+            "Name chats with AI", autoTitleChats, onAutoTitleChange,
+            "Uses a few tokens after each chat. Off: a chat is named after its first question."
+        )
+        Spacer(Modifier.height(10.dp))
+        ToggleCard(
+            "Update assistant from documents", autoPersonaUpdate, onAutoPersonaChange,
+            "Rewrites the assistant's instructions whenever you add, change or delete a knowledge document. Off by default; it costs tokens each time."
+        )
+
         Text(
             "Counted on this phone only and never sent anywhere. Tokens are known for typed chat; voice is measured in time.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 16.dp, start = 4.dp)
@@ -136,6 +174,16 @@ private fun StatTile(title: String, value: String, caption: String, modifier: Mo
         Text(value, color = AssistantTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
         Text(caption, color = AssistantTextMuted, fontSize = 12.sp, maxLines = 1)
     }
+}
+
+private val BUDGET_CHOICES = listOf("Off" to 0L, "50K" to 50_000L, "200K" to 200_000L, "1M" to 1_000_000L)
+
+private fun purposeLabel(purpose: String) = when (purpose) {
+    UsageStore.PURPOSE_CHAT -> "Chat replies"
+    UsageStore.PURPOSE_TITLE -> "Chat names"
+    UsageStore.PURPOSE_PERSONA -> "Assistant instructions"
+    UsageStore.PURPOSE_PDF -> "PDF import"
+    else -> purpose
 }
 
 private fun compactNumber(n: Long): String = when {

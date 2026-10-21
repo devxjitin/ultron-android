@@ -288,3 +288,4 @@
 [2026-10-21 17:03] [Claude] [Docs: docs/ASTRA_REVIEW_STATUS.md - Astra review findings with done/left status]
 [2026-10-21 17:14] [Claude] [Fix: Round 13 audit - unreadable chat recovery, chat export, forget ambiguity+restore, streaming DOCX, chat drafts; compile+lint+tests pass]
 [2026-10-21 17:23] [Claude] [Fix: audit round 14 - structured Google errors, schema notes + Azure original schema, write-timeout lookup, Gmail batch, Sheets/Slides/shared drives, MCP protocol tests]
+[2026-10-21 17:28] [Claude] [Fix: audit round 15 - token purposes + daily budget, AI titles/persona opt-in, reply cap, older-turn digest]

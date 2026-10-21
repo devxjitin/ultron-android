@@ -90,6 +90,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
             .put("model", config.model)
             .put("messages", conversation)
             .put("stream", true)
+            .put("max_completion_tokens", CHAT_REPLY_TOKEN_CAP)
             .put("stream_options", JSONObject().put("include_usage", true))
         if (tools != null) {
             body.put("tools", tools)

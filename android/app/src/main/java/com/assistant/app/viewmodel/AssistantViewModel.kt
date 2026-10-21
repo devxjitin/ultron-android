@@ -503,9 +503,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             showToast("Add a Gemini or Azure API key in Developer settings first.", AppNotificationType.ERROR)
             return false
         }
+        if (overDailyBudget()) {
+            showToast("Today's token budget is used up. Raise or remove it on the Usage page to keep chatting.", AppNotificationType.ERROR)
+            return false
+        }
         val userMessage = ChatMessage(++chatMessageId, fromUser = true, text = message, attachments = attachments)
         val replyId = ++chatMessageId
         val history = chatContext(_uiState.value.chatMessages + userMessage)
+        // Messages that no longer fit are not dropped without a trace: a short reminder of them goes into the instruction.
+        val earlier = earlierDigest(_uiState.value.chatMessages, history.size - 1)
         _uiState.update {
             it.copy(
                 chatMessages = it.chatMessages + userMessage + ChatMessage(replyId, fromUser = false, text = ""),
@@ -561,7 +567,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     hasTools = hasTools,
                     canRemember = settings.memoryEnabled,
                     style = settings.personalization.instruction(forVoice = false)
-                )
+                ) + earlier
                 val chatListener = object : ChatStreamListener {
                     override suspend fun onText(delta: String) {
                         incoming.send(delta)
@@ -592,19 +598,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 statusJob.cancel()
                 if (requestId != chatRequestSeq) {
                     // The chat was replaced while this request ran: keep the usage, drop the reply.
-                    recordUsage(UsageDay("", inputTokens = usedInput, outputTokens = usedOutput))
+                    recordUsage(chatTokens(usedInput, usedOutput))
                 } else if (reply.isBlank()) {
                     updateReply { it.copy(text = "I have nothing to say to that. Try asking another way.", status = null, isError = true) }
                 } else {
                     saveChatTurn(message, reply.trim(), attachments)
-                    recordUsage(UsageDay("", chatMessages = 1, inputTokens = usedInput, outputTokens = usedOutput))
+                    recordUsage(chatTokens(usedInput, usedOutput, messages = 1))
                 }
             } catch (e: CancellationException) {
                 // Tokens already billed for a cancelled reply still count.
-                if (usedInput + usedOutput > 0) recordUsage(UsageDay("", inputTokens = usedInput, outputTokens = usedOutput))
+                if (usedInput + usedOutput > 0) recordUsage(chatTokens(usedInput, usedOutput))
                 throw e
             } catch (e: Exception) {
-                if (usedInput + usedOutput > 0) recordUsage(UsageDay("", inputTokens = usedInput, outputTokens = usedOutput))
+                if (usedInput + usedOutput > 0) recordUsage(chatTokens(usedInput, usedOutput))
                 incoming.close()
                 revealer.cancel()
                 statusJob.cancel()
@@ -849,16 +855,31 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      * Has the model name a saved chat after what the whole conversation was about, not its first
      * question: after the first exchange, then again every third one as the topic develops.
      */
-    private fun recordAuxiliaryUsage(inputTokens: Int, outputTokens: Int) =
-        recordUsage(UsageDay("", inputTokens = inputTokens.toLong(), outputTokens = outputTokens.toLong()))
+    private fun auxiliaryUsage(purpose: String): (Int, Int) -> Unit = { inputTokens, outputTokens ->
+        recordUsage(UsageDay("", inputTokens = inputTokens.toLong(), outputTokens = outputTokens.toLong(),
+            purposes = mapOf(purpose to inputTokens.toLong() + outputTokens)))
+    }
 
-    /** Text generation for titles, personas and formatting; the tokens it uses count in Usage like chat tokens. */
-    private fun auxTextClient(apiKey: String) = GeminiTextClient(apiKey, onUsage = ::recordAuxiliaryUsage)
+    private fun chatTokens(input: Long, output: Long, messages: Int = 0) =
+        UsageDay("", chatMessages = messages, inputTokens = input, outputTokens = output,
+            purposes = mapOf(UsageStore.PURPOSE_CHAT to input + output))
+
+    /** Text generation for titles, personas and formatting; the tokens it uses count in Usage, under [purpose]. */
+    private fun auxTextClient(apiKey: String, purpose: String) = GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose))
+
+    /** True once today's tokens reach the daily budget the user set (never when no budget is set). */
+    private fun overDailyBudget(): Boolean {
+        val budget = _uiState.value.settings.dailyTokenBudget
+        if (budget <= 0) return false
+        val today = java.time.LocalDate.now().toString()
+        return (_uiState.value.usageDays.firstOrNull { it.day == today }?.tokens ?: 0L) >= budget
+    }
 
     private suspend fun updateChatTitle(sessionId: String) {
         try {
             // Titles are written by Gemini; a chat that runs on Azure must not send its text to another provider.
             if (_uiState.value.azure.isActive) return
+            if (!_uiState.value.settings.autoTitleChats || overDailyBudget()) return
             val session = chatHistoryStore.sessions.first().firstOrNull { it.id == sessionId } ?: return
             val turns = session.turns.size
             if (session.customTitle != null && turns % TITLE_REFRESH_EVERY_TURNS != 0) return
@@ -867,7 +888,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val files = it.attachments.joinToString(" ") { file -> "[file: ${file.name}]" }
                 "User: ${"$files ${it.userText}".trim().take(300)}\nAssistant: ${it.assistantText.take(300)}"
             }
-            val raw = auxTextClient(apiKey).generateText(
+            val raw = auxTextClient(apiKey, UsageStore.PURPOSE_TITLE).generateText(
                 "Write a short title (2 to 5 words) for this conversation, based on what it was about overall, " +
                     "not just the first message. Use the language of the conversation. Reply with the title only, " +
                     "no quotes or punctuation at the end.\n\n$transcript"
@@ -1825,7 +1846,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val instruction = KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
                 val draft = KnowledgeBaseProvider.validatePersonaDraft(
-                    auxTextClient(apiKey).generateText(instruction)
+                    auxTextClient(apiKey, UsageStore.PURPOSE_PERSONA).generateText(instruction)
                 )
                 _uiState.update { it.copy(isGeneratingPrompt = false, generatedPromptDraft = draft) }
                 showToast("Agent prompt drafted. Review and save.")
@@ -1849,25 +1870,24 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  (see [AppSettingsStore.setAutoPersona]), so a manual edit lasts until the next change. */
     private fun refreshAutoPersona() {
         personaRefreshJob?.cancel()
-        _uiState.update { it.copy(isUpdatingAgentPrompt = true) }
+        _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
         personaRefreshJob = viewModelScope.launch {
             try {
                 // A prompt the user wrote is theirs; only a generated (or empty) one is redrafted.
-                if (!settingsStore.canReplacePersona()) {
-                    _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
-                    return@launch
-                }
+                if (!settingsStore.canReplacePersona()) return@launch
                 val docs = ragDocumentStore.documents.first()
                 if (docs.isEmpty()) {
                     settingsStore.setAutoPersona(null)
                     invalidateWarmSessionAndReprewarm()
-                } else {
+                } else if (_uiState.value.settings.autoPersonaUpdate && !overDailyBudget()) {
+                    // Only when the user switched it on (Usage page): redrafting spends tokens on every document change.
                     val apiKey = resolveApiKey()
                     if (apiKey.isNotBlank()) {
-                        // Bounded so the blocking "Updating" screen can never hang the app.
+                        _uiState.update { it.copy(isUpdatingAgentPrompt = true) }
+                        // Bounded so the "Updating" notice can never hang the app.
                         val draft = withTimeoutOrNull(PERSONA_REFRESH_TIMEOUT_MS) {
                             KnowledgeBaseProvider.validatePersonaDraft(
-                                auxTextClient(apiKey).generateText(
+                                auxTextClient(apiKey, UsageStore.PURPOSE_PERSONA).generateText(
                                     KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
                                 )
                             )
@@ -1888,6 +1908,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
         }
+    }
+
+    /** Hides the "Updating" notice; the redraft keeps running in the background. */
+    fun onDismissAgentPromptUpdate() {
+        _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
+    }
+
+    fun onAutoTitleToggled(enabled: Boolean) {
+        viewModelScope.launch { runCatching { settingsStore.setAutoTitleChats(enabled) } }
+    }
+
+    fun onAutoPersonaToggled(enabled: Boolean) {
+        viewModelScope.launch {
+            runCatching { settingsStore.setAutoPersonaUpdate(enabled) }
+            if (enabled) refreshAutoPersona()
+        }
+    }
+
+    fun onDailyBudgetChanged(tokens: Long) {
+        viewModelScope.launch { runCatching { settingsStore.setDailyTokenBudget(tokens) } }
     }
 
     fun onDismissPromptGenerationError() {
@@ -1962,7 +2002,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     if (embeddingKey.isBlank()) throw UserMessageException("Knowledge setup is incomplete. Add the Knowledge API key in Developer settings.")
                     val formattedText = GeminiTextClient(
                         apiKey = embeddingKey,
-                        onUsage = ::recordAuxiliaryUsage,
+                        onUsage = auxiliaryUsage(UsageStore.PURPOSE_PDF),
                         documentFormatPrompt = _uiState.value.settings.documentFormatPrompt,
                         documentFormatModel = AssistantOptions.DATASET_MODEL
                     ).formatKnowledgePdf(pdfBytes, _uiState.value.settings.retrievalChunkLimit)

@@ -8,6 +8,9 @@ import com.assistant.app.data.McpToolSpec
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Upper limit for one typed-chat reply (thinking included), so a runaway answer cannot spend unlimited tokens. */
+internal const val CHAT_REPLY_TOKEN_CAP = 16_384
+
 /** Function declarations in the shape Gemini expects, shared by the Live voice session and the typed chat. */
 object ToolDeclarations {
 
