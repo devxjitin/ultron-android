@@ -122,6 +122,7 @@ import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 import com.assistant.app.viewmodel.ChatMessage
+import com.assistant.app.viewmodel.IncomingShare
 import com.assistant.app.viewmodel.ChatToolCall
 import com.assistant.app.viewmodel.ChatToolState
 import kotlinx.coroutines.Dispatchers
@@ -150,6 +151,8 @@ fun ChatHome(
     onEdit: (Long, String) -> Unit,
     onNotice: (String) -> Unit,
     onVoiceClick: () -> Unit,
+    incomingShare: IncomingShare? = null,
+    onShareConsumed: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var input by rememberSaveable { mutableStateOf("") }
@@ -159,23 +162,35 @@ fun ChatHome(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        scope.launch {
-            for (uri in uris) {
-                if (pending.size >= MAX_FILES_PER_MESSAGE) {
-                    onNotice("You can attach up to $MAX_FILES_PER_MESSAGE files at a time.")
-                    break
-                }
-                val result = withContext(Dispatchers.IO) { readAttachment(context, uri) }
-                when {
-                    result.file == null -> onNotice(result.problem ?: "Couldn't read that file.")
-                    pending.sumOf { it.size } + result.file.size > MAX_TOTAL_BYTES ->
-                        onNotice("Those files are too big together. Attach fewer or smaller files.")
-                    else -> pending.add(result.file)
-                }
+    // Used by the "+" picker and by files shared from other apps.
+    val addFiles: suspend (List<Uri>) -> Unit = { uris ->
+        for (uri in uris) {
+            if (pending.size >= MAX_FILES_PER_MESSAGE) {
+                onNotice("You can attach up to $MAX_FILES_PER_MESSAGE files at a time.")
+                break
+            }
+            val result = withContext(Dispatchers.IO) { readAttachment(context, uri) }
+            when {
+                result.file == null -> onNotice(result.problem ?: "Couldn't read that file.")
+                pending.sumOf { it.size } + result.file.size > MAX_TOTAL_BYTES ->
+                    onNotice("Those files are too big together. Attach fewer or smaller files.")
+                else -> pending.add(result.file)
             }
         }
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch { addFiles(uris) }
+    }
+
+    // A link or files shared from another app: files are attached and text lands in the box, never sent on its own,
+    // so the user can add a question first.
+    LaunchedEffect(incomingShare?.id) {
+        val share = incomingShare ?: return@LaunchedEffect
+        addFiles(share.uris)
+        share.text?.let { input = if (input.isBlank()) it else input + "\n" + it }
+        onShareConsumed(share.id)
     }
 
     val lastLength = messages.lastOrNull()?.text?.length ?: 0

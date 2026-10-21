@@ -103,6 +103,7 @@ fun AssistantScreen(
     onChatEdit: (Long, String) -> Unit = { _, _ -> },
     onChatNew: () -> Unit = {},
     onChatNotice: (String) -> Unit = {},
+    onShareConsumed: (Long) -> Unit = {},
     onOpenChat: (String) -> Unit = {},
     onRequestPermission: () -> Unit,
     onOpenAppSettings: () -> Unit = {},
@@ -252,6 +253,8 @@ fun AssistantScreen(
                 onSend = onChatSend,
                 onEdit = onChatEdit,
                 onNotice = onChatNotice,
+                incomingShare = uiState.incomingShare,
+                onShareConsumed = onShareConsumed,
                 onVoiceClick = {
                     when {
                         hasMicPermission -> onMicTapped()

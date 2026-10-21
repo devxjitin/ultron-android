@@ -136,6 +136,8 @@ Every connector is defined in code with its fixed set of tools and a **surface**
 | Phone navigation | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot (accessibility service) | Voice only |
 | Screen control | read and tap what is on screen, type, wait for text (accessibility service) | Voice only |
 
+**Share to Ultron.** Ultron appears in Android's Share sheet. Share a YouTube video from the YouTube app and a new chat opens with just the link in the message box (the title is dropped and nothing is sent), so you can add any question before sending, for example for its details or to download it (needs the YouTube connector). Share files (images, video, PDF, DOCX, text) from the file manager or any app and they are attached to the chat, ready for your question. Other shared text lands in the message box.
+
 Tap any connector card to open its own page: what it does, where it runs, what it needs, where your data goes and every tool it has (for GitHub and Google, the live tool list after sign-in).
 
 A connector whose sign-in expires shows *Reconnect* and *Remove* instead of failing silently.

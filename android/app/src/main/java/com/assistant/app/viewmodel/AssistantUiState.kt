@@ -1,5 +1,6 @@
 package com.assistant.app.viewmodel
 
+import android.net.Uri
 import com.assistant.app.network.ChatAttachment
 
 import com.assistant.app.network.GithubDeviceCode
@@ -51,7 +52,12 @@ enum class ChatToolState { RUNNING, DONE, FAILED }
 
 data class ChatToolCall(val index: Int, val label: String, val state: ChatToolState)
 
+/** Something another app shared to Ultron (a link or text, and/or files), waiting for the chat to take it. */
+data class IncomingShare(val id: Long, val text: String?, val uris: List<Uri>)
+
 data class AssistantUiState(
+    /** A share from another app, until the home chat has picked it up. */
+    val incomingShare: IncomingShare? = null,
     /** The typed chat shown on the home screen while no voice session is running. */
     val chatMessages: List<ChatMessage> = emptyList(),
     val isChatSending: Boolean = false,

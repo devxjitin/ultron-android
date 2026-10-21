@@ -694,6 +694,37 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Shows a short message from the chat screen, for example "file too large". */
     fun onChatNotice(message: String) = showToast(message, AppNotificationType.ERROR)
 
+    /**
+     * Another app shared a link or files to Ultron. A YouTube link opens a new chat with just the link in the message box
+     * (the YouTube app also shares the title, which is dropped); anything else goes into the current chat. Nothing is sent:
+     * the user adds whatever they want and presses send.
+     */
+    fun onShareReceived(text: String?, uris: List<android.net.Uri>) {
+        val cleanText = text?.trim()?.takeIf { it.isNotEmpty() }
+        if (cleanText == null && uris.isEmpty()) return
+        val current = _uiState.value
+        val youtubeLink = cleanText?.let { com.assistant.app.data.YouTubeLookup.findLink(it) }.takeIf { uris.isEmpty() }
+        if (youtubeLink != null) {
+            onChatNew()
+            if (DeviceTool.YOUTUBE_INFO !in current.settings.enabledDeviceTools) {
+                showToast("Add the YouTube connector from Marketplace so Ultron can read and download videos.", AppNotificationType.ERROR)
+            }
+        } else {
+            if (current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) stopSession()
+            clearAdminDrafts()
+        }
+        _uiState.update {
+            it.copy(
+                showSettings = false, showConnectors = false, showMemory = false,
+                incomingShare = IncomingShare(System.nanoTime(), youtubeLink ?: cleanText, uris)
+            )
+        }
+    }
+
+    fun onShareConsumed(id: Long) {
+        _uiState.update { if (it.incomingShare?.id == id) it.copy(incomingShare = null) else it }
+    }
+
     /** Starts a fresh typed chat; the old one stays in History. */
     fun onChatNew() {
         chatJob?.cancel()

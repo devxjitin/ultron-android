@@ -64,9 +64,7 @@ enum class DeviceTool(
     val label: String,
     val hint: String,
     val description: String,
-    val params: List<ToolParam> = emptyList(),
-    /** Every tool starts switched off; adding its connector (Marketplace or Automation) turns it on. */
-    val defaultEnabled: Boolean = false
+    val params: List<ToolParam> = emptyList()
 ) {
     BRIGHTNESS(
         ToolGroup.DISPLAY_SOUND, "set_brightness", "Set brightness", "Make the screen brighter or dimmer.",
@@ -444,8 +442,7 @@ enum class DeviceTool(
         listOf(
             ToolParam("days", ToolParamType.INTEGER, "Days to look back, 1-7. Default 1.", required = false),
             ToolParam("limit", ToolParamType.INTEGER, "How many apps, 1-10. Default 5.", required = false)
-        ),
-        defaultEnabled = false
+        )
     ),
     APP_USAGE(
         ToolGroup.NOTIFICATIONS, "get_app_usage_time", "App usage time", "Tell how long one app was used (sends it to Gemini).",
@@ -453,19 +450,16 @@ enum class DeviceTool(
         listOf(
             ToolParam("name", ToolParamType.STRING, "App name."),
             ToolParam("days", ToolParamType.INTEGER, "Days to look back, 1-7. Default 1.", required = false)
-        ),
-        defaultEnabled = false
+        )
     ),
     READ_SCREEN(
         ToolGroup.SCREEN, "read_screen", "Read the screen", "See the text and buttons on screen (sends them to Gemini).",
         "Lists the visible text, buttons and fields of the app on screen, numbered, with tap positions. " +
-            "Call it before clicking or typing so you know what is there. Needs the accessibility service.",
-        defaultEnabled = false
+            "Call it before clicking or typing so you know what is there. Needs the accessibility service."
     ),
     CURRENT_APP(
         ToolGroup.SCREEN, "get_current_app", "Current app", "Tell which app is on screen.",
-        "Returns the name of the app currently on screen. Needs the accessibility service.",
-        defaultEnabled = false
+        "Returns the name of the app currently on screen. Needs the accessibility service."
     ),
     CLICK_TEXT(
         ToolGroup.SCREEN, "click_on_text", "Click by text", "Tap a button or link by its label.",
@@ -474,14 +468,12 @@ enum class DeviceTool(
         listOf(
             ToolParam("text", ToolParamType.STRING, "Text or label of the element."),
             ToolParam("occurrence", ToolParamType.INTEGER, "Which match to tap if several, starting at 1. Default 1.", required = false)
-        ),
-        defaultEnabled = false
+        )
     ),
     CLICK_ITEM(
         ToolGroup.SCREEN, "click_screen_item", "Click by number", "Tap an item by its number from the last screen reading.",
         "Taps the item with this number from the latest read_screen result. Needs the accessibility service.",
-        listOf(ToolParam("number", ToolParamType.INTEGER, "Item number from read_screen.")),
-        defaultEnabled = false
+        listOf(ToolParam("number", ToolParamType.INTEGER, "Item number from read_screen."))
     ),
     TAP_POSITION(
         ToolGroup.SCREEN, "tap_screen_position", "Tap a position", "Tap at exact screen coordinates.",
@@ -489,8 +481,7 @@ enum class DeviceTool(
         listOf(
             ToolParam("x", ToolParamType.INTEGER, "Horizontal pixel position."),
             ToolParam("y", ToolParamType.INTEGER, "Vertical pixel position.")
-        ),
-        defaultEnabled = false
+        )
     ),
     TYPE_TEXT(
         ToolGroup.SCREEN, "type_text", "Type text", "Type into the text field on screen.",
@@ -500,13 +491,11 @@ enum class DeviceTool(
             ToolParam("text", ToolParamType.STRING, "Text to type."),
             ToolParam("append", ToolParamType.STRING, "yes to add to existing text; default replaces it.", required = false,
                 choices = listOf("yes", "no"))
-        ),
-        defaultEnabled = false
+        )
     ),
     PRESS_ENTER(
         ToolGroup.SCREEN, "press_enter", "Press Enter", "Submit the text field (Search/Go/Send).",
-        "Presses Enter on the focused text field, for example to run a search after typing. Needs the accessibility service and Android 11.",
-        defaultEnabled = false
+        "Presses Enter on the focused text field, for example to run a search after typing. Needs the accessibility service and Android 11."
     ),
     WAIT_FOR_TEXT(
         ToolGroup.SCREEN, "wait_for_screen_text", "Wait for text", "Wait until some text appears on screen.",
@@ -514,14 +503,12 @@ enum class DeviceTool(
         listOf(
             ToolParam("text", ToolParamType.STRING, "Text to wait for."),
             ToolParam("seconds", ToolParamType.INTEGER, "Longest wait, 1-30. Default 10.", required = false)
-        ),
-        defaultEnabled = false
+        )
     ),
     READ_NOTIFICATIONS(
         ToolGroup.NOTIFICATIONS, "read_notifications", "Read notifications", "Read the phone's current notifications (sends their text to Gemini).",
         "Lists the current notifications with app, title and text. Needs notification access; if missing, the access screen opens.",
-        listOf(ToolParam("limit", ToolParamType.INTEGER, "How many, 1-20. Default 10.", required = false)),
-        defaultEnabled = false
+        listOf(ToolParam("limit", ToolParamType.INTEGER, "How many, 1-20. Default 10.", required = false))
     );
 
     companion object {

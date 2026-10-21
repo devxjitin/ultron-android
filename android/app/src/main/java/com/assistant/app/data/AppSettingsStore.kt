@@ -69,15 +69,17 @@ const val MIN_RETRIEVAL_CHUNK_LIMIT = 1
 const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
 
 /**
- * Applies the user's saved on/off choices ("name=1" / "name=0") over each tool's default, so tools
- * added in later versions start in their default state instead of being silently off.
+ * A phone connector is installed when any of its tools was switched on ("name=1" in the saved choices), and an installed
+ * connector uses all of its tools. Older versions let single tools be switched on or off, so a connector can have been left
+ * with only one tool on; that counts as installed and gets the rest of its tools, instead of staying half-working.
  */
 fun effectiveDeviceTools(overrides: Set<String>?): Set<DeviceTool> {
-    val chosen = overrides.orEmpty().mapNotNull {
+    val on = overrides.orEmpty().mapNotNull {
         val parts = it.split("=", limit = 2)
-        if (parts.size == 2) parts[0] to (parts[1] == "1") else null
-    }.toMap()
-    return DeviceTool.entries.filter { chosen[it.functionName] ?: it.defaultEnabled }.toSet()
+        if (parts.size == 2 && parts[1] == "1") parts[0] else null
+    }.toSet()
+    return PhoneConnectors.all.filter { connector -> connector.tools.any { it.functionName in on } }
+        .flatMap { it.tools }.toSet()
 }
 
 val DEFAULT_DOCUMENT_FORMAT_PROMPT = """

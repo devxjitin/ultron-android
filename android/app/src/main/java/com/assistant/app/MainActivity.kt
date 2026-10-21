@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -133,6 +134,25 @@ class MainActivity : ComponentActivity() {
         viewModel.onAppForegrounded()
     }
 
+
+    /** Takes a link, text or files another app shared to Ultron and gives them to the home chat. */
+    private fun handleShareIntent(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
+        val uris = if (action == Intent.ACTION_SEND_MULTIPLE) {
+            IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+        } else {
+            listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
+        }
+        viewModel.onShareReceived(intent.getStringExtra(Intent.EXTRA_TEXT), uris)
+        intent.action = null // so a recreated activity does not take the same share twice
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShareIntent(intent)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -277,6 +297,7 @@ class MainActivity : ComponentActivity() {
                         onChatEdit = { id, text -> viewModel.onChatEdit(id, text) },
                         onChatNew = { viewModel.onChatNew() },
                         onChatNotice = { viewModel.onChatNotice(it) },
+                        onShareConsumed = { viewModel.onShareConsumed(it) },
                         onOpenChat = { viewModel.onOpenChat(it) },
                         onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
                         onHomeTapped = { viewModel.onHomeTapped() },
