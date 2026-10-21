@@ -643,10 +643,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         DeviceTool.entries.filter { it in PhoneConnectors.chatTools && it in settings.enabledDeviceTools }
             .forEach { declarations.put(ToolDeclarations.device(it)) }
         if (settings.githubLogin.isNotEmpty()) {
-            settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it)) }
+            settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it, withOriginalSchema = true)) }
         }
         settings.enabledGoogleTools()
-            .forEach { (service, tool) -> declarations.put(ToolDeclarations.mcp(tool, prefix = service.toolPrefix)) }
+            .forEach { (service, tool) -> declarations.put(ToolDeclarations.mcp(tool, prefix = service.toolPrefix, withOriginalSchema = true)) }
         return declarations
     }
 
@@ -1236,8 +1236,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun isGoogleAuthRejection(result: Result<String>): Boolean {
         val failure = result.exceptionOrNull() ?: return false
-        return (failure as? com.assistant.app.network.McpException)?.httpCode == 401 ||
-            failure.message.orEmpty().startsWith("Google API error 401")
+        val mcp = failure as? McpException ?: return false
+        // Servers that classify their errors say so; the message check is for a Lambda deployed before that existed.
+        return mcp.httpCode == 401 || mcp.kind == McpException.KIND_AUTH_REJECTED ||
+            (mcp.kind == null && mcp.message.orEmpty().startsWith("Google API error 401"))
     }
 
     /** Forgets the cached token (here and in Play services) so the next call fetches a new one. */

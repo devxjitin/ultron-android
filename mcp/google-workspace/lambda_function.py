@@ -13,11 +13,12 @@ import hmac
 import json
 import os
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 PROTOCOL_VERSION = "2025-03-26"
@@ -31,33 +32,59 @@ def _time_left():
     return 20.0 if _deadline is None else _deadline - time.monotonic()
 
 
-def _call_timeout():
-    left = _time_left()
+class GoogleError(RuntimeError):
+    """A failed Google call. `kind` lets the app tell an expired token from a missing file from a timeout without parsing the text."""
+
+    def __init__(self, message, kind, status=0):
+        super().__init__(message)
+        self.kind = kind
+        self.status = status
+
+
+def _kind(status):
+    return {401: "auth_rejected", 403: "permission_denied", 404: "not_found", 429: "rate_limited"}.get(status, "upstream_error")
+
+
+# A write that times out may still have happened; this much time is kept back so the result can be looked up afterwards.
+WRITE_RESERVE_S = 4.0
+
+
+def _call_timeout(reserve=0.0):
+    left = _time_left() - reserve
     if left < 1.0:
-        raise RuntimeError("The operation ran out of time before Google answered. Nothing more was attempted; check the result before retrying.")
+        raise GoogleError("The operation ran out of time before Google answered. Nothing more was attempted; check the result before retrying.", "timeout")
     return min(20.0, left)
 
 
 # ---------------------------------------------------------------- Google HTTP helpers
 
-def _google(method, url, token, params=None, body=None, raw=False):
+def _google(method, url, token, params=None, body=None, raw=False, data=None, content_type=None, with_type=False):
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None}, doseq=True)
-    data = json.dumps(body).encode() if body is not None else None
+    if data is None and body is not None:
+        data, content_type = json.dumps(body).encode(), "application/json"
     headers = {"Authorization": f"Bearer {token}"}
     if data is not None:
-        headers["Content-Type"] = "application/json"
+        headers["Content-Type"] = content_type or "application/json"
+    write = method != "GET"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=_call_timeout()) as resp:
+        with urllib.request.urlopen(req, timeout=_call_timeout(WRITE_RESERVE_S if write else 0.0)) as resp:
             payload = resp.read(2_000_000)
+            answer_type = resp.headers.get("Content-Type", "")
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")
         try:
             detail = json.loads(detail)["error"]["message"]
         except (ValueError, KeyError, TypeError):
             detail = detail[:300]
-        raise RuntimeError(f"Google API error {e.code}: {detail}")
+        raise GoogleError(f"Google API error {e.code}: {detail}", _kind(e.code), e.code)
+    except (socket.timeout, TimeoutError, urllib.error.URLError):
+        if write:
+            raise GoogleError("Google did not answer in time. The change may or may not have been made; check before trying again.", "outcome_unknown")
+        raise GoogleError("Google did not answer in time.", "timeout")
+    if with_type:
+        return payload, answer_type
     if raw:
         return payload
     return json.loads(payload) if payload else {}
@@ -156,9 +183,36 @@ def cal_create_event(a, t):
             body[key] = a[key]
     if a.get("attendees"):
         body["attendees"] = [{"email": x} for x in a["attendees"]]
-    e = _google("POST", f"{CAL}/calendars/{_q(a.get('calendar_id', 'primary'))}/events", t,
-                {"sendUpdates": "all" if a.get("send_invites") else "none"}, body)
+    try:
+        e = _google("POST", f"{CAL}/calendars/{_q(a.get('calendar_id', 'primary'))}/events", t,
+                    {"sendUpdates": "all" if a.get("send_invites") else "none"}, body)
+    except GoogleError as err:
+        if err.kind != "outcome_unknown":
+            raise
+        found = _find_event(a, t)
+        if found:
+            return _json(_event_summary(found)) + "\nGoogle was slow to answer, but the event exists."
+        if found is None:
+            raise GoogleError("Google did not answer in time and the event could not be confirmed. Look at the calendar before creating it again.", "outcome_unknown")
+        raise GoogleError("Google did not answer in time and no matching event was found, so it was most likely not created.", "outcome_unknown")
     return _json(_event_summary(e))
+
+
+def _find_event(a, t):
+    """The event with this title and start after a timed-out create: the event, False when none matches, None when the lookup itself failed."""
+    start, end = a["start"], a["end"]
+    try:
+        items = _google("GET", f"{CAL}/calendars/{_q(a.get('calendar_id', 'primary'))}/events", t, {
+            "timeMin": start if "T" in start else start + "T00:00:00Z", "timeMax": end if "T" in end else end + "T23:59:59Z",
+            "q": a["summary"], "singleEvents": "true", "maxResults": 10}).get("items", [])
+    except RuntimeError:
+        return None
+    wanted = _when(start, a.get("timezone"))
+    for e in items:
+        if e.get("summary") == a["summary"] and (e.get("start", {}).get("dateTime") or e.get("start", {}).get("date")) is not None:
+            if "date" in wanted or e["start"].get("dateTime", "")[:16] == start[:16]:
+                return e
+    return False
 
 
 def cal_delete_event(a, t):
@@ -232,21 +286,64 @@ def _body_text(payload):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", "\n".join(html))).strip()
 
 
+GM_BATCH = "https://gmail.googleapis.com/batch/gmail/v1"
+META_QUERY = urllib.parse.urlencode({"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]}, doseq=True)
+
+
+def _parse_batch(payload, content_type):
+    """{index: message} from a multipart/mixed batch answer; parts that failed or cannot be read are left out."""
+    boundary = re.search(r"boundary=\"?([^;\"\s]+)", content_type or "")
+    if not boundary:
+        return {}
+    found = {}
+    for chunk in payload.decode("utf-8", "replace").split("--" + boundary.group(1)):
+        ident, status = re.search(r"Content-ID:\s*<response-item(\d+)>", chunk, re.I), re.search(r"HTTP/\d(?:\.\d)? (\d+)", chunk)
+        if not ident or not status or status.group(1) != "200":
+            continue
+        start, end = chunk.find("{", status.end()), chunk.rfind("}")
+        try:
+            found[int(ident.group(1))] = json.loads(chunk[start:end + 1])
+        except ValueError:
+            continue
+    return found
+
+
+def _message_metadata(ids, t):
+    """Headers of several messages with a single request to Gmail; any the batch did not return are fetched one by one."""
+    boundary = "batch_ultron_7f3a"
+    parts = "".join(f"--{boundary}\r\nContent-Type: application/http\r\nContent-ID: <item{i}>\r\n\r\n"
+                    f"GET /gmail/v1/users/me/messages/{_q(mid)}?{META_QUERY}\r\n" for i, mid in enumerate(ids))
+    messages = {}
+    try:
+        payload, content_type = _google("POST", GM_BATCH, t, data=(parts + f"--{boundary}--\r\n").encode(),
+                                        content_type=f"multipart/mixed; boundary={boundary}", with_type=True)
+        messages = _parse_batch(payload, content_type)
+    except GoogleError as e:
+        if e.kind == "auth_rejected":
+            raise  # the token is bad for every message; fetching them one by one would fail the same way
+
+    def one(i):
+        try:
+            return _google("GET", f"{GM}/messages/{_q(ids[i])}", t, {"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]})
+        except RuntimeError:
+            return None  # out of time or refused for this one message; the rest are still useful
+
+    missing = [i for i in range(len(ids)) if i not in messages]
+    if missing:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            for i, msg in zip(missing, pool.map(one, missing)):
+                if msg is not None:
+                    messages[i] = msg
+    return [messages[i] for i in range(len(ids)) if i in messages]
+
+
 def gm_search(a, t):
     listing = _google("GET", f"{GM}/messages", t, {"q": a.get("query"), "maxResults": min(int(a.get("max_results", 10)), 20),
                                                    "pageToken": a.get("page_token")})
     ids, next_token = listing.get("messages", []), listing.get("nextPageToken")
-
-    def one(m):
-        try:
-            msg = _google("GET", f"{GM}/messages/{m['id']}", t, {"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]})
-        except RuntimeError:
-            return None  # out of time or refused for this one message; the rest are still useful
-        return {"id": msg["id"], "thread_id": msg.get("threadId"), "from": _header(msg, "From"), "subject": _header(msg, "Subject"),
-                "date": _header(msg, "Date"), "snippet": msg.get("snippet"), "unread": "UNREAD" in msg.get("labelIds", [])}
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        found = [m for m in pool.map(one, ids) if m is not None]
+    found = [{"id": msg["id"], "thread_id": msg.get("threadId"), "from": _header(msg, "From"), "subject": _header(msg, "Subject"),
+              "date": _header(msg, "Date"), "snippet": msg.get("snippet"), "unread": "UNREAD" in msg.get("labelIds", [])}
+             for msg in (_message_metadata([m["id"] for m in ids], t) if ids else [])]
     if len(found) < len(ids):
         return _json({"messages": found, "next_page_token": next_token,
                       "note": f"Only {len(found)} of {len(ids)} messages could be read in time."})
@@ -306,6 +403,9 @@ GMAIL_TOOLS = [
 
 DR = "https://www.googleapis.com/drive/v3"
 FILE_FIELDS = "id,name,mimeType,modifiedTime,size,webViewLink"
+# Files that live in a shared drive are invisible to Drive unless the request says it understands them.
+ALL_DRIVES = {"supportsAllDrives": "true"}
+ALL_DRIVES_LIST = {"supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "allDrives"}
 
 
 def _files(data):
@@ -320,29 +420,29 @@ def dr_search(a, t):
         text = a["query"].replace("\\", "\\\\").replace("'", "\\'")
         q = f"fullText contains '{text}' and trashed = false"
     return _files(_google("GET", f"{DR}/files", t, {"q": q, "pageSize": min(int(a.get("max_results", 10)), 25), "pageToken": a.get("page_token"),
-                                    "fields": f"nextPageToken,files({FILE_FIELDS})"}))
+                                    "fields": f"nextPageToken,files({FILE_FIELDS})", **ALL_DRIVES_LIST}))
 
 
 def dr_recent(a, t):
     return _files(_google("GET", f"{DR}/files", t, {"q": "trashed = false", "orderBy": "modifiedTime desc",
                                                     "pageSize": min(int(a.get("max_results", 10)), 25), "pageToken": a.get("page_token"),
-                                                    "fields": f"nextPageToken,files({FILE_FIELDS})"}))
+                                                    "fields": f"nextPageToken,files({FILE_FIELDS})", **ALL_DRIVES_LIST}))
 
 
 def dr_meta(a, t):
-    return _json(_google("GET", f"{DR}/files/{_q(a['file_id'])}", t, {"fields": FILE_FIELDS + ",owners(displayName,emailAddress),parents"}))
+    return _json(_google("GET", f"{DR}/files/{_q(a['file_id'])}", t, {"fields": FILE_FIELDS + ",owners(displayName,emailAddress),parents", **ALL_DRIVES}))
 
 
 def dr_read(a, t):
     fid = _q(a["file_id"])
-    meta = _google("GET", f"{DR}/files/{fid}", t, {"fields": "name,mimeType,size"})
+    meta = _google("GET", f"{DR}/files/{fid}", t, {"fields": "name,mimeType,size", **ALL_DRIVES})
     mime = meta["mimeType"]
     export = {"application/vnd.google-apps.document": "text/plain", "application/vnd.google-apps.presentation": "text/plain",
               "application/vnd.google-apps.spreadsheet": "text/csv"}.get(mime)
     if export:
         raw = _google("GET", f"{DR}/files/{fid}/export", t, {"mimeType": export}, raw=True)
     elif mime.startswith("text/") or mime in ("application/json", "application/xml"):
-        raw = _google("GET", f"{DR}/files/{fid}", t, {"alt": "media"}, raw=True)
+        raw = _google("GET", f"{DR}/files/{fid}", t, {"alt": "media", **ALL_DRIVES}, raw=True)
     else:
         return f"'{meta['name']}' is a {mime} file; only Google Docs/Sheets/Slides and text files can be read here."
     return f"# {meta['name']}\n" + _window(raw.decode("utf-8", "replace"), a.get("offset"))
@@ -353,14 +453,25 @@ def dr_create(a, t):
     meta = json.dumps({"name": a["name"], "mimeType": a.get("mime_type", "text/plain")})
     payload = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{meta}\r\n"
                f"--{boundary}\r\nContent-Type: {a.get('mime_type', 'text/plain')}\r\n\r\n{a['content']}\r\n--{boundary}--").encode()
-    req = urllib.request.Request(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=" + FILE_FIELDS, data=payload, method="POST",
-        headers={"Authorization": f"Bearer {t}", "Content-Type": f"multipart/related; boundary={boundary}"})
+    started = datetime.now(timezone.utc)
     try:
-        with urllib.request.urlopen(req, timeout=_call_timeout()) as resp:
-            return _json(json.load(resp))
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Google API error {e.code}: {e.read().decode('utf-8', 'replace')[:300]}")
+        created = _google("POST", "https://www.googleapis.com/upload/drive/v3/files", t,
+                          {"uploadType": "multipart", "fields": FILE_FIELDS, **ALL_DRIVES}, data=payload,
+                          content_type=f"multipart/related; boundary={boundary}")
+    except GoogleError as err:
+        if err.kind != "outcome_unknown":
+            raise
+        name = a["name"].replace("\\", "\\\\").replace("'", "\\'")
+        try:
+            files = _google("GET", f"{DR}/files", t, {
+                "q": f"name = '{name}' and trashed = false and createdTime > '{(started - timedelta(seconds=60)).strftime('%Y-%m-%dT%H:%M:%SZ')}'",
+                "orderBy": "createdTime desc", "pageSize": 1, "fields": f"files({FILE_FIELDS})", **ALL_DRIVES_LIST}).get("files", [])
+        except RuntimeError:
+            raise GoogleError("Google did not answer in time and the file could not be confirmed. Look in Drive before creating it again.", "outcome_unknown")
+        if files:
+            return _json(files[0]) + "\nGoogle was slow to answer, but the file exists."
+        raise GoogleError("Google did not answer in time and no new file with that name was found, so it was most likely not created.", "outcome_unknown")
+    return _json(created)
 
 
 DRIVE_TOOLS = [
@@ -450,9 +561,28 @@ def sh_meta(a, t):
          "columns": s["properties"].get("gridProperties", {}).get("columnCount")} for s in data.get("sheets", [])]})
 
 
+def _rows_window(values, start, limit=MAX_TEXT):
+    """Whole rows from `start` while they fit in `limit` characters, and the row to continue from (None when all were returned)."""
+    start, rows, size = max(0, int(start or 0)), [], 0
+    for i in range(start, len(values)):
+        size += len(json.dumps(values[i], ensure_ascii=False)) + 1
+        if rows and size > limit:
+            return rows, i
+        rows.append(values[i])
+    return rows, None
+
+
 def sh_get(a, t):
-    data = _google("GET", f"{SH}/{_q(a['spreadsheet_id'])}/values/{_q(a['range'])}", t)
-    return _text(_json({"range": data.get("range"), "values": data.get("values", [])}))
+    render = a.get("value_render_option")
+    if render not in (None, "FORMATTED_VALUE", "UNFORMATTED_VALUE", "FORMULA"):
+        return "status=invalid\nvalue_render_option must be FORMATTED_VALUE, UNFORMATTED_VALUE or FORMULA."
+    data = _google("GET", f"{SH}/{_q(a['spreadsheet_id'])}/values/{_q(a['range'])}", t, {"valueRenderOption": render})
+    values = data.get("values", [])
+    rows, more = _rows_window(values, a.get("start_row"))
+    out = {"range": data.get("range"), "total_rows": len(values), "first_row": max(0, int(a.get("start_row") or 0)), "values": rows}
+    if more is not None:
+        out["next_start_row"] = more
+    return _json(out)
 
 
 def sh_update(a, t):
@@ -468,7 +598,10 @@ def sh_append(a, t):
 
 SHEETS_TOOLS = [
     _tool("get_spreadsheet", "Get the title and tabs of a spreadsheet.", _obj({"spreadsheet_id": S}, ["spreadsheet_id"]), sh_meta, True),
-    _tool("get_values", "Read cells, e.g. range Sheet1!A1:D20.", _obj({"spreadsheet_id": S, "range": S}, ["spreadsheet_id", "range"]), sh_get, True),
+    _tool("get_values", "Read cells, e.g. range Sheet1!A1:D20. A large range comes back in parts: call again with start_row set to next_start_row.",
+          _obj({"spreadsheet_id": S, "range": S, "start_row": {"type": "integer", "description": "Row (0 = first row of the range) to start from, to read a long range in parts"},
+                "value_render_option": {"type": "string", "enum": ["FORMATTED_VALUE", "UNFORMATTED_VALUE", "FORMULA"], "description": "Default FORMATTED_VALUE; FORMULA shows the formulas"}},
+               ["spreadsheet_id", "range"]), sh_get, True),
     _tool("update_values", "Overwrite cells in a range.", _obj({"spreadsheet_id": S, "range": S, "values": ROWS}, ["spreadsheet_id", "range", "values"]), sh_update, False),
     _tool("append_values", "Add rows after the last row of a table.", _obj({"spreadsheet_id": S, "range": S, "values": ROWS}, ["spreadsheet_id", "range", "values"]), sh_append, False),
 ]
@@ -479,9 +612,11 @@ SHEETS_TOOLS = [
 SL = "https://slides.googleapis.com/v1/presentations"
 
 
-def _slide_text(elements):
+def _slide_text(elements, depth=0):
     out = []
     for el in elements:
+        if depth < 6:  # shapes inside a group are the slide's text too
+            out += _slide_text(el.get("elementGroup", {}).get("children", []), depth + 1)
         text = el.get("shape", {}).get("text", {}).get("textElements", [])
         joined = "".join(x.get("textRun", {}).get("content", "") for x in text).strip()
         if joined:
@@ -496,8 +631,11 @@ def _slide_text(elements):
 
 def sl_read(a, t):
     pres = _google("GET", f"{SL}/{_q(a['presentation_id'])}", t)
-    slides = [{"slide": i + 1, "id": s["objectId"], "text": _slide_text(s.get("pageElements", []))} for i, s in enumerate(pres.get("slides", []))]
-    return _text(_json({"title": pres.get("title"), "slides": slides}))
+    every = pres.get("slides", [])
+    first, last = max(1, int(a.get("from_slide") or 1)), int(a.get("to_slide") or len(every))
+    slides = [{"slide": i + 1, "id": s["objectId"], "text": _slide_text(s.get("pageElements", []))}
+              for i, s in enumerate(every) if first <= i + 1 <= last]
+    return _window(_json({"title": pres.get("title"), "total_slides": len(every), "slides": slides}), a.get("offset"))
 
 
 def sl_replace(a, t):
@@ -507,7 +645,10 @@ def sl_replace(a, t):
 
 
 SLIDES_TOOLS = [
-    _tool("read_presentation", "Read the text of every slide in a presentation.", _obj({"presentation_id": S}, ["presentation_id"]), sl_read, True),
+    _tool("read_presentation", "Read the text of the slides of a presentation (all by default).",
+          _obj({"presentation_id": S, "from_slide": {"type": "integer", "description": "First slide to read, 1-based"},
+                "to_slide": {"type": "integer", "description": "Last slide to read"},
+                "offset": {"type": "integer", "description": "Start of the text, to read a long result in parts"}}, ["presentation_id"]), sl_read, True),
     _tool("replace_text", "Replace every occurrence of a text in a presentation.",
           _obj({"presentation_id": S, "find": S, "replace": S}, ["presentation_id", "find", "replace"]), sl_replace, False),
 ]
@@ -543,16 +684,22 @@ def _rpc(msg, tools, token):
         tool = next((t for t in tools if t["name"] == params.get("name")), None)
         if tool is None:
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "Unknown tool"}}
+        structured = None
         if not token:
             text, is_error = "No Google access token was sent. Sign in to the Google service again.", True
+            structured = {"error": {"kind": "auth_rejected", "status": 401}}
         else:
             try:
                 text, is_error = tool["fn"](arguments, token), False
             except KeyError as e:
                 text, is_error = f"Missing argument: {e}", True
+            except GoogleError as e:
+                text, is_error, structured = str(e), True, {"error": {"kind": e.kind, "status": e.status}}
             except Exception as e:  # surface failures to the model, not as protocol errors
                 text, is_error = str(e), True
         result = {"content": [{"type": "text", "text": text}], "isError": is_error}
+        if structured:
+            result["structuredContent"] = structured
     else:
         return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "Method not found"}}
     return {"jsonrpc": "2.0", "id": mid, "result": result}

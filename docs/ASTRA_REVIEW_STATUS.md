@@ -15,8 +15,8 @@ P2 = meaningful reliability or feature defect, P3 = cleanup.
 | | Count |
 |---|---|
 | Findings in the review | 37 |
-| Fixed (done) | 24 |
-| Partly fixed (a real piece is left) | 13 |
+| Fixed (done) | 28 |
+| Partly fixed (a real piece is left) | 9 |
 | Not started | 0 |
 | All P1 findings (F01–F09, F31) | fixed in code; only F08 (durable downloads) has a follow-up piece left |
 
@@ -41,6 +41,7 @@ been re-run after the changes, and nothing has been tried on a device or deploye
 | 11 | `c0bc03f` | tests; fixed a cancelled call surfacing as an IOException |
 | 12 | `9d5b6cc` | F33 (release id), F32 (usage scope), F19, F35 (Repair, photos), F02 check |
 | 13 | `eddfc23` | F09 (recovery/export), F05 (forget, restore), F17 (disclosure, export), F06 (streaming parser), F18 (drafts) |
+| 14 | not committed yet | F21, F23, F28 (partly), F24, F22 (protocol tests) |
 
 ## Findings
 
@@ -68,14 +69,14 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | F18 | P2 | Composer draft cleared on rejection, not scoped to a chat | Done (R8, R13) | Typed text survives page changes; attached files do not survive the app process being killed |
 | F19 | P2 | Some destinations bypassed the unsaved-changes guard | Done (R8, R12) | — |
 | F20 | P2 | Preview failures looked like endless loading; image decode unbounded | Done (R8) | — |
-| F21 | P2 | Expired Google tokens stayed cached | Partial (R7) | Structured auth errors from the server |
-| F22 | P2 | MCP SSE waited for the whole connection to close | Done (R5, R10, R11) | Protocol-negotiation compatibility tests |
-| F23 | P2 | MCP schema conversion changed argument types | Partial (R7, R11) | Reject or mark unsupported tools; give Azure the original schema |
-| F24 | P2 | Google list/read tools returned incomplete data | Partial (R7, R11) | Sheets and Slides range reads, shared drives |
+| F21 | P2 | Expired Google tokens stayed cached | Done (R7, R14) | Server now sends an error kind; app keeps the old message check for a Lambda not yet redeployed |
+| F22 | P2 | MCP SSE waited for the whole connection to close | Done (R5, R10, R11, R14) | — (client echoes the negotiated protocol version; tested with older/newer versions, JSON and SSE, session loss) |
+| F23 | P2 | MCP schema conversion changed argument types | Done (R7, R11, R14) | Simplified tools say so to the model; Azure gets the original JSON Schema. Gemini still gets the reduced dialect |
+| F24 | P2 | Google list/read tools returned incomplete data | Done (R7, R11, R14) | — (Sheets in row windows, Slides by slide range incl. grouped shapes, Drive covers shared drives) |
 | F25 | P2 | Docs reads ignored all but the first tab | Done (R5, R11) | — |
 | F26 | P2 | Gmail reply draft lacked threading headers | Done (R5, R11) | — |
 | F27 | P2 | MCP handlers crashed on valid JSON that is not an RPC object | Done (R5, R11) | — |
-| F28 | P2 | Timeout budgets did not fit multi-step operations | Partial (R7) | Reconcile after a write times out, fewer Gmail round trips, infra timeout |
+| F28 | P2 | Timeout budgets did not fit multi-step operations | Partial (R7, R14) | Create event/file are looked up after a timeout and Gmail search is one batch call; other writes only say the outcome is unknown. Batch format and 30 s infra timeout not checked against live Gmail/AWS |
 | F29 | P2 | Notes not atomic or locked across store instances | Done (R6) | Concurrency test needs an Android context |
 | F30 | P2 | Clear cache could remove active downloads and previews | Partial (R6) | Real lease tracking (today a 10-minute rule for previews) |
 | F31 | P1 | Calling an ambiguous contact picked the first match | Done (R1) | — |
@@ -127,7 +128,6 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 
 | Round | Content |
 |---|---|
-| 14 | F21, F23, F28, F24, F22 tests |
 | 15 | F13, F14, F15 |
 | 16 | F10, F11, F08, F30 |
 | 17 | Lint warnings, AGP/compileSdk upgrade, README and dead code |

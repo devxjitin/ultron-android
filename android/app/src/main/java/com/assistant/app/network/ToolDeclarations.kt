@@ -48,13 +48,36 @@ object ToolDeclarations {
         )
 
     /** A tool from a connected MCP server, declared under a prefixed name so it cannot clash with device tools. */
-    fun mcp(tool: McpToolSpec, nonBlocking: Boolean = false, prefix: String = GITHUB_TOOL_PREFIX): JSONObject {
+    fun mcp(
+        tool: McpToolSpec,
+        nonBlocking: Boolean = false,
+        prefix: String = GITHUB_TOOL_PREFIX,
+        /** Chat only: also carries the tool's own JSON Schema under [ORIGINAL_SCHEMA_KEY] for providers that accept it as is. */
+        withOriginalSchema: Boolean = false
+    ): JSONObject {
+        val analysis = McpSchema.analyze(tool.schema)
+        val note = if (analysis.issues.isEmpty()) "" else " (Argument types are simplified for this model: ${analysis.issues.joinToString()}.)"
         val declaration = JSONObject()
             .put("name", prefix + tool.name)
-            .put("description", tool.description.take(400))
+            .put("description", tool.description.take(400) + note)
         if (nonBlocking) declaration.put("behavior", "NON_BLOCKING")
-        McpSchema.toGeminiParameters(tool.schema)?.let { declaration.put("parameters", it) }
+        analysis.parameters?.let { declaration.put("parameters", it) }
+        if (withOriginalSchema) {
+            runCatching { JSONObject(tool.schema).also { it.remove("\$schema") } }.getOrNull()
+                ?.takeIf { it.optString("type") == "object" }?.let { declaration.put(ORIGINAL_SCHEMA_KEY, it) }
+        }
         return declaration
+    }
+
+    /** Declarations carry the tool's own schema under this key for Azure; Gemini rejects unknown fields, so its client removes it. */
+    const val ORIGINAL_SCHEMA_KEY = "_jsonSchema"
+
+    fun withoutPrivateFields(declarations: JSONArray): JSONArray = JSONArray().also { copy ->
+        for (i in 0 until declarations.length()) {
+            val declaration = JSONObject(declarations.getJSONObject(i).toString())
+            declaration.keys().asSequence().filter { it.startsWith("_") }.toList().forEach { declaration.remove(it) }
+            copy.put(declaration)
+        }
     }
 
     /** save_memory / forget_memory: the assistant's personal memory about the user. */

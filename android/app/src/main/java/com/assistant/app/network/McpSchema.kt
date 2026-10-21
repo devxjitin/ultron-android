@@ -8,11 +8,18 @@ import org.json.JSONObject
  * parameters: upper-case types, no $ref/anyOf/additionalProperties, only fields Gemini understands.
  */
 object McpSchema {
+    /** What the conversion produced, and the places where the result is looser than the original schema. */
+    class Analysis(val parameters: JSONObject?, val issues: List<String>)
+
     /** Null when the tool takes no arguments (Gemini rejects an object with no properties). */
-    fun toGeminiParameters(schemaJson: String): JSONObject? {
-        val schema = runCatching { JSONObject(schemaJson) }.getOrNull() ?: return null
-        val converted = convert(schema, 0, schema) ?: return null
-        return converted.takeIf { it.optString("type") == "OBJECT" && (it.optJSONObject("properties")?.length() ?: 0) > 0 }
+    fun toGeminiParameters(schemaJson: String): JSONObject? = analyze(schemaJson).parameters
+
+    fun analyze(schemaJson: String): Analysis {
+        val schema = runCatching { JSONObject(schemaJson) }.getOrNull() ?: return Analysis(null, listOf("The schema is not valid JSON."))
+        val issues = mutableListOf<String>()
+        val converted = convert(schema, 0, schema, issues) ?: return Analysis(null, issues.distinct())
+        val parameters = converted.takeIf { it.optString("type") == "OBJECT" && (it.optJSONObject("properties")?.length() ?: 0) > 0 }
+        return Analysis(parameters, issues.distinct())
     }
 
     /** Follows a local reference such as "#/$defs/Thing" or "#/definitions/Thing" inside [root]; null if it cannot be found. */
@@ -27,27 +34,34 @@ object McpSchema {
 
     private fun unsupported(note: String) = JSONObject().put("type", "STRING").put("description", note)
 
-    private fun convert(node: JSONObject, depth: Int, root: JSONObject): JSONObject? {
-        if (depth > MAX_DEPTH) return unsupported("Too deeply nested to describe; pass a JSON-encoded value.")
+    private fun convert(node: JSONObject, depth: Int, root: JSONObject, issues: MutableList<String>): JSONObject? {
+        if (depth > MAX_DEPTH) {
+            issues += "deeply nested arguments"
+            return unsupported("Too deeply nested to describe; pass a JSON-encoded value.")
+        }
         node.optString("\$ref").takeIf { it.isNotEmpty() }?.let { ref ->
-            val target = resolveRef(ref, root) ?: return unsupported("Unresolved schema reference; pass a JSON-encoded value.")
+            val target = resolveRef(ref, root) ?: run {
+                issues += "an unresolved reference"
+                return unsupported("Unresolved schema reference; pass a JSON-encoded value.")
+            }
             // Keep the description written next to the reference.
             val merged = JSONObject(target.toString())
             node.optString("description").takeIf { it.isNotBlank() }?.let { merged.put("description", it) }
-            return convert(merged, depth + 1, root)
+            return convert(merged, depth + 1, root, issues)
         }
         // A single-part allOf is just that part.
-        node.optJSONArray("allOf")?.takeIf { it.length() == 1 }?.optJSONObject(0)?.let { return convert(it, depth + 1, root) }
+        node.optJSONArray("allOf")?.takeIf { it.length() == 1 }?.optJSONObject(0)?.let { return convert(it, depth + 1, root, issues) }
         // Unions: Gemini has none, so the first real option is used and the others are named in the description.
         val union = node.optJSONArray("anyOf") ?: node.optJSONArray("oneOf")
         if (union != null) {
             val options = (0 until union.length()).mapNotNull { union.optJSONObject(it) }.filter { it.optString("type") != "null" }
             val first = options.firstOrNull()
             if (first != null) {
-                val converted = convert(first, depth + 1, root) ?: return null
+                val converted = convert(first, depth + 1, root, issues) ?: return null
                 val others = options.drop(1).map { it.optString("type").ifEmpty { "other" } }.distinct()
                     .filter { it != first.optString("type") }
                 if (others.isNotEmpty()) {
+                    issues += "arguments that accept more than one type"
                     val note = "Also accepts: ${others.joinToString()}."
                     converted.put("description", listOfNotNull(converted.optString("description").takeIf { it.isNotBlank() }, note).joinToString(" "))
                 }
@@ -67,9 +81,10 @@ object McpSchema {
                 val properties = JSONObject()
                 val source = node.optJSONObject("properties") ?: JSONObject()
                 source.keys().forEach { key ->
-                    source.optJSONObject(key)?.let { child -> convert(child, depth + 1, root)?.let { properties.put(key, it) } }
+                    source.optJSONObject(key)?.let { child -> convert(child, depth + 1, root, issues)?.let { properties.put(key, it) } }
                 }
                 out.put("properties", properties)
+                if (source.length() == 0 && depth > 0) issues += "free-form object arguments"
                 val required = node.optJSONArray("required")
                 if (required != null) {
                     val kept = JSONArray()
@@ -79,7 +94,7 @@ object McpSchema {
             }
             "array" -> {
                 out.put("type", "ARRAY")
-                out.put("items", node.optJSONObject("items")?.let { convert(it, depth + 1, root) } ?: JSONObject().put("type", "STRING"))
+                out.put("items", node.optJSONObject("items")?.let { convert(it, depth + 1, root, issues) } ?: JSONObject().put("type", "STRING"))
             }
             "integer" -> out.put("type", "INTEGER")
             "number" -> out.put("type", "NUMBER")

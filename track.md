@@ -287,3 +287,4 @@
 [2026-10-21 17:01] [Claude] [Fix: Round 12 audit - monotonic release id, usage scope, Personalization guard, Repair label, partial photo access; compile+lint pass]
 [2026-10-21 17:03] [Claude] [Docs: docs/ASTRA_REVIEW_STATUS.md - Astra review findings with done/left status]
 [2026-10-21 17:14] [Claude] [Fix: Round 13 audit - unreadable chat recovery, chat export, forget ambiguity+restore, streaming DOCX, chat drafts; compile+lint+tests pass]
+[2026-10-21 17:23] [Claude] [Fix: audit round 14 - structured Google errors, schema notes + Azure original schema, write-timeout lookup, Gmail batch, Sheets/Slides/shared drives, MCP protocol tests]

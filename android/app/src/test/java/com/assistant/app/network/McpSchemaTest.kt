@@ -53,6 +53,37 @@ class McpSchemaTest {
         assertTrue(!v.has("description"))
     }
 
+    @Test fun `a tool that converts exactly reports no simplifications`() {
+        val analysis = McpSchema.analyze("""{"type":"object","properties":{"id":{"type":"integer"},"tags":{"type":"array","items":{"type":"string"}}}}""")
+        assertTrue(analysis.issues.isEmpty())
+    }
+
+    @Test fun `every place the schema had to be simplified is reported`() {
+        val analysis = McpSchema.analyze(
+            """{"type":"object","properties":{
+                 "v":{"anyOf":[{"type":"integer"},{"type":"string"}]},
+                 "x":{"${'$'}ref":"#/nowhere"},
+                 "blob":{"type":"object"}}}"""
+        )
+        assertTrue(analysis.issues.any { it.contains("more than one type") })
+        assertTrue(analysis.issues.any { it.contains("unresolved") })
+        assertTrue(analysis.issues.any { it.contains("free-form") })
+    }
+
+    @Test fun `a declaration says when argument types were simplified and carries the original schema for chat`() {
+        val spec = com.assistant.app.data.McpToolSpec(
+            "t", "Does things", """{"type":"object","properties":{"v":{"anyOf":[{"type":"integer"},{"type":"string"}]}}}""", false
+        )
+        val plain = ToolDeclarations.mcp(spec)
+        assertTrue(plain.getString("description").contains("simplified"))
+        assertTrue(!plain.has(ToolDeclarations.ORIGINAL_SCHEMA_KEY))
+        val forChat = ToolDeclarations.mcp(spec, withOriginalSchema = true)
+        assertTrue(forChat.getJSONObject(ToolDeclarations.ORIGINAL_SCHEMA_KEY).getJSONObject("properties").getJSONObject("v").has("anyOf"))
+        val stripped = ToolDeclarations.withoutPrivateFields(org.json.JSONArray().put(forChat)).getJSONObject(0)
+        assertTrue(!stripped.has(ToolDeclarations.ORIGINAL_SCHEMA_KEY))
+        assertEquals("t", stripped.getString("name").removePrefix(com.assistant.app.data.GITHUB_TOOL_PREFIX))
+    }
+
     @Test fun `required fields and arrays survive`() {
         val result = convert(
             """{"type":"object","properties":{"tags":{"type":"array","items":{"type":"string"}},"id":{"type":"integer"}},"required":["id"]}"""

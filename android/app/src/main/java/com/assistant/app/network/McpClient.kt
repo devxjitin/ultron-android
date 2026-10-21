@@ -14,7 +14,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-class McpException(message: String, val httpCode: Int = 0) : Exception(message)
+/** [kind] is the server's own classification of a failed tool (see [KIND_AUTH_REJECTED]); null when it sent none. */
+class McpException(message: String, val httpCode: Int = 0, val kind: String? = null) : Exception(message) {
+    companion object {
+        /** The upstream service refused the access token before running anything, so one retry with a new token is safe. */
+        const val KIND_AUTH_REJECTED = "auth_rejected"
+    }
+}
 
 /**
  * Minimal MCP client over "streamable HTTP": every request is a JSON-RPC POST, and the answer comes
@@ -34,6 +40,8 @@ class McpClient(
     /** The request in flight; calls are serialized by [lock], so cancelling this cancels the right one. */
     @Volatile private var activeCall: okhttp3.Call? = null
     private var sessionId: String? = null
+    /** The protocol version the server agreed to; newer servers want it echoed in a header on every later request. */
+    private var protocolVersion: String? = null
     private var initialized = false
     private var nextId = 1
 
@@ -73,7 +81,10 @@ class McpClient(
                 val text = (0 until content.length()).mapNotNull { i ->
                     content.getJSONObject(i).takeIf { it.optString("type") == "text" }?.optString("text")
                 }.joinToString("\n")
-                if (result.optBoolean("isError")) Result.failure(McpException(text.ifBlank { "The tool reported an error." }))
+                if (result.optBoolean("isError")) {
+                    val kind = result.optJSONObject("structuredContent")?.optJSONObject("error")?.optString("kind")?.takeIf { it.isNotEmpty() }
+                    Result.failure(McpException(text.ifBlank { "The tool reported an error." }, kind = kind))
+                }
                 else Result.success(text)
             } catch (e: McpException) {
                 Result.failure(e)
@@ -103,7 +114,8 @@ class McpClient(
             .put("protocolVersion", PROTOCOL_VERSION)
             .put("capabilities", JSONObject())
             .put("clientInfo", JSONObject().put("name", "ultron").put("version", "1.0"))
-        request("initialize", params)
+        val agreed = request("initialize", params)
+        protocolVersion = agreed.optString("protocolVersion").takeIf { it.isNotEmpty() }
         post(JSONObject().put("jsonrpc", "2.0").put("method", "notifications/initialized"), expectBody = false)
         initialized = true
     }
@@ -117,6 +129,7 @@ class McpClient(
         } catch (e: McpException) {
             if (e.httpCode == 404 && method != "initialize" && sessionId != null) {
                 sessionId = null
+                protocolVersion = null
                 initialized = false
                 ensureInitialized()
                 post(body, expectBody = true, id = id)
@@ -132,6 +145,7 @@ class McpClient(
             .header("Accept", "application/json, text/event-stream")
         headers().forEach { (key, value) -> builder.header(key, value) }
         sessionId?.let { builder.header("Mcp-Session-Id", it) }
+        protocolVersion?.let { builder.header("MCP-Protocol-Version", it) }
         val call = http.newCall(builder.build())
         activeCall = call
         call.execute().use { response ->

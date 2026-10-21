@@ -209,7 +209,9 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                 .put("description", declaration.optString("description"))
             function.put(
                 "parameters",
-                declaration.optJSONObject("parameters")?.let { lowerCaseTypes(it) as JSONObject }
+                // A connector tool's own JSON Schema is sent unchanged; only the app's own tools need the type conversion.
+                declaration.optJSONObject(ToolDeclarations.ORIGINAL_SCHEMA_KEY)
+                    ?: declaration.optJSONObject("parameters")?.let { lowerCaseTypes(it) as JSONObject }
                     ?: JSONObject().put("type", "object").put("properties", JSONObject())
             )
             result.put(JSONObject().put("type", "function").put("function", function))
