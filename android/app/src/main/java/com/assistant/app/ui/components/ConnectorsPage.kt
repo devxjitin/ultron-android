@@ -2,6 +2,11 @@ package com.assistant.app.ui.components
 
 import android.Manifest
 import android.app.AppOpsManager
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -100,7 +105,8 @@ import com.assistant.app.BuildConfig
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.GoogleService
 import com.assistant.app.data.McpToolSpec
-import com.assistant.app.data.ToolGroup
+import com.assistant.app.data.PhoneConnectors
+import com.assistant.app.data.Surface
 import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentPink
@@ -113,11 +119,8 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 
 private enum class Category(val label: String) {
     PRODUCTIVITY("Productivity"), DEVELOPER("Developer"), COMMUNICATION("Communication"),
-    MEDIA("Media & location"), AUTOMATION("Automation")
+    MEDIA("Media & location"), PHONE("Phone"), AUTOMATION("Automation")
 }
-
-/** Local connectors run on this phone; cloud connectors sign in to an online service. */
-private enum class Place(val label: String) { LOCAL("Local"), CLOUD("Cloud") }
 
 /** Extra Android access a connector needs before its tools work. */
 private enum class Access { NONE, NOTIFICATION_ACCESS, ACCESSIBILITY, USAGE_ACCESS }
@@ -141,7 +144,9 @@ private class Connector(
     val icon: ImageVector,
     val color: Color,
     val kind: Kind,
-    val tools: List<DeviceTool> = emptyList()
+    val tools: List<DeviceTool> = emptyList(),
+    /** Automation connectors act on the phone itself and work in voice only; every other connector works in voice and chat. */
+    val automation: Boolean = false
 )
 
 private fun photosPermission() =
@@ -149,49 +154,47 @@ private fun photosPermission() =
 
 private const val PHONE = "On your phone"
 
-/** Connectors whose tools are picked out by hand; every other tool falls into its group's connector below. */
-private val NamedConnectors = listOf(
-    Connector("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
-        PHONE, Category.PRODUCTIVITY, Icons.Outlined.CalendarMonth, Color(0xFF4285F4),
-        Kind.Local(listOf(Manifest.permission.READ_CALENDAR)),
-        listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT)),
-    Connector("contacts", "Contacts", "Find people, call them and save new contacts from your phone's address book.",
-        PHONE, Category.COMMUNICATION, Icons.Outlined.Contacts, Color(0xFF34A853),
-        Kind.Local(listOf(Manifest.permission.READ_CONTACTS)),
-        listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CREATE_CONTACT, DeviceTool.CONTACT_BIRTHDAY)),
-    Connector("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
-        PHONE, Category.COMMUNICATION, Icons.Outlined.Notifications, Color(0xFFEA4335),
-        Kind.Local(access = Access.NOTIFICATION_ACCESS), listOf(DeviceTool.READ_NOTIFICATIONS)),
-    Connector("photos", "Photos", "Count and list your recent photos.",
-        PHONE, Category.MEDIA, Icons.Outlined.PhotoLibrary, Color(0xFFF9AB00),
-        Kind.Local(listOf(photosPermission())), listOf(DeviceTool.RECENT_PHOTOS)),
-    Connector("location", "Location", "Know where you are and get directions.",
-        PHONE, Category.MEDIA, Icons.Outlined.LocationOn, Color(0xFF0F9D58),
-        Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION)), listOf(DeviceTool.LOCATION, DeviceTool.DIRECTIONS))
+/** A phone-side connector: its tools and whether it reaches the chat come from [PhoneConnectors]. */
+private fun phone(
+    id: String, name: String, description: String, category: Category, icon: ImageVector, color: Color,
+    kind: Kind = Kind.Local(), subtitle: String = PHONE
+) = Connector(
+    id, name, description, subtitle, category, icon, color, kind, PhoneConnectors.tools(id),
+    automation = PhoneConnectors.surface(id) == Surface.VOICE
 )
 
-/** Automation connectors: everything the assistant can do on the phone itself, one per tool group. */
-private class GroupStyle(val name: String, val description: String, val icon: ImageVector, val color: Color, val access: Access = Access.NONE)
-
-private val GroupStyles: Map<ToolGroup, GroupStyle> = mapOf(
-    ToolGroup.DISPLAY_SOUND to GroupStyle("Display & sound", "Brightness, volume, ringer, vibration, wallpaper, rotation and media controls.", Icons.Outlined.Tune, Color(0xFF7E57C2)),
-    ToolGroup.PHONE_INFO to GroupStyle("Phone info", "Battery, storage, network, Wi-Fi, Bluetooth, clipboard, flashlight and do not disturb.", Icons.Outlined.PhoneAndroid, Color(0xFF26A69A)),
-    ToolGroup.APPS to GroupStyle("Apps", "Open apps, play music, open the camera and app settings.", Icons.Outlined.Apps, Color(0xFF42A5F5)),
-    ToolGroup.ALARMS to GroupStyle("Alarms & timers", "Set alarms, timers and reminders.", Icons.Outlined.Alarm, Color(0xFFFF7043)),
-    ToolGroup.CALLS to GroupStyle("Calls & email", "Place phone calls straight away and prepare email drafts (you press send).", Icons.Outlined.Call, Color(0xFF66BB6A)),
-    ToolGroup.NOTES to GroupStyle("Notes", "Create, search and delete quick notes kept on this device.", Icons.Outlined.EditNote, Color(0xFFFFCA28)),
-    ToolGroup.WEB to GroupStyle("Internet", "Test your internet speed.", Icons.Outlined.Language, Color(0xFF29B6F6)),
-    ToolGroup.YOUTUBE to GroupStyle("YouTube", "Search videos, get details and transcripts, list a channel's videos and download videos or audio to Downloads/Ultron. Runs on the phone.", Icons.Outlined.PlayCircle, Color(0xFFFF0000)),
-    ToolGroup.NAVIGATION to GroupStyle("Phone navigation", "Back, home, recents, notification shade, scrolling, lock screen and screenshots.", Icons.Outlined.Explore, Color(0xFF8D6E63), Access.ACCESSIBILITY),
-    ToolGroup.SCREEN to GroupStyle("Screen control", "Read what is on screen, tap, type and wait for text. Sends screen text to Gemini.", Icons.Outlined.TouchApp, Color(0xFFEC407A), Access.ACCESSIBILITY),
-    ToolGroup.HEALTH to GroupStyle("Sensors & health", "Step count and room light level.", Icons.Outlined.Favorite, Color(0xFFEF5350)),
-    ToolGroup.NOTIFICATIONS to GroupStyle("App usage", "See which apps you use most. Sends app names to Gemini.", Icons.Outlined.QueryStats, Color(0xFF78909C), Access.USAGE_ACCESS)
-)
-
-private val DuckDuckGoConnector = Connector(
-    "duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
-    "Free, no sign-in", Category.PRODUCTIVITY, Icons.Outlined.Language, Color(0xFFDE5833), Kind.Online,
-    listOf(DeviceTool.WEB_SEARCH)
+private val PhoneCatalog = listOf(
+    phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps, light level and an internet speed test.",
+        Category.PHONE, Icons.Outlined.PhoneAndroid, Color(0xFF26A69A)),
+    phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
+        Category.PHONE, Icons.Outlined.Tune, Color(0xFF7E57C2)),
+    phone("alarms_notes", "Alarms & notes", "Set alarms, timers and reminders, and keep quick notes on this device.",
+        Category.PRODUCTIVITY, Icons.Outlined.Alarm, Color(0xFFFF7043)),
+    phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
+        Category.PRODUCTIVITY, Icons.Outlined.CalendarMonth, Color(0xFF4285F4), Kind.Local(listOf(Manifest.permission.READ_CALENDAR))),
+    phone("contacts", "Contacts", "Find people and see their birthdays from your phone's address book.",
+        Category.COMMUNICATION, Icons.Outlined.Contacts, Color(0xFF34A853), Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
+    phone("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
+        Category.COMMUNICATION, Icons.Outlined.Notifications, Color(0xFFEA4335), Kind.Local(access = Access.NOTIFICATION_ACCESS)),
+    phone("photos", "Photos", "Count and list your recent photos.",
+        Category.MEDIA, Icons.Outlined.PhotoLibrary, Color(0xFFF9AB00), Kind.Local(listOf(photosPermission()))),
+    phone("location", "Location", "Know where you are and get directions.",
+        Category.MEDIA, Icons.Outlined.LocationOn, Color(0xFF0F9D58), Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION))),
+    phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
+        Category.PHONE, Icons.Outlined.QueryStats, Color(0xFF78909C), Kind.Local(access = Access.USAGE_ACCESS)),
+    phone("duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
+        Category.PRODUCTIVITY, Icons.Outlined.Language, Color(0xFFDE5833), Kind.Online, "Free, no sign-in"),
+    phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
+        Category.MEDIA, Icons.Outlined.PlayCircle, Color(0xFFFF0000)),
+    // Automation connectors (voice only).
+    phone("calls", "Calls", "Dial a number, call a contact by name and save new contacts.",
+        Category.AUTOMATION, Icons.Outlined.Call, Color(0xFF66BB6A), Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
+    phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, change the wallpaper, use the clipboard and show notifications.",
+        Category.AUTOMATION, Icons.Outlined.Apps, Color(0xFF42A5F5)),
+    phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
+        Category.AUTOMATION, Icons.Outlined.Explore, Color(0xFF8D6E63), Kind.Local(access = Access.ACCESSIBILITY)),
+    phone("screen", "Screen control", "Read what is on screen, tap, type and wait for text. Sends screen text to Gemini.",
+        Category.AUTOMATION, Icons.Outlined.TouchApp, Color(0xFFEC407A), Kind.Local(access = Access.ACCESSIBILITY))
 )
 
 private val GitHubConnector = Connector(
@@ -217,22 +220,12 @@ private val GoogleConnectors = listOf(
         Category.PRODUCTIVITY, Icons.Outlined.Slideshow, Color(0xFFF9AB00))
 )
 
-private val Catalog: List<Connector> = run {
-    val claimed = NamedConnectors.flatMap { it.tools }.toSet()
-    val grouped = GroupStyles.mapNotNull { (group, style) ->
-        val tools = DeviceTool.entries.filter { it.group == group && it !in claimed }
-        if (tools.isEmpty()) null
-        else Connector("group_${group.name}", style.name, style.description, PHONE, Category.AUTOMATION, style.icon, style.color,
-            Kind.Local(access = style.access), tools)
-    }
-    NamedConnectors + DuckDuckGoConnector + GitHubConnector + GoogleConnectors + grouped
-}
+private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector + GoogleConnectors
 
 @Composable
 fun ConnectorsPage(
     /** True for the Marketplace (find and add connectors); false for Connectors (the ones already added). */
     marketplace: Boolean,
-    onBrowseToggle: () -> Unit,
     /** Ids of added connectors whose sign-in stopped working. */
     issues: Set<String>,
     githubLogin: String,
@@ -242,16 +235,11 @@ fun ConnectorsPage(
     onCancelGithubSignIn: () -> Unit,
     onDisconnectGithub: () -> Unit,
     githubTools: List<McpToolSpec>,
-    enabledGithubTools: Set<String>,
-    onGithubToolToggled: (String, Boolean) -> Unit,
     googleAccounts: Map<String, String>,
     googleTools: Map<String, List<McpToolSpec>>,
-    enabledGoogleTools: Map<String, Set<String>>,
     onConnectGoogle: (GoogleService) -> Unit,
     onDisconnectGoogle: (GoogleService) -> Unit,
-    onGoogleToolToggled: (GoogleService, String, Boolean) -> Unit,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
-    onToolToggled: (DeviceTool, Boolean) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -266,10 +254,10 @@ fun ConnectorsPage(
     }
 
     var query by remember { mutableStateOf("") }
-    var place by remember { mutableStateOf(Place.LOCAL) }
     var category by remember { mutableStateOf<Category?>(null) }
     var setupNeeded by remember { mutableStateOf(false) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
+    var detailId by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun accessGranted(kind: Kind.Local): Boolean = localAccessGranted(context, kind, resumeTick)
 
@@ -309,10 +297,19 @@ fun ConnectorsPage(
     }
 
     val matching = Catalog.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
-    // Marketplace: filter by category. Connectors: only what is already added, split into Local and Cloud.
-    // Browse lists only what is still to add; the connectors already added live on the Connectors page.
-    val shown = if (marketplace) matching.filter { (category == null || it.category == category) && !connected(it) }
-    else matching.filter { connected(it) && (if (it.kind is Kind.Local) Place.LOCAL else Place.CLOUD) == place }
+    // Marketplace: what is still to add (never automation, which has its own section), filtered by category.
+    // Connectors: Installed (added, voice and chat) and Automation (voice only, always listed so it can be switched on).
+    val shown = if (marketplace) matching.filter { !it.automation && (category == null || it.category == category) && !connected(it) }
+    else matching.filter { if (it.automation) true else connected(it) }
+
+    val detail = detailId?.let { id -> Catalog.firstOrNull { it.id == id } }
+    BackHandler(enabled = detail != null) { detailId = null }
+
+    fun toolLines(c: Connector): List<ToolLine> = when (val kind = c.kind) {
+        is Kind.GitHub -> githubTools.map { mcpLine(it) }
+        is Kind.Google -> googleTools[kind.service.id].orEmpty().map { mcpLine(it) }
+        else -> c.tools.map { ToolLine(it.label, it.hint, false) }
+    }
 
     @Composable
     fun Card(c: Connector) {
@@ -327,35 +324,38 @@ fun ConnectorsPage(
                 c.kind is Kind.Google && c.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[c.kind.service.id]}"
                 else -> c.subtitle
             },
-            // The Marketplace only adds; per-tool switches and removal live on the Connectors page.
-            rows = if (marketplace) emptyList() else toolRows(c, enabledTools, githubTools, enabledGithubTools, googleTools, enabledGoogleTools),
             connectLabel = if (marketplace) "Add" else "Connect",
             onRemove = { disconnecting = c },
             connectedLabel = if (marketplace) "Added" else "Connected",
             onConnect = { connect(c) },
             onDisconnect = { if (!marketplace) disconnecting = c },
-            onRowToggled = { id, on ->
-                when (val kind = c.kind) {
-                    is Kind.GitHub -> onGithubToolToggled(id, on)
-                    is Kind.Google -> onGoogleToolToggled(kind.service, id, on)
-                    else -> DeviceTool.fromFunctionName(id)?.let { onToolToggled(it, on) }
-                }
-            },
-            onAllToggled = { on ->
-                when (val kind = c.kind) {
-                    is Kind.GitHub -> githubTools.forEach { onGithubToolToggled(it.name, on) }
-                    is Kind.Google -> googleTools[kind.service.id].orEmpty().forEach { onGoogleToolToggled(kind.service, it.name, on) }
-                    else -> onToolsEnabled(c.tools, on, c.name)
-                }
-            }
+            onOpen = { detailId = c.id }
         )
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    if (detail != null) {
+        val broken = needsReconnect(detail)
+        ConnectorDetail(
+            connector = detail,
+            info = InfoById[detail.id],
+            connected = connected(detail) && !broken,
+            reconnect = broken,
+            subtitle = when {
+                detail.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
+                detail.kind is Kind.Google && detail.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[detail.kind.service.id]}"
+                else -> detail.subtitle
+            },
+            tools = toolLines(detail),
+            connectLabel = if (marketplace) "Add" else "Connect",
+            onConnect = { connect(detail) },
+            onDisconnect = { disconnecting = detail },
+            onBack = { detailId = null },
+            modifier = modifier
+        )
+    } else Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (marketplace) "Browse connectors" else "Your connectors", color = AssistantTextPrimary, fontSize = 20.sp,
+            Text(if (marketplace) "Marketplace" else "Your connectors", color = AssistantTextPrimary, fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Pill(if (marketplace) "Done" else "Browse", filled = !marketplace, onClick = onBrowseToggle)
         }
         TextField(
             value = query,
@@ -381,47 +381,30 @@ fun ConnectorsPage(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CategoryChip("All", category == null) { category = null }
-                Category.entries.forEach { item -> CategoryChip(item.label, category == item) { category = item } }
+                Category.entries.filter { it != Category.AUTOMATION }.forEach { item -> CategoryChip(item.label, category == item) { category = item } }
             }
-        } else Row(
-            Modifier.fillMaxWidth().padding(vertical = 14.dp).clip(RoundedCornerShape(16.dp))
-                .background(AssistantFieldBackground).border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(16.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Place.entries.forEach { item ->
-                val on = item == place
-                Box(
-                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
-                        .background(if (on) AssistantSurface else Color.Transparent)
-                        .clickable { place = item }.padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(item.label, color = if (on) AssistantAccent else AssistantTextSecondary, fontSize = 14.sp,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
-                }
-            }
-        }
+        } else Spacer(Modifier.height(14.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            if (shown.isEmpty()) {
-                val empty = when {
-                    marketplace && query.isBlank() -> "Everything here is already added."
-                    marketplace || query.isNotBlank() -> "No connectors match your search."
-                    else -> "Nothing added here yet. Tap Browse to add connectors."
-                }
-                Text(empty, color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
-            }
             if (marketplace) {
-                if (shown.isNotEmpty()) SectionHeading("Available")
-                shown.forEach { Card(it) }
+                if (shown.isEmpty()) {
+                    Text(if (query.isBlank() && category == null) "Everything here is already added." else "No connectors match your search.",
+                        color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
+                } else {
+                    SectionHeading("Available")
+                    shown.forEach { Card(it) }
+                }
             } else {
-                var lastCategory: Category? = null
-                shown.forEach { c ->
-                    if (place == Place.LOCAL && (c.category == Category.AUTOMATION) != (lastCategory == Category.AUTOMATION) || lastCategory == null) {
-                        SectionHeading(if (place == Place.CLOUD) "Online services" else if (c.category == Category.AUTOMATION) "Automation" else "Phone apps")
-                    }
-                    lastCategory = c.category
-                    Card(c)
+                val installed = shown.filter { !it.automation }
+                val automation = shown.filter { it.automation }
+                SectionHeading("Installed")
+                if (installed.isEmpty()) {
+                    Text(if (query.isBlank()) "Nothing installed yet. Open Marketplace from the menu to add connectors." else "No installed connector matches your search.",
+                        color = AssistantTextMuted, modifier = Modifier.padding(vertical = 12.dp))
+                }
+                installed.forEach { Card(it) }
+                if (automation.isNotEmpty()) {
+                    SectionHeading("Automation connectors (voice only)")
+                    automation.forEach { Card(it) }
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -474,32 +457,25 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
     Access.NONE -> kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
 }
 
-/** One switch under a connector: a device tool or a tool offered by a connected MCP server. */
-private class ToolRow(val id: String, val label: String, val hint: String, val on: Boolean)
-
-private fun toolRows(
-    connector: Connector,
-    enabledTools: Set<DeviceTool>,
-    githubTools: List<McpToolSpec>,
-    enabledGithubTools: Set<String>,
-    googleTools: Map<String, List<McpToolSpec>>,
-    enabledGoogleTools: Map<String, Set<String>>
-): List<ToolRow> = when (val kind = connector.kind) {
-    is Kind.GitHub -> mcpToolRows(githubTools, enabledGithubTools)
-    is Kind.Google -> mcpToolRows(googleTools[kind.service.id].orEmpty(), enabledGoogleTools[kind.service.id].orEmpty())
-    else -> connector.tools.map { ToolRow(it.functionName, it.label, it.hint, it in enabledTools) }
-}
-
-private fun mcpToolRows(tools: List<McpToolSpec>, enabled: Set<String>): List<ToolRow> = tools.map { tool ->
-    val summary = tool.description.lineSequence().firstOrNull().orEmpty().take(110)
-    ToolRow(tool.name, tool.name.replace('_', ' ').replaceFirstChar { it.uppercase() },
-        if (tool.readOnly) summary else "Can change data. $summary", tool.name in enabled)
-}
-
 @Composable
 private fun SectionHeading(text: String) {
     Text(text.uppercase(), color = AssistantTextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 10.dp))
+}
+
+/** Says where a connector works: Voice + Chat, or Voice only (automation). */
+@Composable
+private fun SurfaceChip(voiceOnly: Boolean) {
+    val shape = RoundedCornerShape(8.dp)
+    val textColor = if (voiceOnly) AssistantTextSecondary else AssistantAccent
+    Text(
+        if (voiceOnly) "Voice only" else "Voice + Chat",
+        color = textColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(shape)
+            .background(if (voiceOnly) AssistantFieldBackground else AssistantAccent.copy(alpha = 0.14f))
+            .border(BorderStroke(1.dp, textColor.copy(alpha = 0.35f)), shape)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    )
 }
 
 @Composable
@@ -507,20 +483,17 @@ private fun ConnectorCard(
     connector: Connector,
     connected: Boolean,
     subtitle: String,
-    rows: List<ToolRow>,
     reconnect: Boolean,
     connectLabel: String,
     connectedLabel: String,
     onRemove: () -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
-    onRowToggled: (String, Boolean) -> Unit,
-    onAllToggled: (Boolean) -> Unit
+    onOpen: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val cardShape = RoundedCornerShape(22.dp)
     Column(
-        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(cardShape)
+        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(cardShape).clickable(onClick = onOpen)
             .background(AssistantSurface).border(BorderStroke(1.dp, AssistantOutline), cardShape).padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -535,6 +508,8 @@ private fun ConnectorCard(
                 Text(connector.name, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                     maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 21.sp)
                 Text(subtitle, color = AssistantTextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(6.dp))
+                SurfaceChip(voiceOnly = connector.automation)
             }
             Spacer(Modifier.size(8.dp))
             when {
@@ -548,49 +523,213 @@ private fun ConnectorCard(
         if (reconnect) {
             TextButton(onClick = onRemove) { Text("Remove", color = AssistantTextSecondary, fontSize = 13.sp) }
         }
-        if (rows.isNotEmpty()) {
-            val on = rows.count { it.on }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).clickable { expanded = !expanded }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Tools · $on of ${rows.size} on", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null, tint = AssistantTextMuted)
-            }
-            if (expanded) {
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { onAllToggled(true) }, enabled = on < rows.size) {
-                        Text("Select all", color = AssistantAccent, fontSize = 13.sp)
-                    }
-                    TextButton(onClick = { onAllToggled(false) }, enabled = on > 0) {
-                        Text("Clear", color = AssistantTextSecondary, fontSize = 13.sp)
-                    }
-                }
-                rows.forEach { tool ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .clickable { onRowToggled(tool.id, !tool.on) }.padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = tool.on,
-                            onCheckedChange = { onRowToggled(tool.id, it) },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = AssistantAccent,
-                                uncheckedColor = AssistantTextMuted,
-                                checkmarkColor = Color.White
-                            )
-                        )
-                        Column(Modifier.weight(1f).padding(end = 4.dp)) {
-                            Text(tool.label, color = AssistantTextPrimary, fontSize = 14.sp)
-                            Text(tool.hint, color = AssistantTextMuted, fontSize = 12.sp, lineHeight = 16.sp)
-                        }
-                    }
-                }
-            }
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+            Text("View details", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(18.dp))
         }
     }
+}
+
+/** One tool line on a connector's detail page. */
+private class ToolLine(val title: String, val text: String, val changesData: Boolean)
+
+private fun mcpLine(tool: McpToolSpec) = ToolLine(
+    tool.name.replace('_', ' ').replaceFirstChar { it.uppercase() },
+    tool.description.lineSequence().firstOrNull().orEmpty().take(140),
+    !tool.readOnly
+)
+
+/** The long-form facts shown on a connector's own page. */
+private class Info(val about: String, val needs: String, val privacy: String, val runsOn: String = "Your phone")
+
+private const val GOOGLE_NEEDS = "Sign in with a Google account and approve Google's permission screen."
+private const val GOOGLE_PRIVACY = "Your Google sign-in stays on this phone. The assistant's requests pass through your own Google Workspace server " +
+    "on AWS Lambda, which only forwards them to Google and stores nothing. It includes tools that change your data."
+private const val GOOGLE_RUNS = "Your Google Workspace server on AWS Lambda, then Google's own APIs"
+
+private val InfoById: Map<String, Info> = mapOf(
+    "device_info" to Info(
+        "Lets the assistant tell you things about your phone: the date and time, battery, free storage and memory, network and Wi-Fi, Bluetooth, step count and room light. It only reads and never changes anything. The internet speed test downloads about 5 MB.",
+        "No Android permission.",
+        "Readings stay on the phone. They reach Gemini (or Azure OpenAI in the chat) only as part of the conversation when you ask."
+    ),
+    "device_controls" to Info(
+        "Changes simple phone settings when you ask: the flashlight, screen brightness inside Ultron, volume, ringer mode, vibration, Do Not Disturb, music play, pause and skip, how long the screen stays on, and auto-rotate.",
+        "Screen timeout and auto-rotate need Android's Modify system settings permission, and Do Not Disturb needs Do Not Disturb access. Android asks the first time you use them.",
+        "Nothing leaves the phone except the words of the conversation."
+    ),
+    "alarms_notes" to Info(
+        "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose, and keeps quick notes. Notes are saved only on this phone.",
+        "No permission. Reminders appear as notifications, so keep notifications on for Ultron.",
+        "Notes never leave the phone unless you ask the assistant to read them out."
+    ),
+    "calendar" to Info(
+        "Reads your upcoming events from every calendar on the phone (Google Calendar included), checks whether a time slot is free, and opens a new-event form for you to confirm. Nothing is saved until you press save.",
+        "Calendar permission.",
+        "Event titles and times are sent to the model when you ask about your schedule."
+    ),
+    "contacts" to Info(
+        "Finds a contact's number by name and tells you their birthday. It only reads.",
+        "Contacts permission.",
+        "The contact details you ask about are sent to the model for that answer."
+    ),
+    "location" to Info(
+        "Tells you where the phone is right now and starts navigation to a place in your maps app.",
+        "Location permission.",
+        "Your coordinates and address are sent to the model when you ask where you are."
+    ),
+    "photos" to Info(
+        "Counts your recent photos and lists their file names. It does not open or send the pictures.",
+        "Photos permission.",
+        "Only file names and counts are shared with the model."
+    ),
+    "notifications" to Info(
+        "Reads the notifications currently on your phone so the assistant can tell you what you missed.",
+        "Notification access. A special Android screen opens when you add it.",
+        "Notification text can be private. It is sent to the model whenever you ask. Add this only if you are comfortable with that."
+    ),
+    "app_usage" to Info(
+        "Tells you which apps you use most and how long you used one app.",
+        "Usage access. A special Android screen opens when you add it.",
+        "App names and usage times are sent to the model when you ask."
+    ),
+    "duckduckgo" to Info(
+        "Searches the web with DuckDuckGo and answers from the results, naming the source. There is no account and no API key.",
+        "No sign-in and no permission.",
+        "Your search words go to DuckDuckGo. Results are treated as untrusted text and never as instructions.",
+        "Your phone, which asks DuckDuckGo directly"
+    ),
+    "youtube" to Info(
+        "Searches YouTube, shows video details, reads transcripts (captions), lists a channel's or playlist's videos, and downloads a video or only its audio to Downloads/Ultron. Before downloading it asks which format and quality you want, from what that video really offers (up to 4K or 8K). It all runs on your phone because YouTube blocks cloud servers.",
+        "No sign-in. Downloads need free storage (a 4K video can be several GB), and a notification shows the progress.",
+        "Requests go from your phone straight to YouTube. Saving videos may be against YouTube's terms of service, so download only what you are allowed to keep.",
+        "Your phone, which asks YouTube directly"
+    ),
+    "github" to Info(
+        "Lets the assistant work with your GitHub: search repositories and code, read files, issues, pull requests and commits, and make changes with the tools GitHub offers. Every tool GitHub's server provides is used, including ones that change data.",
+        "Sign in with GitHub. A code is copied and GitHub opens in your browser.",
+        "Requests go to GitHub's own MCP server with your sign-in token, which is kept encrypted on this phone. Repository text is untrusted and never treated as instructions.",
+        "GitHub's MCP server"
+    ),
+    "google_calendar" to Info("See your calendars and events, find a free slot, and create, answer and delete events.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
+    "gmail" to Info("Search your inbox, read messages, list labels and create drafts. Drafts are never sent automatically.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
+    "google_drive" to Info("Search files, list recent files, read file contents and create new files.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
+    "google_docs" to Info("Read your Google Docs, add text to them and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
+    "google_sheets" to Info("Read cell values, and update or append rows in your Google Sheets.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
+    "google_slides" to Info("Read your Google Slides presentations and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
+    "calls" to Info(
+        "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save. It works by voice only.",
+        "Contacts permission. Android asks for the Phone permission the first time a call is placed.",
+        "A call is placed only when you ask. The number or name is part of the conversation."
+    ),
+    "apps_settings" to Info(
+        "Opens apps by name, the camera, Android settings and an app's info page, changes the wallpaper from an image link, reads or writes the clipboard and posts a notification. It works by voice only.",
+        "No special permission. The wallpaper tool needs an internet link to an image.",
+        "Clipboard text you ask the assistant to read is sent to the model."
+    ),
+    "navigation" to Info(
+        "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone. It works by voice only.",
+        "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
+        "It sends taps and gestures to your phone only. It does not read what is on the screen."
+    ),
+    "screen" to Info(
+        "Reads the buttons and text on the screen, taps them, types and waits for text, so the assistant can use other apps for you. It works by voice only.",
+        "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
+        "Screen text is sent to Gemini whenever the assistant reads the screen, and it may include private information. Use it with care."
+    )
+)
+
+/** A connector's own page: what it does, where it runs, what it needs, where data goes and which tools it has. */
+@Composable
+private fun ConnectorDetail(
+    connector: Connector,
+    info: Info?,
+    connected: Boolean,
+    reconnect: Boolean,
+    subtitle: String,
+    tools: List<ToolLine>,
+    connectLabel: String,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AssistantTextPrimary)
+            }
+            Text("Connector details", color = AssistantTextSecondary, fontSize = 14.sp)
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(connector.color.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(connector.icon, contentDescription = null, tint = connector.color, modifier = Modifier.size(30.dp))
+                }
+                Spacer(Modifier.size(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(connector.name, color = AssistantTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp)
+                    Text(subtitle, color = AssistantTextMuted, fontSize = 13.sp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SurfaceChip(voiceOnly = connector.automation)
+                Spacer(Modifier.weight(1f))
+                when {
+                    reconnect -> Pill("Reconnect", filled = true, onClick = onConnect)
+                    connected -> Pill("Disconnect", filled = false, onClick = onDisconnect)
+                    else -> Pill(connectLabel, filled = true, onClick = onConnect)
+                }
+            }
+            DetailSection("About", info?.about ?: connector.description)
+            DetailSection(
+                "Works in",
+                if (connector.automation) "Voice only. Automation connectors act on your phone, so they never run from the typed chat."
+                else "Voice and the typed chat."
+            )
+            DetailSection("Runs on", info?.runsOn ?: "Your phone")
+            info?.let {
+                DetailSection("What it needs", it.needs)
+                DetailSection("Your data", it.privacy)
+            }
+            SectionHeading("Tools" + if (tools.isNotEmpty()) " · ${tools.size}" else "")
+            Text(
+                "When this connector is added, the assistant can use all of these tools.",
+                color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+            if (tools.isEmpty()) {
+                Text("The tool list appears here after you sign in.", color = AssistantTextMuted, fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+            }
+            tools.forEach { tool ->
+                val shape = RoundedCornerShape(14.dp)
+                Column(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(shape).background(AssistantSurface)
+                        .border(BorderStroke(1.dp, AssistantOutline), shape).padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(tool.title, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    if (tool.text.isNotBlank()) {
+                        Text(tool.text, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+                    }
+                    if (tool.changesData) {
+                        Text("Can change data", color = AssistantAccent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun DetailSection(title: String, body: String) {
+    SectionHeading(title)
+    Text(body, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
 }
 
 @Composable

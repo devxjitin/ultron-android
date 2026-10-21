@@ -107,40 +107,36 @@ The project has three parts:
 - **Edit and resend** any of your messages (the chat after it is replaced), **copy** and **share** any reply.
 - **Auto-titles**: the model names each chat after what it was about, and refreshes the title as the topic develops.
 - **Two chat engines**: Gemini (default) or **Azure OpenAI**, switchable in Developer settings.
-- **Tools in chat**: web search, connected cloud services, knowledge-base search, memory and YouTube. Other phone-control tools stay voice-only on purpose.
+- **Tools in chat**: the chat uses every connector that is not voice-only: Google, GitHub, DuckDuckGo, YouTube, and the phone connectors for device info, device controls (flashlight, volume, brightness), alarms and notes, calendar, contacts lookup, location, photos, notifications and app usage. Automation connectors stay in voice.
 
-### Phone control (voice)
+### Connectors and Marketplace
 
-More than **80 device tools** let the assistant act on the phone. Each group can be switched on or off, and the sensitive ones are off by default.
+Every connector is defined in code with its fixed set of tools and a **surface**: *Voice + Chat*, or *Voice only* (automation). Nothing is installed on a fresh install. The sidebar has two places:
 
-| Group | Examples |
-|---|---|
-| Display and sound | brightness, volume, ringer mode, vibrate, flashlight, do not disturb |
-| Phone info | time, battery, network, storage and memory, device info, Wi-Fi, Bluetooth, clipboard |
-| Apps | open an app, open app settings, open the camera |
-| Alarms and timers | set an alarm, set a timer, schedule a reminder |
-| Calls and messages | dial, search contacts, call a contact, create a contact |
-| Contacts and calendar | upcoming events, birthdays, conflict check, create an event |
-| Location and maps | current location, directions |
-| Notes | create, search and delete notes |
-| Internet | internet speed test |
-| YouTube | search videos, video details, transcripts, channel or playlist videos, and download audio only or video in any quality the video offers (144p up to 4K and 8K), after asking you which one, to Downloads/Ultron, from voice or chat; runs on the phone because YouTube blocks cloud IPs |
-| Navigation and screen control | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot, media keys |
-| Screen reading and tapping | read and tap what is on screen (accessibility service, **off by default**) |
-| Photos, sensors and health | recent photos, step counter, light sensor |
-| Private data | read notifications, most-used apps and app usage time (**off by default**) |
+- **Marketplace** lists every connector that is not installed yet. Adding one turns its tools on (and asks for the Android permission or access it needs, or the sign-in).
+- **Connectors** has two sections. **Installed** shows the added Voice + Chat connectors. **Automation connectors (voice only)** lists the phone-control connectors, which are switched on from there and never reach the chat.
 
-### Connectors (MCP)
-
-Connectors are added from a built-in browse view, each with per-tool switches and its own sign-in. The chat uses the **cloud** connectors; voice uses all of them.
-
-| Connector | What it does | How it connects |
+| Connector | Tools | Surface |
 |---|---|---|
-| **Phone apps** | Calendar, contacts, notifications, navigation, screen control | Local, uses Android permissions you grant |
-| **Web search** | Search the web and cite sources | Built-in client |
-| **GitHub** | Browse repositories, issues and pull requests | Sign in with GitHub (OAuth device flow) |
-| **YouTube** | Search videos, get video details, read transcripts, list a channel's videos, download video or audio | Runs on the phone with NewPipe Extractor, no sign-in |
-| **Google Calendar, Gmail, Drive, Docs, Sheets, Slides** | Read and edit your Google data, Gmail drafts are never sent automatically | Per-service Google sign-in plus a stateless Google Workspace MCP server on AWS Lambda |
+| Device info | time, battery, device info, storage and memory, network, Wi-Fi, Bluetooth, step count, light level, internet speed test | Voice + Chat |
+| Device controls | flashlight, brightness, volume, ringer mode, vibrate, do not disturb, media keys, screen timeout, auto-rotate | Voice + Chat |
+| Alarms and notes | set an alarm, set a timer, schedule a reminder, create, search and delete notes | Voice + Chat |
+| Calendar | upcoming events, conflict check, create an event | Voice + Chat |
+| Contacts | search a contact, birthdays | Voice + Chat |
+| Location | current location, directions | Voice + Chat |
+| Photos | recent photos | Voice + Chat |
+| Notifications | read current notifications | Voice + Chat |
+| App usage | most-used apps, app usage time | Voice + Chat |
+| DuckDuckGo | web search with sources | Voice + Chat |
+| YouTube | search videos, video details, transcripts, channel or playlist videos, and download audio only or video in any quality the video offers (144p up to 4K and 8K), after asking you which one, to Downloads/Ultron. Runs on the phone with NewPipe Extractor, no sign-in | Voice + Chat |
+| GitHub | repositories, issues, pull requests (sign in with GitHub, OAuth device flow) | Voice + Chat |
+| Google Calendar, Gmail, Drive, Docs, Sheets, Slides | read and edit your Google data, Gmail drafts are never sent automatically (per-service Google sign-in plus a stateless Google Workspace MCP server on AWS Lambda) | Voice + Chat |
+| Calls | dial, call a contact, create a contact | Voice only |
+| Apps and settings | open an app, the camera and settings, wallpaper, clipboard, show a notification | Voice only |
+| Phone navigation | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot (accessibility service) | Voice only |
+| Screen control | read and tap what is on screen, type, wait for text (accessibility service) | Voice only |
+
+Tap any connector card to open its own page: what it does, where it runs, what it needs, where your data goes and every tool it has (for GitHub and Google, the live tool list after sign-in).
 
 A connector whose sign-in expires shows *Reconnect* and *Remove* instead of failing silently.
 

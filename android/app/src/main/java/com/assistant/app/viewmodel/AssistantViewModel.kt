@@ -32,7 +32,7 @@ import com.assistant.app.data.SearchFailureCategory
 import com.assistant.app.data.classifySearchFailure
 import com.assistant.app.data.requiresEmbeddingMigration
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.ToolGroup
+import com.assistant.app.data.PhoneConnectors
 import com.assistant.app.data.GITHUB_OAUTH_SCOPE
 import com.assistant.app.data.GITHUB_MCP_URL
 import com.assistant.app.data.MEMORY_FORGET_TOOL
@@ -604,12 +604,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    /** Cloud connectors plus web search and YouTube (which has to run on the phone) are offered to the chat; other phone tools stay voice-only. */
+    /** The chat gets the cloud connectors and the phone connectors that are not voice-only (automation stays in voice). */
     private fun chatToolDeclarations(settings: AssistantSettings): JSONArray {
         val declarations = JSONArray()
         declarations.put(ToolDeclarations.knowledgeSearch())
-        if (DeviceTool.WEB_SEARCH in settings.enabledDeviceTools) declarations.put(ToolDeclarations.device(DeviceTool.WEB_SEARCH))
-        DeviceTool.entries.filter { it.group == ToolGroup.YOUTUBE && it in settings.enabledDeviceTools }
+        DeviceTool.entries.filter { it in PhoneConnectors.chatTools && it in settings.enabledDeviceTools }
             .forEach { declarations.put(ToolDeclarations.device(it)) }
         if (settings.githubLogin.isNotEmpty()) {
             settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it)) }
@@ -643,8 +642,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private suspend fun runChatTool(name: String, args: JSONObject): String = when {
         name == "search_knowledge_base" -> runChatKnowledgeSearch(args)
-        name == DeviceTool.WEB_SEARCH.functionName -> runDeviceTool(DeviceTool.WEB_SEARCH, args)
-        DeviceTool.fromFunctionName(name)?.group == ToolGroup.YOUTUBE -> runDeviceTool(DeviceTool.fromFunctionName(name)!!, args)
+        DeviceTool.fromFunctionName(name)?.let { it in PhoneConnectors.chatTools } == true -> runDeviceTool(DeviceTool.fromFunctionName(name)!!, args)
         name == MEMORY_SAVE_TOOL || name == MEMORY_FORGET_TOOL -> runMemoryTool(name, args)
         name.startsWith(GITHUB_TOOL_PREFIX) -> runGithubTool(name.removePrefix(GITHUB_TOOL_PREFIX), args)
         GoogleService.fromToolName(name) != null -> GoogleService.fromToolName(name)!!.let { runGoogleTool(it, name.removePrefix(it.toolPrefix), args) }
@@ -845,10 +843,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Opens the Connectors page (the connectors added so far); ends any live session first, like the other full pages. */
     fun onConnectorsTapped() = openConnectors(marketplace = false)
 
-    /** Switches Connectors between the added connectors and the browse view, where new ones are found and added. */
-    fun onBrowseConnectors(browse: Boolean) {
-        _uiState.update { it.copy(connectorsMarketplace = browse) }
-    }
+    /** Opens the Marketplace, where every available connector is found and added. */
+    fun onMarketplaceTapped() = openConnectors(marketplace = true)
 
     private fun openConnectors(marketplace: Boolean) {
         val current = _uiState.value
@@ -1016,13 +1012,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             delay(afterMs)
             _uiState.update { if (it.activeTool == label && pendingToolCallIds.isEmpty()) it.copy(activeTool = null) else it }
-        }
-    }
-
-    fun onGithubToolToggled(name: String, enabled: Boolean) {
-        launchPersist("") {
-            settingsStore.setGithubToolEnabled(name, enabled)
-            invalidateWarmSessionAndReprewarm()
         }
     }
 
@@ -1217,13 +1206,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             googleTokens.remove(service.id)
             googleClients.remove(service.id)
             setConnectorIssue(service.id, false)
-            invalidateWarmSessionAndReprewarm()
-        }
-    }
-
-    fun onGoogleToolToggled(service: GoogleService, name: String, enabled: Boolean) {
-        launchPersist("") {
-            settingsStore.setGoogleToolEnabled(service, name, enabled)
             invalidateWarmSessionAndReprewarm()
         }
     }
@@ -1531,15 +1513,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onBargeInToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Barge-in enabled" else "Barge-in disabled") {
             settingsStore.setBargeInEnabled(enabled)
-        }
-    }
-
-    /** The tool list is part of the Live setup message, so the warm session built with the old
-     *  list is dropped and rebuilt on the next prewarm. */
-    fun onDeviceToolToggled(tool: DeviceTool, enabled: Boolean) {
-        launchPersist("") {
-            settingsStore.setDeviceToolEnabled(tool, enabled)
-            invalidateWarmSessionAndReprewarm()
         }
     }
 

@@ -150,12 +150,13 @@ object KnowledgeBaseProvider {
     ): String = buildString {
         append(persona.trim())
         if (style.isNotBlank()) append("\n\n").append(style.trim())
-        append("\n\nThis is a typed text chat, not a voice call. You cannot open, close or control apps or the phone from here, ")
-        append("and you must never say you did. If he asks for such an action, tell him to ask you by voice.")
+        append("\n\nThis is a typed text chat, not a voice call. You can use only the tools you were given here. ")
+        append("You cannot open or control apps, tap the screen or place calls from here, and you must never say you did something no tool did. ")
+        append("If he asks for such an action, tell him to ask you by voice.")
         append("\nAlways reply in the language he writes in (Hinglish included).")
         append("\nCall search_knowledge_base only when he asks about information he saved in his own documents or notes, and answer those questions only from what it returns.")
         if (hasTools) {
-            append("\nYou can use the online tools you were given (web search, GitHub) when they help. For recent or changing facts, search first and name the source briefly.")
+            append("\nYou can use the online tools you were given (connected services, web search, YouTube and a few phone tools such as the flashlight, alarms and device info) when they help. For recent or changing facts, search first and name the source briefly.")
         }
         if (canRemember) {
             append("\nWhen he tells you something lasting about himself (name, family, likes and dislikes, routine, goals), call save_memory with one short note about him. If a remembered fact changes, pass the old note in replaces. Call forget_memory when he asks you to forget something. Never save passwords, card or ID numbers, or passing small talk. Do not announce every save.")

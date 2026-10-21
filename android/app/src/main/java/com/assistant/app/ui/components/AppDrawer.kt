@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -85,6 +86,7 @@ enum class NavTab(val label: String, val icon: ImageVector) {
     KNOWLEDGE("Knowledge", AssistantIcons.Knowledge),
     MEMORY("Memory", Icons.Outlined.Psychology),
     CONNECTORS("Connectors", Icons.Outlined.Extension),
+    MARKETPLACE("Marketplace", Icons.Outlined.Storefront),
     PERSONALIZATION("Personalization", Icons.Outlined.AutoAwesome),
     SETTINGS("Settings", AssistantIcons.Settings),
     USAGE("Usage", Icons.Outlined.BarChart),

@@ -281,7 +281,7 @@ class MainActivity : ComponentActivity() {
                         onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
                         onHomeTapped = { viewModel.onHomeTapped() },
                         onConnectorsTapped = { viewModel.onConnectorsTapped() },
-                        onBrowseConnectors = { viewModel.onBrowseConnectors(it) },
+                        onMarketplaceTapped = { viewModel.onMarketplaceTapped() },
                         onInstallUpdate = { viewModel.onInstallUpdate() },
                         onDismissUpdate = { viewModel.onDismissUpdate() },
                         onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
@@ -308,10 +308,8 @@ class MainActivity : ComponentActivity() {
                         onStartGithubSignIn = { viewModel.onStartGithubSignIn() },
                         onCancelGithubSignIn = { viewModel.onCancelGithubSignIn() },
                         onDisconnectGithub = { viewModel.onDisconnectGithub() },
-                        onGithubToolToggled = { name, enabled -> viewModel.onGithubToolToggled(name, enabled) },
                         onConnectGoogle = { service -> viewModel.onConnectGoogle(service) },
                         onDisconnectGoogle = { service -> viewModel.onDisconnectGoogle(service) },
-                        onGoogleToolToggled = { service, name, enabled -> viewModel.onGoogleToolToggled(service, name, enabled) },
                         onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
                         onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
                         onRequestPermission = {
@@ -334,7 +332,6 @@ class MainActivity : ComponentActivity() {
                         onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
-                        onDeviceToolToggled = { tool, enabled -> viewModel.onDeviceToolToggled(tool, enabled) },
                         onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, chatPrompt, documentPrompt, retrievalLimit ->
                             viewModel.onSaveDeveloperChanges(
                                 name,

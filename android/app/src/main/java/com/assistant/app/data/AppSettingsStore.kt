@@ -148,10 +148,8 @@ class AppSettingsStore(private val context: Context) {
     private val liveModelKey = stringPreferencesKey("live_model")
     private val githubLoginKey = stringPreferencesKey("github_login")
     private val githubToolsKey = stringPreferencesKey("github_mcp_tools")
-    private val githubToolOverridesKey = stringSetPreferencesKey("github_tool_overrides")
     private fun googleEmailKey(s: GoogleService) = stringPreferencesKey("google_${s.id}_account")
     private fun googleToolsKey(s: GoogleService) = stringPreferencesKey("google_${s.id}_mcp_tools")
-    private fun googleOverridesKey(s: GoogleService) = stringSetPreferencesKey("google_${s.id}_tool_overrides")
     private val voiceKey = stringPreferencesKey("voice_name")
     private val micSensitivityKey = stringPreferencesKey("mic_sensitivity")
     private val languageCodeKey = stringPreferencesKey("language_code")
@@ -184,11 +182,11 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultVoice,
             githubLogin = prefs[githubLoginKey].orEmpty(),
             githubTools = decodeMcpTools(prefs[githubToolsKey]),
-            enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey]), prefs[githubToolOverridesKey]),
+            enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey])),
             googleAccounts = GoogleService.entries.mapNotNull { s -> prefs[googleEmailKey(s)]?.takeIf { it.isNotBlank() }?.let { s.id to it } }.toMap(),
             googleTools = GoogleService.entries.associate { it.id to decodeMcpTools(prefs[googleToolsKey(it)]) },
             enabledGoogleTools = GoogleService.entries.associate {
-                it.id to effectiveMcpTools(decodeMcpTools(prefs[googleToolsKey(it)]), prefs[googleOverridesKey(it)])
+                it.id to effectiveMcpTools(decodeMcpTools(prefs[googleToolsKey(it)]))
             },
             micSensitivity = MicSensitivity.fromStoredValue(prefs[micSensitivityKey]),
             languageCode = prefs[languageCodeKey]
@@ -229,13 +227,6 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit { if (tools.isEmpty()) it.remove(githubToolsKey) else it[githubToolsKey] = encodeMcpTools(tools) }
     }
 
-    suspend fun setGithubToolEnabled(name: String, enabled: Boolean) {
-        context.settingsDataStore.edit { prefs ->
-            val others = (prefs[githubToolOverridesKey] ?: emptySet()).filterNot { it.startsWith("$name=") }
-            prefs[githubToolOverridesKey] = (others + "$name=${if (enabled) 1 else 0}").toSet()
-        }
-    }
-
     suspend fun setGithubLogin(login: String?) {
         context.settingsDataStore.edit {
             if (login.isNullOrBlank()) it.remove(githubLoginKey) else it[githubLoginKey] = login
@@ -245,13 +236,6 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setGoogleTools(service: GoogleService, tools: List<McpToolSpec>) {
         context.settingsDataStore.edit {
             if (tools.isEmpty()) it.remove(googleToolsKey(service)) else it[googleToolsKey(service)] = encodeMcpTools(tools)
-        }
-    }
-
-    suspend fun setGoogleToolEnabled(service: GoogleService, name: String, enabled: Boolean) {
-        context.settingsDataStore.edit { prefs ->
-            val others = (prefs[googleOverridesKey(service)] ?: emptySet()).filterNot { it.startsWith("$name=") }
-            prefs[googleOverridesKey(service)] = (others + "$name=${if (enabled) 1 else 0}").toSet()
         }
     }
 

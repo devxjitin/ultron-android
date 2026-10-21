@@ -65,8 +65,8 @@ enum class DeviceTool(
     val hint: String,
     val description: String,
     val params: List<ToolParam> = emptyList(),
-    /** Tools that expose private data start switched off until the user turns them on. */
-    val defaultEnabled: Boolean = true
+    /** Every tool starts switched off; adding its connector (Marketplace or Automation) turns it on. */
+    val defaultEnabled: Boolean = false
 ) {
     BRIGHTNESS(
         ToolGroup.DISPLAY_SOUND, "set_brightness", "Set brightness", "Make the screen brighter or dimmer.",

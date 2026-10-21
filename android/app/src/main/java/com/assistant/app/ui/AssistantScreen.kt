@@ -112,7 +112,7 @@ fun AssistantScreen(
     onKnowledgeTapped: () -> Unit = {},
     onHomeTapped: () -> Unit = {},
     onConnectorsTapped: () -> Unit = {},
-    onBrowseConnectors: (Boolean) -> Unit = {},
+    onMarketplaceTapped: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
     onDismissUpdate: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
@@ -139,10 +139,8 @@ fun AssistantScreen(
     onStartGithubSignIn: () -> Unit = {},
     onCancelGithubSignIn: () -> Unit = {},
     onDisconnectGithub: () -> Unit = {},
-    onGithubToolToggled: (String, Boolean) -> Unit = { _, _ -> },
     onConnectGoogle: (GoogleService) -> Unit = {},
     onDisconnectGoogle: (GoogleService) -> Unit = {},
-    onGoogleToolToggled: (GoogleService, String, Boolean) -> Unit = { _, _, _ -> },
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
     onRequestConnectorPermissions: (List<String>) -> Unit = {},
     onDismissSettings: () -> Unit,
@@ -155,7 +153,6 @@ fun AssistantScreen(
     onBargeInToggled: (Boolean) -> Unit,
     onSaveDeveloperChanges: (String, String, String, String, String, String, String, Int) -> Unit,
     onSaveAzure: (com.assistant.app.data.AzureConfig) -> Unit = {},
-    onDeviceToolToggled: (DeviceTool, Boolean) -> Unit,
     onGeneratePromptFromKnowledgeBase: () -> Unit,
     onDismissPromptGenerationError: () -> Unit,
     onAddKnowledgeDocument: (String, String) -> Unit,
@@ -184,7 +181,7 @@ fun AssistantScreen(
                     AdminPage.USAGE -> NavTab.USAGE
                     AdminPage.STORAGE -> NavTab.STORAGE
                 }
-            uiState.showConnectors -> NavTab.CONNECTORS
+            uiState.showConnectors -> if (uiState.connectorsMarketplace) NavTab.MARKETPLACE else NavTab.CONNECTORS
             uiState.showMemory -> NavTab.MEMORY
             else -> NavTab.HOME
         }
@@ -209,7 +206,6 @@ fun AssistantScreen(
         // Back with the menu open closes the menu instead of leaving the app.
         BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
         // Inside Connectors, back from the browse view returns to the added connectors first.
-        BackHandler(enabled = uiState.showConnectors && uiState.connectorsMarketplace && !drawerState.isOpen) { onBrowseConnectors(false) }
         val wide = maxWidth >= 900.dp
         val drawerContent: @Composable (Modifier) -> Unit = { drawerModifier ->
             AppDrawerContent(
@@ -233,6 +229,7 @@ fun AssistantScreen(
                         NavTab.STORAGE -> onStorageTapped()
                         NavTab.KNOWLEDGE -> onKnowledgeTapped()
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
+                        NavTab.MARKETPLACE -> guardedNav(onMarketplaceTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
                         NavTab.SETTINGS -> onSettingsTapped()
                         NavTab.DEVELOPER -> onDeveloperTapped()
@@ -374,7 +371,6 @@ fun AssistantScreen(
             ConnectorsPage(
                 marketplace = uiState.connectorsMarketplace,
                 issues = uiState.connectorIssues,
-                onBrowseToggle = { onBrowseConnectors(!uiState.connectorsMarketplace) },
                 githubLogin = uiState.settings.githubLogin,
                 deviceCode = uiState.githubDeviceCode,
                 enabledTools = uiState.settings.enabledDeviceTools,
@@ -382,16 +378,11 @@ fun AssistantScreen(
                 onCancelGithubSignIn = onCancelGithubSignIn,
                 onDisconnectGithub = onDisconnectGithub,
                 githubTools = uiState.settings.githubTools,
-                enabledGithubTools = uiState.settings.enabledGithubTools,
-                onGithubToolToggled = onGithubToolToggled,
                 googleAccounts = uiState.settings.googleAccounts,
                 googleTools = uiState.settings.googleTools,
-                enabledGoogleTools = uiState.settings.enabledGoogleTools,
                 onConnectGoogle = onConnectGoogle,
                 onDisconnectGoogle = onDisconnectGoogle,
-                onGoogleToolToggled = onGoogleToolToggled,
                 onToolsEnabled = onConnectorToolsEnabled,
-                onToolToggled = onDeviceToolToggled,
                 onRequestPermissions = onRequestConnectorPermissions,
                 modifier = Modifier.padding(top = topReserve)
             )
