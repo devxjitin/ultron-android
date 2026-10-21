@@ -51,6 +51,7 @@ object LinkPreviews {
 
     private val client = HttpClients.shared.newBuilder()
         .followRedirects(false).followSslRedirects(false)
+        .dns(PublicOnlyDns)
         .connectTimeout(6, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS).callTimeout(12, TimeUnit.SECONDS)
         .build()
 
@@ -266,7 +267,18 @@ object LinkPreviews {
         if (url.port != 80 && url.port != 443) return false
         val host = url.host.lowercase()
         if (host == "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false
-        return runCatching { InetAddress.getAllByName(host).all(::isPublicAddress) }.getOrDefault(false)
+        // Names are checked when the connection resolves them (see PublicOnlyDns); only address literals are checked here.
+        val literal = host.contains(':') || host.all { it.isDigit() || it == '.' }
+        return !literal || runCatching { isPublicAddress(InetAddress.getByName(host)) }.getOrDefault(false)
+    }
+
+    /** Resolves names for the connection itself and refuses any answer holding a non-public address, so a changing DNS answer cannot slip through. */
+    private object PublicOnlyDns : okhttp3.Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val addresses = okhttp3.Dns.SYSTEM.lookup(hostname)
+            if (!addresses.all(::isPublicAddress)) throw java.net.UnknownHostException("Not a public address: $hostname")
+            return addresses
+        }
     }
 
     private fun isPublicAddress(address: InetAddress): Boolean {
@@ -275,7 +287,16 @@ object LinkPreviews {
         ) return false
         val b = address.address
         if (b.size == 16 && (b[0].toInt() and 0xFE) == 0xFC) return false // IPv6 unique local
-        if (b.size == 4 && (b[0].toInt() and 0xFF) == 100 && (b[1].toInt() and 0xC0) == 64) return false // carrier-grade NAT
+        val b0 = b[0].toInt() and 0xFF
+        val b1 = if (b.size > 1) b[1].toInt() and 0xFF else 0
+        if (b.size == 4) {
+            if (b0 == 0 || b0 >= 240) return false // "this network", reserved and broadcast
+            if (b0 == 100 && (b1 and 0xC0) == 64) return false // carrier-grade NAT
+            if (b0 == 192 && b1 == 0 && (b[2].toInt() and 0xFF) in 0..2) return false // protocol assignments, documentation
+            if (b0 == 198 && (b1 == 18 || b1 == 19)) return false // benchmarking
+            if ((b0 == 198 && b1 == 51 && (b[2].toInt() and 0xFF) == 100) || (b0 == 203 && b1 == 0 && (b[2].toInt() and 0xFF) == 113)) return false // documentation
+        }
+        if (b.size == 16 && b0 == 0x20 && b1 == 0x01 && b[2].toInt() == 0x0d && (b[3].toInt() and 0xFF) == 0xb8) return false // 2001:db8::/32 documentation
         return true
     }
 }

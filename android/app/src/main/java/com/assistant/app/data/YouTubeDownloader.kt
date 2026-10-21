@@ -38,7 +38,9 @@ import java.io.IOException
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.Request as HttpRequest
 
 /**
@@ -77,6 +79,7 @@ class YouTubeDownloader(private val context: Context) {
         val url = toUrl(video) ?: return "status=invalid\nGive a YouTube link or video id."
         val id = notificationIds.getAndIncrement()
         scope.launch {
+          gate.withPermit {
             val notice = Progress(context, id)
             notice.update("Preparing download", 0)
             try {
@@ -85,6 +88,7 @@ class YouTubeDownloader(private val context: Context) {
             } catch (e: Exception) {
                 notice.done("Download failed", e.message?.take(120) ?: "Could not download this video.", null)
             }
+          }
         }
         return "status=ok\nDownload started in the background. A notification shows progress, and the file will be in " +
             "Downloads/Ultron when it finishes."
@@ -95,7 +99,17 @@ class YouTubeDownloader(private val context: Context) {
     /** The file being written in Downloads/Ultron: a MediaStore entry on Android 10+, a plain file before that. */
     private class Target(val name: String, val uri: Uri?, val file: File?)
 
+    /** Each download works in its own folder, so two running together never touch each other's temporary files. */
     private fun download(url: String, audioOnly: Boolean, height: Int, notice: Progress): Saved {
+        val workDir = File(context.cacheDir, "yt-" + UUID.randomUUID()).apply { mkdirs() }
+        try {
+            return downloadIn(workDir, url, audioOnly, height, notice)
+        } finally {
+            workDir.deleteRecursively()
+        }
+    }
+
+    private fun downloadIn(workDir: File, url: String, audioOnly: Boolean, height: Int, notice: Progress): Saved {
         ensureInit()
         val info = StreamInfo.getInfo(url)
         val title = safeName(info.name)
@@ -103,7 +117,7 @@ class YouTubeDownloader(private val context: Context) {
             val stream = pickAudio(info.audioStreams, webm = false) ?: pickAudio(info.audioStreams, webm = true)
                 ?: throw IOException("No audio stream found.")
             val suffix = stream.format?.suffix ?: "m4a"
-            val cache = File(context.cacheDir, "yt-audio-only.tmp")
+            val cache = File(workDir, "audio-only.tmp")
             try {
                 fetch(stream.content, cache, notice, "Downloading audio", 0, 100)
                 return publish(cache, "$title.$suffix", mimeOf(stream.format?.mimeType, "audio/mp4"))
@@ -117,8 +131,8 @@ class YouTubeDownloader(private val context: Context) {
         if (split != null && audio != null) {
             val total = (split.itagItem?.contentLength ?: -1) + (audio.itagItem?.contentLength ?: -1)
             if (total > 0) requireSpace(total)
-            val videoFile = File(context.cacheDir, "yt-video.tmp")
-            val audioFile = File(context.cacheDir, "yt-audio.tmp")
+            val videoFile = File(workDir, "video.tmp")
+            val audioFile = File(workDir, "audio.tmp")
             try {
                 fetch(split.content, videoFile, notice, "Downloading video", 0, 85)
                 fetch(audio.content, audioFile, notice, "Downloading audio", 85, 95)
@@ -142,7 +156,7 @@ class YouTubeDownloader(private val context: Context) {
             .maxByOrNull { it.height } ?: info.videoStreams.firstOrNull { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
             ?: throw IOException("No downloadable stream found for this video.")
         val suffix = whole.format?.suffix ?: "mp4"
-        val cache = File(context.cacheDir, "yt-whole.tmp")
+        val cache = File(workDir, "whole.tmp")
         try {
             fetch(whole.content, cache, notice, "Downloading video", 0, 100)
             return publish(cache, "$title.$suffix", mimeOf(whole.format?.mimeType, "video/mp4"))
@@ -355,6 +369,8 @@ class YouTubeDownloader(private val context: Context) {
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val notificationIds = AtomicInteger(4000)
+        /** At most two downloads run at once; the rest wait their turn. */
+        val gate = kotlinx.coroutines.sync.Semaphore(2)
         val client: OkHttpClient by lazy {
             HttpClients.shared.newBuilder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
         }
