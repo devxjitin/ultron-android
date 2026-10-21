@@ -131,7 +131,7 @@ class GeminiChatClient(
 
         val call = client.newCall(request)
         // Cancelling the coroutine (new chat, app closed) must also drop the open HTTP stream.
-        val onCancel = currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
+        val onCancel = watchCancellation(call)
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
@@ -182,7 +182,7 @@ class GeminiChatClient(
                 return StreamTurn(text.toString(), calls, raw)
             }
         } finally {
-            onCancel?.dispose()
+            onCancel.cancel()
         }
     }
 

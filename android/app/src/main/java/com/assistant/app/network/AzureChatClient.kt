@@ -102,7 +102,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
             .build()
 
         val call = client.newCall(request)
-        val onCancel = currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
+        val onCancel = watchCancellation(call)
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
@@ -151,7 +151,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                 return StreamTurn(text.toString(), finished)
             }
         } finally {
-            onCancel?.dispose()
+            onCancel.cancel()
         }
     }
 

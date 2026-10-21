@@ -466,6 +466,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // ---------------------------------------------------------------- typed chat (home screen)
 
     private var chatJob: Job? = null
+    /** Identifies the live chat request; New chat / Open chat bump it so an old request cannot touch newer state. */
+    private var chatRequestSeq = 0L
     private var chatMessageId = 0L
     private var textChatSessionId: String? = null
     private var textChatStartedAtMillis = 0L
@@ -492,6 +494,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         fun updateReply(change: (ChatMessage) -> ChatMessage) = _uiState.update { state ->
             state.copy(chatMessages = state.chatMessages.map { if (it.id == replyId) change(it) else it })
         }
+        val requestId = ++chatRequestSeq
         chatJob = viewModelScope.launch {
             // What the reader sees while the first words are still on their way.
             val statusJob = launch {
@@ -567,7 +570,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 incoming.close()
                 revealer.join()
                 statusJob.cancel()
-                if (reply.isBlank()) {
+                if (requestId != chatRequestSeq) {
+                    // The chat was replaced while this request ran: keep the usage, drop the reply.
+                    recordUsage(UsageDay("", inputTokens = usedInput, outputTokens = usedOutput))
+                } else if (reply.isBlank()) {
                     updateReply { it.copy(text = "I have nothing to say to that. Try asking another way.", status = null, isError = true) }
                 } else {
                     saveChatTurn(message, reply.trim(), attachments)
@@ -585,7 +591,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // Keep what already arrived and say what went wrong after it.
                 updateReply { it.copy(text = if (shownText.isBlank()) problem else shownText + "\n\n" + problem, status = null, isError = true) }
             } finally {
-                _uiState.update { it.copy(isChatSending = false) }
+                if (requestId == chatRequestSeq) _uiState.update { it.copy(isChatSending = false) }
             }
         }
     }
@@ -729,6 +735,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Starts a fresh typed chat; the old one stays in History. */
+        chatRequestSeq++
     fun onChatNew() {
         chatJob?.cancel()
         chatJob = null
@@ -746,6 +753,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Opens a saved chat on the home screen; new messages continue it. */
     fun onOpenChat(sessionId: String) {
+        chatRequestSeq++
         val session = _uiState.value.chatSessions.firstOrNull { it.id == sessionId } ?: return
         chatJob?.cancel()
         chatJob = null
