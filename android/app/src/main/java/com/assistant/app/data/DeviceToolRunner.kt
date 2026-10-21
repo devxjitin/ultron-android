@@ -51,6 +51,7 @@ import android.provider.MediaStore
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.view.KeyEvent
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.AssistantNotificationListener
@@ -176,10 +177,17 @@ class DeviceToolRunner(
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val found = findContacts(name, 5)
-                val match = found.firstOrNull() ?: return "status=not_found\nNo contact matches \"$name\"."
-                start(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + match.second.filter { it.isDigit() || it == '+' })))
-                val others = if (found.map { it.first }.distinct().size > 1) " Other matches: " + found.drop(1).joinToString { it.first } else ""
-                "status=ok\nCalling ${match.first} now.$others"
+                if (found.isEmpty()) return "status=not_found\nNo contact matches \"$name\"."
+                // Only call when exactly one number matches; otherwise the user must pick one.
+                val numbers = found.map { it.second.filter { c -> c.isDigit() || c == '+' } }.distinct()
+                if (numbers.size > 1) {
+                    return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to call, " +
+                        "then use dial_number with that number. No call was placed.\n" +
+                        found.joinToString("\n") { "${it.first}: ${it.second}" }
+                }
+                val match = found.first()
+                start(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + numbers.first())))
+                "status=ok\nCalling ${match.first} now."
             }
             DeviceTool.CREATE_CONTACT -> {
                 val name = text("name") ?: return MISSING
@@ -250,6 +258,9 @@ class DeviceToolRunner(
             DeviceTool.SCHEDULE_REMINDER -> {
                 val minutes = number("minutes")?.takeIf { it in 1..1440 } ?: return "status=invalid\nMinutes must be 1-1440."
                 val message = text("message") ?: return MISSING
+                if (!NotificationManagerCompat.from(app).areNotificationsEnabled()) {
+                    return "status=unavailable\nNotifications are turned off for this app, so a reminder could not be shown."
+                }
                 // Saved like any scheduled action, so the reminder survives a restart of the phone.
                 val scheduled = AutomationEngine.schedule(
                     app, DeviceTool.SHOW_NOTIFICATION.functionName,

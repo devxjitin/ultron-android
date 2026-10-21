@@ -10,8 +10,7 @@ param(
     [string]$Bucket = "ultron-app-updates-143920986615",
     # Local Android SDK and JDK make the build about twice as fast as Docker; Docker is the fallback.
     [string]$Sdk = "$env:USERPROFILE\Android\Sdk",
-    [string]$Jdk = $(if ($env:JAVA_HOME) { $env:JAVA_HOME } else { "$env:USERPROFILE
-ea_tools\jdk-21.0.12.1+1" })
+    [string]$Jdk = $(if ($env:JAVA_HOME) { $env:JAVA_HOME } else { (Join-Path $env:USERPROFILE "rea_tools\jdk-21.0.12.1+1") })
 )
 $ErrorActionPreference = "Stop"
 $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"

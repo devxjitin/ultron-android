@@ -275,3 +275,4 @@
 [2026-10-20 08:27] [Claude] [Fix: home par Ultron label tooth raha tha (letterSpacing); streaming me scroll jump fix; APK install]
 [2026-10-21 15:26] [Claude] [Refactor: moved summarize_latency.py to scripts/, Idea.md to docs/, removed android/track.md; README structure updated]
 [2026-10-21 15:35] [Claude] [Update: Marketplace shows all connectors, Available (not added) first then Added; compile check pass]
+[2026-10-21 16:06] [Claude] [Fix: Round 1 audit - JDK path, Lambda InvokeFunction perm, ambiguous contact call, reminder auth; compile pass]
