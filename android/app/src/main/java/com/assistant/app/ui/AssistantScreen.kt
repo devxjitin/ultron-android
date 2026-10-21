@@ -101,6 +101,7 @@ fun AssistantScreen(
     onMicTapped: () -> Unit,
     onMuteToggled: () -> Unit = {},
     onChatSend: (String, List<ChatAttachment>) -> Boolean = { _, _ -> false },
+    onChatDraftSaved: (String, List<ChatAttachment>) -> Unit = { _, _ -> },
     onChatEdit: (Long, String) -> Unit = { _, _ -> },
     onChatNew: () -> Unit = {},
     onChatNotice: (String) -> Unit = {},
@@ -131,6 +132,9 @@ fun AssistantScreen(
     onLibraryDelete: (LibraryItem) -> Unit = {},
     onClearLibraryFiles: () -> Unit = {},
     onClearCache: () -> Unit = {},
+    onExportChats: () -> Unit = {},
+    onExportUnreadableChats: () -> Unit = {},
+    onDiscardUnreadableChats: () -> Unit = {},
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
@@ -138,6 +142,7 @@ fun AssistantScreen(
     onUpdateMemory: (String, String) -> Unit = { _, _ -> },
     onDeleteMemory: (String) -> Unit = {},
     onClearMemory: () -> Unit = {},
+    onRestoreMemory: (String) -> Unit = {},
     onClearAllChats: () -> Unit = {},
     onClearChatsAndMemory: () -> Unit = {},
     onStartGithubSignIn: () -> Unit = {},
@@ -265,6 +270,9 @@ fun AssistantScreen(
                 errorMessage = uiState.errorMessage.takeIf { uiState.voiceState == VoiceState.ERROR },
                 onSend = onChatSend,
                 chatKey = uiState.activeChatId,
+                initialInput = uiState.chatDraftText,
+                initialFiles = uiState.chatDraftFiles,
+                onDraftSaved = onChatDraftSaved,
                 onEdit = onChatEdit,
                 onNotice = onChatNotice,
                 incomingShare = uiState.incomingShare,
@@ -360,7 +368,9 @@ fun AssistantScreen(
                 onUpdate = onUpdateMemory,
                 onDelete = onDeleteMemory,
                 onClearAll = onClearMemory,
-                modifier = Modifier.padding(top = topReserve)
+                modifier = Modifier.padding(top = topReserve),
+                removedByAssistant = uiState.removedMemories,
+                onRestore = onRestoreMemory
             )
         }
 
@@ -429,6 +439,10 @@ fun AssistantScreen(
                         knowledgeCount = uiState.knowledgeDocuments.size,
                         cacheBytes = uiState.cacheBytes,
                         hasUsage = uiState.usageDays.isNotEmpty(),
+                        unreadableChats = uiState.unreadableChats,
+                        onExportChats = onExportChats,
+                        onExportUnreadable = onExportUnreadableChats,
+                        onDiscardUnreadable = onDiscardUnreadableChats,
                         onClearCache = onClearCache,
                         onClearLibrary = onClearLibraryFiles,
                         onClearChats = onClearAllChats,

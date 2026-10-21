@@ -86,6 +86,11 @@ data class AssistantUiState(
     val usageDays: List<com.assistant.app.data.UsageDay> = emptyList(),
     /** Bytes of temporary files (downloaded updates, previews) the app can clear. */
     val cacheBytes: Long = 0L,
+    /** The unsent chat message and files, kept while the user visits another page. */
+    val chatDraftText: String = "",
+    val chatDraftFiles: List<ChatAttachment> = emptyList(),
+    /** Chats that could not be read and were set aside (shown in Storage so they can be saved or deleted). */
+    val unreadableChats: Int = 0,
     /** Set while a Google service waits for the user to pick an account and allow access; the activity shows it. */
     val googleConsent: android.app.PendingIntent? = null,
     /** With [showConnectors]: show the Marketplace (everything available to add) instead of the added connectors. */
@@ -93,6 +98,8 @@ data class AssistantUiState(
     val showMemory: Boolean = false,
     /** Facts the assistant remembers about the user, newest last. */
     val memories: List<MemoryItem> = emptyList(),
+    /** Notes the assistant removed itself, newest last; the Memory page offers to restore them. */
+    val removedMemories: List<MemoryItem> = emptyList(),
     /** Set while a GitHub sign-in waits for the user to approve it on github.com. */
     val githubDeviceCode: GithubDeviceCode? = null,
     val errorMessage: String? = null,

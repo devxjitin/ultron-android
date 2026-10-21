@@ -64,7 +64,9 @@ fun MemoryPage(
     onUpdate: (String, String) -> Unit,
     onDelete: (String) -> Unit,
     onClearAll: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    removedByAssistant: List<MemoryItem> = emptyList(),
+    onRestore: (String) -> Unit = {}
 ) {
     var draft by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<MemoryItem?>(null) }
@@ -141,6 +143,25 @@ fun MemoryPage(
                     modifier = Modifier.weight(1f).padding(vertical = 10.dp))
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).clickable { onDelete(item.id) }, contentAlignment = Alignment.Center) {
                     Icon(Icons.Filled.Close, contentDescription = "Forget this", tint = AssistantTextMuted, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+        if (removedByAssistant.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "REMOVED BY THE ASSISTANT", color = AssistantTextMuted, fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+            removedByAssistant.asReversed().forEach { item ->
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(16.dp)).background(AssistantSurface)
+                        .border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(16.dp))
+                        .padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(item.text, color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp,
+                        modifier = Modifier.weight(1f).padding(vertical = 10.dp))
+                    TextButton(onClick = { onRestore(item.id) }) { Text("Restore") }
                 }
             }
         }

@@ -38,6 +38,7 @@ import com.assistant.app.data.GITHUB_MCP_URL
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.MemoryStore
+import com.assistant.app.data.formatChatsAsText
 import com.assistant.app.data.memoriesForPrompt
 import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.GoogleService
@@ -390,6 +391,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 .catch { e -> Log.e("AssistantError", "Failed to read memory", e) }
                 .collect { items -> _uiState.update { it.copy(memories = items) } }
         }
+        viewModelScope.launch {
+            memoryStore.removedByAssistant
+                .catch { e -> Log.e("AssistantError", "Failed to read removed memory", e) }
+                .collect { items -> _uiState.update { it.copy(removedMemories = items) } }
+        }
     }
 
     @Volatile private var keysLoaded = false
@@ -728,6 +734,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Called when the chat screen is left: keeps what was typed and attached so it is still there on return. */
+    fun onChatDraftSaved(text: String, files: List<ChatAttachment>) {
+        _uiState.update { it.copy(chatDraftText = text, chatDraftFiles = files) }
+    }
+
     /** Shows a short message from the chat screen, for example "file too large". */
     fun onChatNotice(message: String) = showToast(message, AppNotificationType.ERROR)
 
@@ -896,7 +907,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun openAdminPage(page: AdminPage) {
-        if (page == AdminPage.STORAGE) refreshCacheSize()
+        if (page == AdminPage.STORAGE) {
+            refreshCacheSize()
+            refreshUnreadableChats()
+        }
         val current = _uiState.value
         // Already on an admin page (Settings, Knowledge or History): switch pages directly.
         if (current.showSettings || current.showConnectors || current.showMemory) {
@@ -976,6 +990,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         launchPersist("Memory deleted") { memoryStore.remove(id); invalidateWarmSessionAndReprewarm() }
     }
 
+    /** Brings back a note the assistant had removed. */
+    fun onRestoreMemory(id: String) {
+        launchPersist("Memory restored") { memoryStore.restore(id); invalidateWarmSessionAndReprewarm() }
+    }
+
     fun onClearMemory() {
         launchPersist("Memory cleared") { memoryStore.clear(); invalidateWarmSessionAndReprewarm() }
     }
@@ -986,8 +1005,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return "status=disabled\nMemory is turned off by the user. Do not save or forget anything."
         }
         if (name != MEMORY_SAVE_TOOL) {
-            val removed = memoryStore.removeMatching(args.optString("about"))
-            return if (removed > 0) "status=ok\nForgot $removed saved fact(s)." else "status=ok\nNothing saved matched that."
+            val forgotten = memoryStore.forget(args.optString("about"))
+            return when {
+                forgotten.removed.isNotEmpty() -> "status=ok\nForgot: ${forgotten.removed.joinToString("; ") { it.text }}."
+                forgotten.ambiguous.isNotEmpty() -> "status=ambiguous\nNothing was forgotten because several notes match: " +
+                    forgotten.ambiguous.take(5).joinToString("; ") { it.text } +
+                    ". Ask the user which one, then call forget_memory again with words from that note only."
+                else -> "status=ok\nNothing saved matched that."
+            }
         }
         val result = memoryStore.save(args.optString("fact"), args.optString("replaces").takeIf { it.isNotBlank() })
         return buildString {
@@ -1490,6 +1515,55 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             val bytes = withContext(Dispatchers.IO) { getApplication<Application>().cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
             _uiState.update { it.copy(cacheBytes = bytes) }
         }
+    }
+
+    private fun refreshUnreadableChats() {
+        viewModelScope.launch {
+            val count = runCatching { chatHistoryStore.unreadableCount() }.getOrDefault(0)
+            _uiState.update { it.copy(unreadableChats = count) }
+        }
+    }
+
+    /** Shares every saved chat as a text file, so the history can be kept outside the app. */
+    fun onExportChats() {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) { formatChatsAsText(chatHistoryStore.sessions.first()) }
+            shareExport("ultron-chats.txt", "text/plain", text)
+        }
+    }
+
+    /** Shares the chats that could not be read, exactly as they were stored, so they can be kept or sent for repair. */
+    fun onExportUnreadableChats() {
+        viewModelScope.launch {
+            val json = chatHistoryStore.unreadableAsJson() ?: return@launch
+            shareExport("ultron-unreadable-chats.json", "application/json", json)
+        }
+    }
+
+    fun onDiscardUnreadableChats() {
+        viewModelScope.launch {
+            runCatching { chatHistoryStore.discardUnreadable() }
+            refreshUnreadableChats()
+        }
+    }
+
+    private suspend fun shareExport(fileName: String, mime: String, content: String) {
+        val app = getApplication<Application>()
+        val uri = withContext(Dispatchers.IO) {
+            runCatching {
+                val file = java.io.File(java.io.File(app.cacheDir, "exports").apply { mkdirs() }, fileName)
+                file.writeText(content)
+                androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.updates", file)
+            }.getOrNull()
+        }
+        if (uri == null) {
+            showToast("Couldn't prepare the file.", AppNotificationType.ERROR)
+            return
+        }
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType(mime)
+            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        app.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /** Deletes the temporary files; a finished update download is simply fetched again when needed. */

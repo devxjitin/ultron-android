@@ -46,4 +46,10 @@ class MemoryReplacementTest {
         val hindi = listOf(note("a", "वह दिल्ली में रहता है"), note("b", "उसे चाय पसंद है"))
         assertEquals("b", chooseReplacement(hindi, "उसे चाय पसंद है").remove?.id)
     }
+
+    @Test fun `forget matches only notes that contain every word`() {
+        assertEquals(listOf("tea"), factsMatching(notes, "strong tea").map { it.id })
+        assertEquals(setOf("home", "uncle"), factsMatching(notes, "Delhi").map { it.id }.toSet())
+        assertTrue(factsMatching(notes, "").isEmpty())
+    }
 }

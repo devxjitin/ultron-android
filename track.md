@@ -285,3 +285,5 @@
 [2026-10-21 16:51] [Claude] [Add: Round 11 tests - DocxText, public address ranges, Lambda RPC/Gmail/Docs/paging; isPublicAddress made top-level]
 [2026-10-21 16:56] [Claude] [Add: Round 11 Kotlin tests (schema, SSE, chat finish/cancel, memory replace); Fix: cancelled call no longer crashes as IOException]
 [2026-10-21 17:01] [Claude] [Fix: Round 12 audit - monotonic release id, usage scope, Personalization guard, Repair label, partial photo access; compile+lint pass]
+[2026-10-21 17:03] [Claude] [Docs: docs/ASTRA_REVIEW_STATUS.md - Astra review findings with done/left status]
+[2026-10-21 17:14] [Claude] [Fix: Round 13 audit - unreadable chat recovery, chat export, forget ambiguity+restore, streaming DOCX, chat drafts; compile+lint+tests pass]

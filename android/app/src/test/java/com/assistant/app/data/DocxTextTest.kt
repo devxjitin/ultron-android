@@ -29,14 +29,19 @@ class DocxTextTest {
         assertEquals(100, DocxText.extract(docx(xml), 100).length)
     }
 
-    @Test fun `a file without document xml gives empty text`() {
+    @Test fun `a file without document xml is reported as unreadable`() {
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zip -> zip.putNextEntry(ZipEntry("other.xml")); zip.write(byteArrayOf(1)); zip.closeEntry() }
-        assertEquals("", DocxText.extract(out.toByteArray(), 100))
+        assertEquals(DocxText.UNREADABLE, DocxText.extract(out.toByteArray(), 100))
     }
 
-    @Test fun `not a zip gives empty text`() {
-        assertEquals("", DocxText.extract(byteArrayOf(1, 2, 3, 4), 100))
+    @Test fun `not a zip is reported as unreadable`() {
+        assertEquals(DocxText.UNREADABLE, DocxText.extract(byteArrayOf(1, 2, 3, 4), 100))
+    }
+
+    @Test fun `tabs line breaks and numeric entities are handled`() {
+        val xml = "<w:p><w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>&#65;&#x42;</w:t></w:r></w:p>"
+        assertEquals("a\tb\nAB", DocxText.extract(docx(xml), 100))
     }
 
     @Test fun `a highly compressible huge document is read only up to the cap`() {
@@ -46,5 +51,11 @@ class DocxTextTest {
         assertTrue("fixture should be small, was ${bytes.size}", bytes.size < 200_000)
         val text = DocxText.extract(bytes, 1000)
         assertEquals(1000, text.length)
+    }
+
+    @Test fun `a document larger than the read cap says so`() {
+        val huge = "<w:p><w:t>" + "x".repeat(9 * 1024 * 1024) + "</w:t></w:p>"
+        val text = DocxText.extract(docx(huge), 20 * 1024 * 1024)
+        assertTrue(text.endsWith(DocxText.TOO_LARGE_NOTE.trim()))
     }
 }

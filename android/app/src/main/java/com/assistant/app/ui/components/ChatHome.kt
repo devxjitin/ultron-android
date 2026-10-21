@@ -155,12 +155,20 @@ fun ChatHome(
     onVoiceClick: () -> Unit,
     /** Id of the open saved chat; switching to another chat (or to a new one) drops the unsent draft. */
     chatKey: String? = null,
+    /** The unsent message and files from when this screen was last left, so a trip to another page loses nothing. */
+    initialInput: String = "",
+    initialFiles: List<ChatAttachment> = emptyList(),
+    onDraftSaved: (String, List<ChatAttachment>) -> Unit = { _, _ -> },
     incomingShare: IncomingShare? = null,
     onShareConsumed: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var input by rememberSaveable { mutableStateOf("") }
-    val pending = remember { mutableStateListOf<ChatAttachment>() }
+    var input by rememberSaveable { mutableStateOf(initialInput) }
+    val pending = remember { mutableStateListOf<ChatAttachment>().apply { addAll(initialFiles) } }
+    val latestDraftSaved by androidx.compose.runtime.rememberUpdatedState(onDraftSaved)
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { latestDraftSaved(input, pending.toList()) }
+    }
     var previewFile by remember { mutableStateOf<ChatAttachment?>(null) }
     val listState = rememberLazyListState()
     val context = LocalContext.current

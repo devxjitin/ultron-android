@@ -27,8 +27,30 @@ const val MEMORY_PROMPT_BUDGET_CHARS = 4_000
 class MemoryStore(private val context: Context) {
 
     private val itemsKey = stringPreferencesKey("items")
+    /** Notes the assistant removed (forget or replace), newest last, so the user can bring one back. */
+    private val removedKey = stringPreferencesKey("removed_by_assistant")
 
     val items: Flow<List<MemoryItem>> = context.memoryDataStore.data.map { decode(it[itemsKey]) }
+
+    val removedByAssistant: Flow<List<MemoryItem>> = context.memoryDataStore.data.map { decode(it[removedKey]) }
+
+    private fun logRemoved(prefs: androidx.datastore.preferences.core.MutablePreferences, gone: List<MemoryItem>) {
+        if (gone.isEmpty()) return
+        prefs[removedKey] = encode((decode(prefs[removedKey]) + gone).takeLast(MAX_REMOVED_LOG))
+    }
+
+    /** Puts a note the assistant removed back among the saved ones. */
+    suspend fun restore(id: String) {
+        context.memoryDataStore.edit { prefs ->
+            val log = decode(prefs[removedKey])
+            val note = log.firstOrNull { it.id == id } ?: return@edit
+            val existing = decode(prefs[itemsKey])
+            if (existing.none { it.text.equals(note.text, ignoreCase = true) }) {
+                prefs[itemsKey] = encode((existing + note).takeLast(MAX_MEMORY_ITEMS))
+            }
+            prefs[removedKey] = encode(log.filterNot { it.id == id })
+        }
+    }
 
     suspend fun current(): List<MemoryItem> = items.first()
 
@@ -66,6 +88,7 @@ class MemoryStore(private val context: Context) {
             choice.remove?.let { gone ->
                 replaced += gone.text
                 existing = existing.filterNot { it.id == gone.id }
+                logRemoved(prefs, listOf(gone))
             }
             if (choice.ambiguous.isNotEmpty()) ambiguous = choice.ambiguous.map { it.text }.take(3)
             if (existing.none { it.text.equals(clean, ignoreCase = true) }) {
@@ -95,22 +118,31 @@ class MemoryStore(private val context: Context) {
         }
     }
 
-    /** Removes every fact that contains all words of [query] as whole words; returns how many were removed. */
-    suspend fun removeMatching(query: String): Int {
-        val words = splitWords(query).filter { it.length > 1 }
-        if (words.isEmpty()) return 0
-        var removed = 0
+    /**
+     * Forgets the one fact that contains all words of [query]. When several facts match, nothing is removed and they
+     * are returned in [ForgetResult.ambiguous], so the assistant can ask which one the user meant.
+     */
+    suspend fun forget(query: String): ForgetResult {
+        var result = ForgetResult(emptyList(), emptyList())
         context.memoryDataStore.edit { prefs ->
             val existing = decode(prefs[itemsKey])
-            val kept = existing.filterNot { item -> splitWords(item.text).toSet().let { itemWords -> words.all { it in itemWords } } }
-            removed = existing.size - kept.size
-            if (removed > 0) prefs[itemsKey] = encode(kept)
+            val matches = factsMatching(existing, query)
+            if (matches.size == 1) {
+                prefs[itemsKey] = encode(existing.filterNot { it.id == matches[0].id })
+                logRemoved(prefs, matches)
+                result = ForgetResult(matches, emptyList())
+            } else if (matches.size > 1) {
+                result = ForgetResult(emptyList(), matches)
+            }
         }
-        return removed
+        return result
     }
 
     suspend fun clear() {
-        context.memoryDataStore.edit { it.remove(itemsKey) }
+        context.memoryDataStore.edit {
+            it.remove(itemsKey)
+            it.remove(removedKey)
+        }
     }
 
     private fun encode(items: List<MemoryItem>): String = JSONArray().also { array ->
@@ -156,6 +188,18 @@ internal fun chooseReplacement(existing: List<MemoryItem>, hint: String): Replac
     return if (top.size == 1 && best >= REPLACE_CLEAR_MATCH) ReplaceChoice(top[0].first, emptyList())
     else ReplaceChoice(null, scored.map { it.first })
 }
+
+/** [removed] is the fact that was forgotten; [ambiguous] lists several matches that were all kept. */
+class ForgetResult(val removed: List<MemoryItem>, val ambiguous: List<MemoryItem>)
+
+/** Facts that contain every word of [query] as a whole word. */
+internal fun factsMatching(items: List<MemoryItem>, query: String): List<MemoryItem> {
+    val words = splitWords(query).filter { it.length > 1 }
+    if (words.isEmpty()) return emptyList()
+    return items.filter { item -> splitWords(item.text).toSet().let { itemWords -> words.all { it in itemWords } } }
+}
+
+private const val MAX_REMOVED_LOG = 20
 
 data class SaveResult(val added: Boolean, val replaced: List<String>, val related: List<String>, val ambiguous: List<String> = emptyList())
 

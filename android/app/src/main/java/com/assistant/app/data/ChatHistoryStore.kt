@@ -38,6 +38,33 @@ class ChatHistoryStore(private val context: Context) {
         return decodeAll(prefs[sessionsKey]).bad.isEmpty() && prefs[quarantineKey].isNullOrBlank()
     }
 
+    /** How many unreadable chats are set aside or still sitting in the main data. */
+    suspend fun unreadableCount(): Int {
+        val prefs = context.chatHistoryDataStore.data.first()
+        val kept = runCatching { JSONArray(prefs[quarantineKey].orEmpty().ifBlank { "[]" }).length() }.getOrDefault(0)
+        return kept + decodeAll(prefs[sessionsKey]).bad.size
+    }
+
+    /** The unreadable data as one JSON array text, for the user to keep or send for repair; null when there is none. */
+    suspend fun unreadableAsJson(): String? {
+        val prefs = context.chatHistoryDataStore.data.first()
+        val all = JSONArray()
+        runCatching { JSONArray(prefs[quarantineKey].orEmpty().ifBlank { "[]" }) }.getOrNull()?.let { kept ->
+            for (i in 0 until kept.length()) all.put(kept.get(i))
+        }
+        decodeAll(prefs[sessionsKey]).bad.forEach { all.put(it) }
+        return if (all.length() == 0) null else all.toString(2)
+    }
+
+    /** Permanently drops the unreadable data. Readable chats stay, and cleanup of orphaned files can run again. */
+    suspend fun discardUnreadable() {
+        context.chatHistoryDataStore.edit { prefs ->
+            val decoded = decodeAll(prefs[sessionsKey])
+            if (decoded.bad.isNotEmpty()) prefs[sessionsKey] = encode(decoded.sessions)
+            prefs.remove(quarantineKey)
+        }
+    }
+
     /** Reads the sessions for a write; anything unreadable is kept in the quarantine key instead of being overwritten. */
     private fun load(prefs: MutablePreferences): List<ChatSession> {
         val decoded = decodeAll(prefs[sessionsKey])
@@ -188,5 +215,20 @@ class ChatHistoryStore(private val context: Context) {
                 )
             }
         )
+    }
+}
+
+/** Every chat as plain text, newest first, for backing up or reading outside the app. */
+internal fun formatChatsAsText(sessions: List<ChatSession>): String = buildString {
+    val date = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    sessions.forEach { session ->
+        val started = java.time.Instant.ofEpochMilli(session.startedAtMillis).atZone(java.time.ZoneId.systemDefault()).format(date)
+        append("=== ").append(session.title).append(" (").append(started).append(") ===\n")
+        session.turns.forEach { turn ->
+            val files = turn.attachments.joinToString(", ") { it.name }
+            append("You: ").append(turn.userText)
+            if (files.isNotEmpty()) append(" [files: ").append(files).append("]")
+            append("\nAssistant: ").append(turn.assistantText).append("\n\n")
+        }
     }
 }

@@ -38,6 +38,10 @@ fun StoragePage(
     knowledgeCount: Int,
     cacheBytes: Long,
     hasUsage: Boolean,
+    unreadableChats: Int,
+    onExportChats: () -> Unit,
+    onExportUnreadable: () -> Unit,
+    onDiscardUnreadable: () -> Unit,
     onClearCache: () -> Unit,
     onClearLibrary: () -> Unit,
     onClearChats: () -> Unit,
@@ -65,6 +69,26 @@ fun StoragePage(
             PageRow("Memory", "$memoryCount ${if (memoryCount == 1) "fact" else "facts"}")
             PageRow("Knowledge documents", knowledgeCount.toString())
             PageRow("Cache", formatBytes(cacheBytes))
+        }
+
+        PageLabel("Back up")
+        PageCard {
+            ActionRow(
+                "Export chats", "Save every chat as a text file. The phone keeps up to " +
+                    "${com.assistant.app.data.ChatHistoryStore.MAX_SESSIONS} chats of " +
+                    "${com.assistant.app.data.ChatHistoryStore.MAX_TURNS_PER_SESSION} messages each; when it is full, the chat used longest ago is dropped.",
+                "Export", enabled = chatCount > 0, onClick = onExportChats
+            )
+            if (unreadableChats > 0) {
+                Separator()
+                ActionRow(
+                    "Unreadable chats ($unreadableChats)", "These could not be opened and were set aside, not deleted. Save them before you delete them.",
+                    "Save", enabled = true, onClick = onExportUnreadable
+                )
+                ClearRow("Delete unreadable chats", "Permanently removes only the set-aside data.", enabled = true) {
+                    pending = Triple("Delete unreadable chats?", "The set-aside data will be deleted for good. Readable chats are not touched.", onDiscardUnreadable)
+                }
+            }
         }
 
         PageLabel("Clear data")
@@ -105,6 +129,18 @@ private fun Separator() {
     Spacer(Modifier.height(10.dp))
     HorizontalDivider(color = AssistantOutline)
     Spacer(Modifier.height(10.dp))
+}
+
+@Composable
+private fun ActionRow(title: String, description: String, label: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(description, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        Spacer(Modifier.size(8.dp))
+        TextButton(onClick = onClick, enabled = enabled) { Text(label) }
+    }
 }
 
 @Composable
