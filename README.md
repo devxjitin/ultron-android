@@ -109,6 +109,10 @@ The project has three parts:
 - **Two chat engines**: Gemini (default) or **Azure OpenAI**, switchable in Developer settings.
 - **Tools in chat**: the chat uses every connector that is not voice-only: Google, GitHub, DuckDuckGo, YouTube, and the phone connectors for device info, device controls (flashlight, volume, brightness), alarms and notes, calendar, contacts lookup, location, photos, notifications and app usage. Automation connectors stay in voice.
 
+### Link previews
+
+When a chat reply is finished, every link in it (up to ten) gets a card: one or two links show large cards with the full image, longer lists show compact rows. A page that cannot be read still gets a card with its site icon and name. YouTube links show the video thumbnail with a play mark and the channel name; other pages use their Open Graph tags. Pages are read on the phone, only public web addresses are fetched, and tapping a card opens the link.
+
 ### Light and dark theme
 
 The menu ends with an **Appearance** picker: System (follows the phone), Light or Dark. The choice is saved and applied before the first frame. Both palettes are contrast-checked so text stays readable on every surface.

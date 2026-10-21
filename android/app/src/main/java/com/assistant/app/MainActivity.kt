@@ -274,7 +274,11 @@ class MainActivity : ComponentActivity() {
 
             var themeMode by remember { mutableStateOf(ThemePrefs.load(this@MainActivity)) }
             AssistantTheme(themeMode) {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = com.assistant.app.ui.theme.AssistantBackground,
+                    contentColor = com.assistant.app.ui.theme.AssistantTextPrimary
+                ) {
                     val uiState by viewModel.uiState.collectAsState()
                     LaunchedEffect(uiState.googleConsent) {
                         uiState.googleConsent?.let { pending ->
@@ -315,6 +319,9 @@ class MainActivity : ComponentActivity() {
                         onThemeModeChange = { mode ->
                             themeMode = mode
                             ThemePrefs.save(this@MainActivity, mode)
+                            val night = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                                android.content.res.Configuration.UI_MODE_NIGHT_YES
+                            ActivePalette.current = paletteFor(mode, night)
                         },
                         onOpenChat = { viewModel.onOpenChat(it) },
                         onKnowledgeTapped = { viewModel.onKnowledgeTapped() },

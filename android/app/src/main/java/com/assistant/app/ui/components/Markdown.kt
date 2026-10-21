@@ -3,6 +3,18 @@ package com.assistant.app.ui.components
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import com.assistant.app.data.LinkPreviews
+import com.assistant.app.ui.theme.AssistantFieldBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,7 +73,8 @@ private sealed interface MdBlock {
     data class Code(val language: String, val code: String) : MdBlock
     data class Item(val marker: String, val depth: Int, val text: String) : MdBlock
     data class Quote(val text: String) : MdBlock
-    data class Table(val header: List<String>, val rows: List<List<String>>) : MdBlock
+    data class Table(val header: List<String>, val rows: List<List<String>>, val aligns: List<TextAlign>) : MdBlock
+    data class Picture(val alt: String, val url: String) : MdBlock
     data object Rule : MdBlock
 }
 
@@ -86,8 +99,8 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier, color: Color = Ass
                     ),
                     modifier = Modifier.padding(top = if (block.level <= 2) 6.dp else 2.dp)
                 )
-                is MdBlock.Item -> Row(Modifier.padding(start = (block.depth * 18).dp)) {
-                    Text(block.marker, color = AssistantTextSecondary, style = BodyStyle, modifier = Modifier.width(24.dp))
+                is MdBlock.Item -> Row(Modifier.padding(start = (block.depth.coerceAtMost(4) * 18).dp)) {
+                    Text(block.marker, color = AssistantTextSecondary, style = BodyStyle, modifier = Modifier.width(28.dp))
                     Text(inline(block.text), color = color, style = BodyStyle, modifier = Modifier.weight(1f))
                 }
                 is MdBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
@@ -100,6 +113,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier, color: Color = Ass
                 MdBlock.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(AssistantOutline))
                 is MdBlock.Code -> CodeBlock(block.language, block.code)
                 is MdBlock.Table -> TableBlock(block, color)
+                is MdBlock.Picture -> PictureBlock(block)
             }
         }
     }
@@ -131,23 +145,69 @@ private fun CodeBlock(language: String, code: String) {
     }
 }
 
+/**
+ * A table whose columns have one width for every row (the widest cell, within limits), so the header lines up with
+ * the data. Cells wrap inside their column, rows share the height of their tallest cell, and a wide table scrolls sideways.
+ */
 @Composable
 private fun TableBlock(table: MdBlock.Table, color: Color) {
-    Column(
-        Modifier.horizontalScroll(rememberScrollState()).clip(RoundedCornerShape(10.dp))
-            .border(1.dp, AssistantOutline, RoundedCornerShape(10.dp))
-    ) {
-        (listOf(table.header) + table.rows).forEachIndexed { rowIndex, cells ->
-            Row(Modifier.background(if (rowIndex == 0) AssistantSelectedBg else Color.Transparent)) {
-                cells.forEach { cell ->
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val style = MaterialTheme.typography.bodyMedium
+    val header = style.copy(fontWeight = FontWeight.SemiBold)
+    val widths = remember(table, style) {
+        val all = listOf(table.header) + table.rows
+        table.header.indices.map { col ->
+            val longest = all.maxOf { row ->
+                inline(row[col]).text.lines().maxOfOrNull { measurer.measure(it, header, softWrap = false).size.width } ?: 0
+            }
+            (with(density) { longest.toDp() } + 24.dp).coerceIn(84.dp, 260.dp)
+        }
+    }
+    val shape = RoundedCornerShape(10.dp)
+    val total = widths.fold(0.dp) { sum, w -> sum + w }
+    val rows = listOf(table.header) + table.rows
+    Column(Modifier.horizontalScroll(rememberScrollState()).clip(shape).border(1.dp, AssistantOutline, shape)) {
+        rows.forEachIndexed { rowIndex, cells ->
+            val background = when {
+                rowIndex == 0 -> AssistantSelectedBg
+                rowIndex % 2 == 0 -> AssistantFieldBackground.copy(alpha = 0.6f)
+                else -> Color.Transparent
+            }
+            Row(Modifier.height(IntrinsicSize.Min).background(background)) {
+                cells.forEachIndexed { col, cell ->
                     Text(
                         inline(cell), color = color,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (rowIndex == 0) FontWeight.SemiBold else FontWeight.Normal),
-                        modifier = Modifier.widthIn(min = 80.dp, max = 220.dp).padding(horizontal = 10.dp, vertical = 8.dp)
+                        textAlign = table.aligns.getOrElse(col) { TextAlign.Start },
+                        style = if (rowIndex == 0) header else style,
+                        modifier = Modifier.width(widths[col]).fillMaxHeight().padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
             }
+            if (rowIndex < rows.lastIndex) Box(Modifier.width(total).height(1.dp).background(AssistantOutline))
         }
+    }
+}
+
+/** An image written as ![alt](address) on its own line; it loads on the phone like a link preview image. */
+@Composable
+private fun PictureBlock(picture: MdBlock.Picture) {
+    val context = LocalContext.current
+    val image by produceState<ImageBitmap?>(null, picture.url) { value = LinkPreviews.image(picture.url)?.asImageBitmap() }
+    val shape = RoundedCornerShape(12.dp)
+    val loaded = image
+    if (loaded != null) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Image(
+                loaded, contentDescription = picture.alt, contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth().clip(shape).border(1.dp, AssistantOutline, shape).clickable {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(picture.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }
+            )
+            if (picture.alt.isNotBlank()) Text(picture.alt, color = AssistantTextMuted, fontSize = 12.sp)
+        }
+    } else if (picture.alt.isNotBlank()) {
+        Text(picture.alt, color = AssistantTextMuted, style = BodyStyle)
     }
 }
 
@@ -158,6 +218,8 @@ private val bulletRegex = Regex("""^(\s*)([-*+])\s+(.*)$""")
 private val numberedRegex = Regex("""^(\s*)(\d{1,3})[.)]\s+(.*)$""")
 private val ruleRegex = Regex("""^\s*([-*_])(\s*\1){2,}\s*$""")
 private val tableSeparatorRegex = Regex("""^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$""")
+private val pictureRegex = Regex("""^!\[([^\]]*)]\((https?://\S+?)\)$""")
+private val taskRegex = Regex("""^\[([ xX])]\s+(.*)$""")
 
 private fun parseMarkdown(source: String): List<MdBlock> {
     val lines = source.replace("\r\n", "\n").split('\n')
@@ -204,22 +266,40 @@ private fun parseMarkdown(source: String): List<MdBlock> {
                 }
                 blocks += MdBlock.Quote(quote.toString())
             }
-            trimmed.startsWith("|") && i + 1 < lines.size && tableSeparatorRegex.matches(lines[i + 1]) -> {
+            pictureRegex.matches(trimmed) -> {
+                flushParagraph()
+                val match = pictureRegex.matchEntire(trimmed)!!
+                blocks += MdBlock.Picture(match.groupValues[1], match.groupValues[2])
+            }
+            trimmed.contains('|') && i + 1 < lines.size && tableSeparatorRegex.matches(lines[i + 1]) &&
+                splitRow(trimmed).size == splitRow(lines[i + 1]).size && splitRow(trimmed).size > 1 -> {
                 flushParagraph()
                 val header = splitRow(trimmed)
+                val aligns = splitRow(lines[i + 1]).map {
+                    when {
+                        it.startsWith(":") && it.endsWith(":") -> TextAlign.Center
+                        it.endsWith(":") -> TextAlign.End
+                        else -> TextAlign.Start
+                    }
+                }
                 val rows = mutableListOf<List<String>>()
                 i += 2
-                while (i < lines.size && lines[i].trim().startsWith("|")) {
+                while (i < lines.size && lines[i].isNotBlank() && lines[i].contains('|')) {
                     rows += splitRow(lines[i].trim()).let { row -> (row + List(header.size) { "" }).take(header.size) }
                     i++
                 }
                 i-- // the loop's own i++ moves past the last table row
-                blocks += MdBlock.Table(header, rows)
+                blocks += MdBlock.Table(header, rows, aligns)
             }
             bulletRegex.matches(line) -> {
                 flushParagraph()
                 val match = bulletRegex.matchEntire(line)!!
-                blocks += MdBlock.Item("•", match.groupValues[1].length / 2, match.groupValues[3])
+                val depth = match.groupValues[1].length / 2
+                val task = taskRegex.matchEntire(match.groupValues[3])
+                blocks += when {
+                    task != null -> MdBlock.Item(if (task.groupValues[1] == " ") "\u2610" else "\u2611", depth, task.groupValues[2])
+                    else -> MdBlock.Item(if (depth == 0) "\u2022" else "\u25E6", depth, match.groupValues[3])
+                }
             }
             numberedRegex.matches(line) -> {
                 flushParagraph()
@@ -237,16 +317,20 @@ private fun parseMarkdown(source: String): List<MdBlock> {
     return blocks
 }
 
+private val cellSplit = Regex("(?<!\\\\)\\|")
+
 private fun splitRow(row: String): List<String> =
-    row.trim().trim('|').split('|').map { it.trim() }
+    row.trim().removePrefix("|").removeSuffix("|").split(cellSplit).map { it.replace("\\|", "|").trim() }
 
 // ------------------------------------------------------------------ inline
 
 private val inlineRegex = Regex(
-    """`([^`\n]+)`|\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|\[([^\]\n]+)]\((https?://[^)\s]+)\)|(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])|(?<![\w_])_(?!\s)(.+?)(?<!\s)_(?![\w_])"""
+    """`([^`\n]+)`|\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|\[([^\]\n]+)]\((https?://(?:[^()\s]|\([^()\s]*\))+)\)|(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])|(?<![\w_])_(?!\s)(.+?)(?<!\s)_(?![\w_])|<(https?://[^>\s]+)>|(?<![(\w])(https?://(?:[^\s<>\[\]()]|\([^\s()]*\))*(?:[^\s<>\[\]().,;:!?'"*_]|\([^\s()]*\)))"""
 )
 
-private fun inline(text: String): AnnotatedString = buildAnnotatedString { appendInline(text, 0) }
+private val lineBreakRegex = Regex("(?i)<br\\s*/?>")
+
+private fun inline(text: String): AnnotatedString = buildAnnotatedString { appendInline(text.replace(lineBreakRegex, "\n"), 0) }
 
 private fun AnnotatedString.Builder.appendInline(text: String, depth: Int) {
     var cursor = 0
@@ -261,12 +345,12 @@ private fun AnnotatedString.Builder.appendInline(text: String, depth: Int) {
                 if (depth < 3) appendInline((g[2] ?: g[3])!!.value, depth + 1) else append((g[2] ?: g[3])!!.value)
             }
             g[4] != null -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { appendInline(g[4]!!.value, depth + 1) }
-            g[5] != null -> withLink(
-                LinkAnnotation.Url(
-                    g[6]!!.value,
-                    TextLinkStyles(SpanStyle(color = AssistantAccent, textDecoration = TextDecoration.Underline))
-                )
-            ) { append(g[5]!!.value) }
+            // Link text may carry its own bold or italics ("[**Title**](url)"), so it is parsed too.
+            g[5] != null -> withLink(linkOf(g[6]!!.value)) {
+                if (depth < 3) appendInline(g[5]!!.value, depth + 1) else append(g[5]!!.value)
+            }
+            // A bare address, or one in angle brackets, is a link too and is shown as written.
+            g[9] != null || g[10] != null -> (g[9] ?: g[10])!!.value.let { url -> withLink(linkOf(url)) { append(url) } }
             else -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                 val inner = (g[7] ?: g[8])!!.value
                 if (depth < 3) appendInline(inner, depth + 1) else append(inner)
@@ -276,6 +360,9 @@ private fun AnnotatedString.Builder.appendInline(text: String, depth: Int) {
     }
     append(text.substring(cursor))
 }
+
+private fun linkOf(url: String) =
+    LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = AssistantAccent, textDecoration = TextDecoration.Underline)))
 
 private fun AnnotatedString.Builder.withStyle(style: SpanStyle, block: AnnotatedString.Builder.() -> Unit) {
     pushStyle(style)

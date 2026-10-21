@@ -470,6 +470,7 @@ private fun ChatBubble(message: ChatMessage, canEdit: Boolean, isStreaming: Bool
                 }
             }
             val finished = !message.isError && message.text.isNotEmpty() && !isStreaming
+            if (finished) LinkPreviewCards(message.text, Modifier.widthIn(max = 640.dp))
             AnimatedVisibility(finished, enter = fadeIn(tween(350)) + slideInVertically(tween(350)) { it / 2 } + expandVertically()) {
                 ResponseActions(message.text)
             }

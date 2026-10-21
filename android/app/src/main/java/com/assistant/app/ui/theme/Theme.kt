@@ -10,6 +10,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -108,9 +109,14 @@ fun applyWindowColors(activity: Activity, palette: AssistantPalette) {
 
 @Composable
 fun AssistantTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
-    val palette = paletteFor(mode, isSystemInDarkTheme())
-    // Set before the content composes, so the first frame already has the right colours.
-    if (ActivePalette.current !== palette) ActivePalette.current = palette
+    val systemDark = isSystemInDarkTheme()
+    // The palette is written outside composition (here and when the user picks a mode), never while composing, so every
+    // screen that read a colour is told to redraw. MainActivity sets it before the first frame.
+    LaunchedEffect(mode, systemDark) {
+        val wanted = paletteFor(mode, systemDark)
+        if (ActivePalette.current !== wanted) ActivePalette.current = wanted
+    }
+    val palette = ActivePalette.current
     val view = LocalView.current
     SideEffect { (view.context as? Activity)?.let { applyWindowColors(it, palette) } }
     MaterialTheme(

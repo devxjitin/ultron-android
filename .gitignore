@@ -10,10 +10,10 @@ baseline/
 .claude/
 android/app/objectbox-jni-*.dll
 
-# YouTube MCP Lambda build artifacts and secret token
-mcp/youtube-search/build/
-mcp/youtube-search/function.zip
-mcp/youtube-search/.access_token
+# Web extract MCP Lambda build artifacts and secret token
+mcp/web-extract/build/
+mcp/web-extract/function.zip
+mcp/web-extract/.access_token
 
 # MCP config containing secret URL
 .mcp.json
