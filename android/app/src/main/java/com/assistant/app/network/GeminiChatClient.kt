@@ -44,7 +44,9 @@ interface ChatStreamListener {
  */
 class GeminiChatClient(
     private val apiKey: String,
-    private val model: String = CHAT_MODEL
+    private val model: String = CHAT_MODEL,
+    /** Overridable so tests can point the client at a local server. */
+    private val baseUrl: String = "https://generativelanguage.googleapis.com"
 ) {
 
     companion object {
@@ -125,7 +127,7 @@ class GeminiChatClient(
         if (tools != null) bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", tools)))
         // Key goes in a header, not the URL, so it can't leak through logged URLs.
         val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/$model:streamGenerateContent?alt=sse")
+            .url("$baseUrl/v1beta/models/$model:streamGenerateContent?alt=sse")
             .header("x-goog-api-key", apiKey)
             .post(bodyJson.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
@@ -197,6 +199,10 @@ class GeminiChatClient(
                 }
                 return StreamTurn(text.toString(), calls, raw)
             }
+        } catch (e: java.io.IOException) {
+            // A cancelled call fails with an IOException; report it as the cancellation it is.
+            currentCoroutineContext().ensureActive()
+            throw e
         } finally {
             onCancel.cancel()
         }

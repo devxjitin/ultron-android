@@ -141,7 +141,7 @@ class McpClient(
             if (streaming) {
                 // Answer as soon as the matching event arrives; the server may keep the stream open afterwards.
                 val body = response.body ?: throw McpException("The server sent no answer.")
-                val message = readEvents(body.source(), id)
+                val message = readSseAnswer(body.source(), id)
                 message.optJSONObject("error")?.let { throw McpException(it.optString("message", "The server returned an error.")) }
                 return message.optJSONObject("result") ?: JSONObject()
             }
@@ -163,30 +163,30 @@ class McpClient(
         }
     }
 
-    /** Reads server-sent events until the JSON-RPC answer for [id] arrives; events may span several `data:` lines. */
-    private fun readEvents(source: okio.BufferedSource, id: Int): JSONObject {
-        val data = StringBuilder()
-        fun dispatch(): JSONObject? {
-            if (data.isEmpty()) return null
-            val message = runCatching { JSONObject(data.toString()) }.getOrNull()
-            data.setLength(0)
-            return message?.takeIf { it.optInt("id", -1) == id }
-        }
-        while (true) {
-            val line = source.readUtf8Line() ?: break
-            if (line.isEmpty()) {
-                dispatch()?.let { return it }
-            } else if (line.startsWith("data:")) {
-                if (data.isNotEmpty()) data.append("\n")
-                data.append(line.removePrefix("data:").removePrefix(" "))
-            }
-        }
-        dispatch()?.let { return it }
-        throw McpException("The server sent no answer.")
-    }
-
     private companion object {
         const val PROTOCOL_VERSION = "2025-03-26"
         const val MAX_PAGES = 5
     }
+}
+
+/** Reads server-sent events until the JSON-RPC answer for [id] arrives; events may span several `data:` lines. */
+internal fun readSseAnswer(source: okio.BufferedSource, id: Int): JSONObject {
+    val data = StringBuilder()
+    fun dispatch(): JSONObject? {
+        if (data.isEmpty()) return null
+        val message = runCatching { JSONObject(data.toString()) }.getOrNull()
+        data.setLength(0)
+        return message?.takeIf { it.optInt("id", -1) == id }
+    }
+    while (true) {
+        val line = source.readUtf8Line() ?: break
+        if (line.isEmpty()) {
+            dispatch()?.let { return it }
+        } else if (line.startsWith("data:")) {
+            if (data.isNotEmpty()) data.append("\n")
+            data.append(line.removePrefix("data:").removePrefix(" "))
+        }
+    }
+    dispatch()?.let { return it }
+    throw McpException("The server sent no answer.")
 }

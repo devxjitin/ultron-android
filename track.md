@@ -282,3 +282,5 @@
 [2026-10-21 16:27] [Claude] [Fix: Round 7 audit - Google 401 refresh+retry, 22s op deadline, paging/offset reads, $ref/union schema conversion; compile pass]
 [2026-10-21 16:32] [Claude] [Fix: Round 8 audit - tools off main thread, debounced search, chat draft, nav guard, preview errors, connector repair; compile pass]
 [2026-10-21 16:45] [Claude] [Fix: Rounds 9-10 audit - usage ledger, context budget, persona kept, reminders list/cancel, lint errors, README; compile+lint pass]
+[2026-10-21 16:51] [Claude] [Add: Round 11 tests - DocxText, public address ranges, Lambda RPC/Gmail/Docs/paging; isPublicAddress made top-level]
+[2026-10-21 16:56] [Claude] [Add: Round 11 Kotlin tests (schema, SSE, chat finish/cancel, memory replace); Fix: cancelled call no longer crashes as IOException]

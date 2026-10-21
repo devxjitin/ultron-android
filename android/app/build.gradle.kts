@@ -128,6 +128,9 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Real org.json (the Android one is only a stub in unit tests) and a local HTTP server for streaming tests.
+    testImplementation("org.json:json:20240303")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     implementation(platform("androidx.compose:compose-bom:2024.09.03"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

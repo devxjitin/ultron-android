@@ -1,5 +1,7 @@
 package com.assistant.app.network
 
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -153,7 +155,11 @@ class GeminiTextClient(
                 .getJSONArray("parts")
                 .getJSONObject(0)
                 .getString("text")
-        } } finally {
+        } } catch (e: java.io.IOException) {
+            // A cancelled call fails with an IOException; report it as the cancellation it is.
+            currentCoroutineContext().ensureActive()
+            throw e
+        } finally {
             watcher.cancel()
         }
     }

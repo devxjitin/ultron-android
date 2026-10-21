@@ -165,6 +165,10 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                 }
                 return StreamTurn(text.toString(), finished)
             }
+        } catch (e: java.io.IOException) {
+            // A cancelled call fails with an IOException; report it as the cancellation it is.
+            currentCoroutineContext().ensureActive()
+            throw e
         } finally {
             onCancel.cancel()
         }

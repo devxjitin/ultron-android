@@ -62,19 +62,12 @@ class MemoryStore(private val context: Context) {
         var ambiguous = emptyList<String>()
         context.memoryDataStore.edit { prefs ->
             var existing = decode(prefs[itemsKey])
-            val oldWords = contentWords(replaces.orEmpty())
-            if (oldWords.isNotEmpty()) {
-                // Delete only a single clear match; several equally good matches are left for the model to choose.
-                val scored = existing.map { it to overlap(oldWords, contentWords(it.text)) }.filter { it.second >= REPLACE_OVERLAP }
-                val best = scored.maxOfOrNull { it.second } ?: 0.0
-                val top = scored.filter { it.second == best }
-                if (top.size == 1 && best >= REPLACE_CLEAR_MATCH) {
-                    replaced += top[0].first.text
-                    existing = existing.filterNot { it.id == top[0].first.id }
-                } else if (scored.isNotEmpty()) {
-                    ambiguous = scored.map { it.first.text }.take(3)
-                }
+            val choice = chooseReplacement(existing, replaces.orEmpty())
+            choice.remove?.let { gone ->
+                replaced += gone.text
+                existing = existing.filterNot { it.id == gone.id }
             }
+            if (choice.ambiguous.isNotEmpty()) ambiguous = choice.ambiguous.map { it.text }.take(3)
             if (existing.none { it.text.equals(clean, ignoreCase = true) }) {
                 existing = (existing + MemoryItem(UUID.randomUUID().toString(), clean, System.currentTimeMillis()))
                     .takeLast(MAX_MEMORY_ITEMS)
@@ -86,15 +79,6 @@ class MemoryStore(private val context: Context) {
             prefs[itemsKey] = encode(existing)
         }
         return SaveResult(added, replaced, related, ambiguous)
-    }
-
-    private fun contentWords(text: String): Set<String> =
-        splitWords(text).filter { it.length > 2 && it !in FILLER_WORDS }.toSet()
-
-    /** Share of the smaller word set that also appears in the other. */
-    private fun overlap(a: Set<String>, b: Set<String>): Double {
-        if (a.isEmpty() || b.isEmpty()) return 0.0
-        return a.intersect(b).size.toDouble() / minOf(a.size, b.size)
     }
 
     suspend fun update(id: String, text: String) {
@@ -150,6 +134,29 @@ class MemoryStore(private val context: Context) {
 }
 
 /** [ambiguous] lists older notes that matched the replace hint equally well, so none of them was deleted. */
+private fun contentWords(text: String): Set<String> =
+    splitWords(text).filter { it.length > 2 && it !in FILLER_WORDS }.toSet()
+
+/** Share of the smaller word set that also appears in the other. */
+private fun overlap(a: Set<String>, b: Set<String>): Double {
+    if (a.isEmpty() || b.isEmpty()) return 0.0
+    return a.intersect(b).size.toDouble() / minOf(a.size, b.size)
+}
+
+/** What a replace hint does to the saved notes: [remove] is the one clear match; [ambiguous] lists equal candidates that are all kept. */
+internal class ReplaceChoice(val remove: MemoryItem?, val ambiguous: List<MemoryItem>)
+
+/** Deletes only a single clearly best match; several equally good matches are left for the model to choose between. */
+internal fun chooseReplacement(existing: List<MemoryItem>, hint: String): ReplaceChoice {
+    val hintWords = contentWords(hint)
+    if (hintWords.isEmpty()) return ReplaceChoice(null, emptyList())
+    val scored = existing.map { it to overlap(hintWords, contentWords(it.text)) }.filter { it.second >= REPLACE_OVERLAP }
+    val best = scored.maxOfOrNull { it.second } ?: 0.0
+    val top = scored.filter { it.second == best }
+    return if (top.size == 1 && best >= REPLACE_CLEAR_MATCH) ReplaceChoice(top[0].first, emptyList())
+    else ReplaceChoice(null, scored.map { it.first })
+}
+
 data class SaveResult(val added: Boolean, val replaced: List<String>, val related: List<String>, val ambiguous: List<String> = emptyList())
 
 private const val REPLACE_OVERLAP = 0.5
