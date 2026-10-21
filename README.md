@@ -50,8 +50,8 @@ The project has three parts:
 | Part | Where | What it is |
 |---|---|---|
 | **Android app** | [`android/`](android) | The assistant itself, written in Kotlin with Jetpack Compose. |
-| **Cloud connectors** | [`mcp/`](mcp) | Small stateless AWS Lambda servers (Google Workspace, update service). |
-| **Release tooling** | [`scripts/`](scripts) | A PowerShell script that builds a small release and publishes it for over-the-air updates. |
+| **Cloud connectors** | [`mcp/`](mcp) | Small stateless AWS Lambda servers (Google Workspace, web extract, update service). |
+| **Release tooling** | [`scripts/`](scripts) | A PowerShell script that builds a small release and publishes it for over-the-air updates, plus a latency-log summary script. |
 
 ---
 
@@ -249,9 +249,15 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 │   └── local.properties.example     Template for local configuration
 ├── mcp/                             AWS Lambda servers
 │   ├── google-workspace/            Google Workspace MCP server (REST APIs)
-│   └── ultron-updates/              Update check and download-link service
-├── scripts/publish-update.ps1       Build and publish an over-the-air update
-├── docs/screenshots/                Images used in this README
+│   ├── ultron-updates/              Update check and download-link service
+│   └── web-extract/                 Web page content and metadata extraction server
+├── infra/ultron.yaml                CloudFormation template for the AWS backend
+├── scripts/
+│   ├── publish-update.ps1           Build and publish an over-the-air update
+│   └── summarize_latency.py         Summarize captured logcat latency traces
+├── docs/
+│   ├── Idea.md                      Review notes, white-label plan, UI blueprint, future scope
+│   └── screenshots/                 Images used in this README
 └── track.md                         Change log of every change made to the project
 ```
 
