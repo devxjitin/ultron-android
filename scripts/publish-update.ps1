@@ -18,6 +18,13 @@ $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
 # Same number goes into the app (as its version code) and into latest.json, so the phone can compare builds.
 $versionCode = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
 
+# Fail before the slow build if publishing could not work anyway.
+if (-not (Get-Command aws -ErrorAction SilentlyContinue)) { throw "The AWS CLI ('aws') was not found; install it and run 'aws login' first." }
+# Two publishes in the same minute (or a clock that went backwards) must not reuse a number: always go above what is live.
+$liveCode = $null
+try { $liveCode = [int]((aws s3 cp "s3://$Bucket/latest.json" - --only-show-errors | ConvertFrom-Json).versionCode) } catch { }
+if ($liveCode -and $versionCode -le $liveCode) { $versionCode = $liveCode + 1 }
+
 Write-Host "Building version $VersionName (code $versionCode)..."
 if ((Test-Path "$Sdk\platforms") -and (Test-Path "$Jdk\bin\java.exe")) {
     $env:JAVA_HOME = $Jdk; $env:ANDROID_HOME = $Sdk; $env:ANDROID_SDK_ROOT = $Sdk

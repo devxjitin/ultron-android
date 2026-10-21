@@ -155,8 +155,12 @@ private class Connector(
     val tint: Color get() = if (ActivePalette.current.dark) lerp(color, Color.White, 0.35f) else color
 }
 
-private fun photosPermission() =
-    if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+private fun photosPermissions(): List<String> = when {
+    // Android 14 lets the user share only selected photos, which is the separate "visual user selected" permission.
+    Build.VERSION.SDK_INT >= 34 -> listOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+    Build.VERSION.SDK_INT >= 33 -> listOf(Manifest.permission.READ_MEDIA_IMAGES)
+    else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
 
 private const val PHONE = "On your phone"
 
@@ -183,7 +187,7 @@ private val PhoneCatalog = listOf(
     phone("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
         Category.COMMUNICATION, Icons.Outlined.Notifications, Color(0xFFEA4335), Kind.Local(access = Access.NOTIFICATION_ACCESS)),
     phone("photos", "Photos", "Count and list your recent photos.",
-        Category.MEDIA, Icons.Outlined.PhotoLibrary, Color(0xFFF9AB00), Kind.Local(listOf(photosPermission()))),
+        Category.MEDIA, Icons.Outlined.PhotoLibrary, Color(0xFFF9AB00), Kind.Local(photosPermissions())),
     phone("location", "Location", "Know where you are and get directions.",
         Category.MEDIA, Icons.Outlined.LocationOn, Color(0xFF0F9D58), Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
     phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
@@ -473,8 +477,10 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
         }
         mode == AppOpsManager.MODE_ALLOWED
     }
-    // Approximate location is enough for the Location connector, so either of its two permissions counts.
-    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions) {
+    // Approximate location, or only the photos the user picked, is enough: any one of such a pair counts.
+    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions ||
+        (Build.VERSION.SDK_INT >= 34 && Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED in kind.permissions)
+    ) {
         kind.permissions.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
     } else {
         kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
@@ -537,7 +543,7 @@ private fun ConnectorCard(
             }
             Spacer(Modifier.size(8.dp))
             when {
-                reconnect -> Pill("Reconnect", filled = true, onClick = onConnect)
+                reconnect -> Pill(if (connector.kind is Kind.Local) "Repair" else "Reconnect", filled = true, onClick = onConnect)
                 connected -> Pill(connectedLabel, filled = false, check = true, onClick = onDisconnect)
                 else -> Pill(connectLabel, filled = true, onClick = onConnect)
             }
@@ -704,7 +710,7 @@ private fun ConnectorDetail(
                 SurfaceChip(voiceOnly = connector.automation)
                 Spacer(Modifier.weight(1f))
                 when {
-                    reconnect -> Pill("Reconnect", filled = true, onClick = onConnect)
+                    reconnect -> Pill(if (connector.kind is Kind.Local) "Repair" else "Reconnect", filled = true, onClick = onConnect)
                     connected -> Pill("Disconnect", filled = false, onClick = onDisconnect)
                     else -> Pill(connectLabel, filled = true, onClick = onConnect)
                 }

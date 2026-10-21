@@ -284,3 +284,4 @@
 [2026-10-21 16:45] [Claude] [Fix: Rounds 9-10 audit - usage ledger, context budget, persona kept, reminders list/cancel, lint errors, README; compile+lint pass]
 [2026-10-21 16:51] [Claude] [Add: Round 11 tests - DocxText, public address ranges, Lambda RPC/Gmail/Docs/paging; isPublicAddress made top-level]
 [2026-10-21 16:56] [Claude] [Add: Round 11 Kotlin tests (schema, SSE, chat finish/cancel, memory replace); Fix: cancelled call no longer crashes as IOException]
+[2026-10-21 17:01] [Claude] [Fix: Round 12 audit - monotonic release id, usage scope, Personalization guard, Repair label, partial photo access; compile+lint pass]

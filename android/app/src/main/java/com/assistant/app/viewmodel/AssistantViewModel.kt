@@ -101,6 +101,8 @@ const val ADD_DOCUMENT_TARGET_ID = "__add__"
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
+        /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
+        val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
         /** Most recent chat messages sent to the model as context for a typed reply. */
         private const val MAX_CHAT_CONTEXT_MESSAGES = 24
@@ -1435,7 +1437,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var voiceUsageStartMs = 0L
 
     private fun recordUsage(delta: UsageDay) {
-        viewModelScope.launch { runCatching { usageStore.add(delta) } }
+        // Not viewModelScope: that scope is already cancelled when onCleared stops a running voice session.
+        usageScope.launch { runCatching { usageStore.add(delta) } }
     }
 
     private fun recordVoiceUsage() {

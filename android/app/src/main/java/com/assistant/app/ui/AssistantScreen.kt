@@ -200,8 +200,16 @@ fun AssistantScreen(
         // Settings <-> Knowledge keeps the same page (and draft), so it isn't guarded.
         var settingsDirty by remember { mutableStateOf(false) }
         var pendingNav by remember { mutableStateOf<(() -> Unit)?>(null) }
+        // Typed but unsaved Personalization text gets the same protection, with a simple keep-or-discard question.
+        var personalizationDirty by remember { mutableStateOf(false) }
+        var pendingPersonalizationNav by remember { mutableStateOf<(() -> Unit)?>(null) }
         val guardedNav: (() -> Unit) -> Unit = { action ->
-            if (uiState.showSettings && settingsDirty) pendingNav = action else action()
+            when {
+                uiState.showSettings && settingsDirty -> pendingNav = action
+                uiState.showSettings && uiState.adminPage == AdminPage.PERSONALIZATION && personalizationDirty ->
+                    pendingPersonalizationNav = action
+                else -> action()
+            }
         }
         val scope = rememberCoroutineScope()
         val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -406,7 +414,8 @@ fun AssistantScreen(
                     LibraryPage(files, load = onLoadAttachment, onOpenChat = onOpenChat, onDelete = onLibraryDelete, onNotice = onChatNotice, modifier = pageModifier)
                 }
                 AdminPage.PERSONALIZATION -> PersonalizationPage(
-                    uiState.settings.personalization, uiState.settings.assistantName, onPersonalizationChanged, pageModifier
+                    uiState.settings.personalization, uiState.settings.assistantName, onPersonalizationChanged, pageModifier,
+                    onDirtyChanged = { personalizationDirty = it }
                 )
                 AdminPage.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                 AdminPage.STORAGE -> {
@@ -498,6 +507,18 @@ fun AssistantScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 116.dp)
         )
+
+        pendingPersonalizationNav?.let { leave ->
+            AlertDialog(
+                onDismissRequest = { pendingPersonalizationNav = null },
+                title = { Text("Discard unsaved changes?") },
+                text = { Text("You typed in Personalization but did not press Save.") },
+                confirmButton = {
+                    TextButton(onClick = { pendingPersonalizationNav = null; personalizationDirty = false; leave() }) { Text("Discard") }
+                },
+                dismissButton = { TextButton(onClick = { pendingPersonalizationNav = null }) { Text("Keep editing") } }
+            )
+        }
 
         if (uiState.restartRequestId > 0) {
             AlertDialog(

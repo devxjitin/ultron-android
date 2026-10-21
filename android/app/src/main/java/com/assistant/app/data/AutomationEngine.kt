@@ -120,6 +120,9 @@ object AutomationEngine {
 
     // ---------------------------------------------------------------- event rules
 
+    // No tool offers rule creation or listing right now. The engine stays so rules saved by earlier builds keep
+    // running after an update; removing it needs a decision on those saved rules first.
+
     fun addRule(context: Context, event: String?, toolName: String?, argsJson: String?): String {
         if (event == null || event !in EVENTS) return "status=invalid\nEvent must be one of: ${EVENTS.joinToString()}."
         val tool = checkTool(toolName) ?: return NOT_AUTOMATABLE

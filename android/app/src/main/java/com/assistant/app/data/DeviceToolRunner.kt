@@ -379,10 +379,20 @@ class DeviceToolRunner(
                 calendarConflicts(begin, begin + (number("duration_minutes") ?: 60).coerceIn(5, 1440) * 60_000L)
             }
             DeviceTool.RECENT_PHOTOS -> {
-                val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
-                else Manifest.permission.READ_EXTERNAL_STORAGE
-                missingPermission(permission)?.let { return it }
-                recentPhotos((number("days") ?: 7).coerceIn(1, 90), (number("limit") ?: 5).coerceIn(1, 10))
+                fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
+                var onlySelected = false
+                if (Build.VERSION.SDK_INT >= 34) {
+                    onlySelected = !allowed(Manifest.permission.READ_MEDIA_IMAGES) && allowed(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                    if (!onlySelected) {
+                        missingPermission(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)?.let { return it }
+                    }
+                } else {
+                    val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
+                    else Manifest.permission.READ_EXTERNAL_STORAGE
+                    missingPermission(permission)?.let { return it }
+                }
+                val photos = recentPhotos((number("days") ?: 7).coerceIn(1, 90), (number("limit") ?: 5).coerceIn(1, 10))
+                if (onlySelected) "$photos\nNote: the user shared only some photos with the app, so this may not be everything." else photos
             }
             DeviceTool.SCREEN_TIMEOUT -> {
                 val seconds = number("seconds")?.takeIf { it in 15..1800 } ?: return "status=invalid\nSeconds must be 15-1800."
