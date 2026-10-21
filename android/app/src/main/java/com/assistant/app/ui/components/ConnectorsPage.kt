@@ -88,6 +88,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import com.assistant.app.ui.theme.ActivePalette
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -109,6 +111,7 @@ import com.assistant.app.data.PhoneConnectors
 import com.assistant.app.data.Surface
 import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentPink
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
@@ -147,7 +150,10 @@ private class Connector(
     val tools: List<DeviceTool> = emptyList(),
     /** Automation connectors act on the phone itself and work in voice only; every other connector works in voice and chat. */
     val automation: Boolean = false
-)
+) {
+    /** The brand colour, lightened on the dark theme so dark brand colours stay visible on a dark card. */
+    val tint: Color get() = if (ActivePalette.current.dark) lerp(color, Color.White, 0.35f) else color
+}
 
 private fun photosPermission() =
     if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -501,7 +507,7 @@ private fun ConnectorCard(
                 Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(connector.color.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(connector.icon, contentDescription = null, tint = connector.color, modifier = Modifier.size(24.dp))
+                Icon(connector.icon, contentDescription = null, tint = connector.tint, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
@@ -667,7 +673,7 @@ private fun ConnectorDetail(
                     Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(connector.color.copy(alpha = 0.18f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(connector.icon, contentDescription = null, tint = connector.color, modifier = Modifier.size(30.dp))
+                    Icon(connector.icon, contentDescription = null, tint = connector.tint, modifier = Modifier.size(30.dp))
                 }
                 Spacer(Modifier.size(14.dp))
                 Column(Modifier.weight(1f)) {
@@ -752,7 +758,7 @@ private fun Pill(text: String, filled: Boolean, enabled: Boolean = true, check: 
     Row(
         Modifier.height(38.dp).clip(shape)
             .then(
-                if (filled) Modifier.background(Brush.horizontalGradient(listOf(AssistantAccent, AssistantAccentPink)), shape)
+                if (filled) Modifier.background(Brush.horizontalGradient(listOf(AssistantAccentFill, AssistantAccentPink)), shape)
                 else Modifier.border(BorderStroke(1.dp, AssistantOutline), shape)
             )
             .clickable(enabled = enabled, onClick = onClick).padding(horizontal = if (check) 12.dp else 18.dp),

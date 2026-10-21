@@ -109,6 +109,10 @@ The project has three parts:
 - **Two chat engines**: Gemini (default) or **Azure OpenAI**, switchable in Developer settings.
 - **Tools in chat**: the chat uses every connector that is not voice-only: Google, GitHub, DuckDuckGo, YouTube, and the phone connectors for device info, device controls (flashlight, volume, brightness), alarms and notes, calendar, contacts lookup, location, photos, notifications and app usage. Automation connectors stay in voice.
 
+### Light and dark theme
+
+The menu ends with an **Appearance** picker: System (follows the phone), Light or Dark. The choice is saved and applied before the first frame. Both palettes are contrast-checked so text stays readable on every surface.
+
 ### Connectors and Marketplace
 
 Every connector is defined in code with its fixed set of tools and a **surface**: *Voice + Chat*, or *Voice only* (automation). Nothing is installed on a fresh install. The sidebar has two places:

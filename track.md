@@ -247,3 +247,5 @@
 [2026-10-21 09:40] [Claude] [Update: published OTA build with the connector all-tools fix]
 [2026-10-21 09:44] [Claude] [Update: YouTube share opens a new chat with only the link in the box, nothing is sent]
 [2026-10-21 09:51] [Claude] [Update: published OTA build where YouTube share opens a new chat with only the link]
+[2026-10-21 10:33] [Claude] [Add: dark theme with System/Light/Dark picker in the menu, contrast-checked palettes, themed system bars and night resources]
+[2026-10-21 10:40] [Claude] [Update: published OTA build with dark theme and Appearance picker]

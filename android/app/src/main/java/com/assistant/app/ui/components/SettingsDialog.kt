@@ -78,6 +78,7 @@ import com.assistant.app.viewmodel.ADD_DOCUMENT_TARGET_ID
 import com.assistant.app.viewmodel.AdminPage
 import com.assistant.app.viewmodel.KnowledgePreparationStage
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantSurfaceElevated
 import com.assistant.app.ui.theme.AssistantTextMuted
@@ -586,7 +587,7 @@ fun SettingsPage(
                 enabled = !isSavingDeveloper,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = AssistantAccent,
+                    containerColor = AssistantAccentFill,
                     contentColor = androidx.compose.ui.graphics.Color.White
                 ),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),

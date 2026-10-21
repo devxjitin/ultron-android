@@ -57,6 +57,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -68,8 +70,11 @@ import com.assistant.app.data.ChatSession
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentPink
 import com.assistant.app.ui.theme.AssistantError
+import com.assistant.app.ui.theme.AssistantFieldBackground
+import com.assistant.app.ui.theme.ThemeMode
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantSelectedBg
 import com.assistant.app.ui.theme.AssistantSurface
@@ -109,6 +114,8 @@ fun AppDrawerContent(
     activeChatId: String? = null,
     onOpenChat: (String) -> Unit = {},
     onDeleteChat: (String) -> Unit = {},
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var chatToDelete by remember { mutableStateOf<ChatSession?>(null) }
@@ -142,6 +149,33 @@ fun AppDrawerContent(
             chats.take(MAX_DRAWER_CHATS).forEach { chat ->
                 ChatRow(chat.title, chat.id == activeChatId && selected == NavTab.HOME,
                     onClick = { onOpenChat(chat.id) }, onLongClick = { chatToDelete = chat })
+            }
+        }
+        NavSection("Appearance")
+        ThemePicker(themeMode, onThemeModeChange)
+    }
+}
+
+/** System, Light and Dark side by side; the chosen one is outlined and filled. */
+@Composable
+private fun ThemePicker(selected: ThemeMode, onChange: (ThemeMode) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ThemeMode.entries.forEach { mode ->
+            val shape = RoundedCornerShape(12.dp)
+            val on = mode == selected
+            Box(
+                Modifier.weight(1f).height(40.dp).clip(shape)
+                    .background(if (on) AssistantSelectedBg else AssistantFieldBackground, shape)
+                    .border(BorderStroke(if (on) 1.5.dp else 1.dp, if (on) AssistantAccent else AssistantOutline), shape)
+                    .selectable(selected = on, role = Role.RadioButton, onClick = { onChange(mode) }),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    mode.label,
+                    color = if (on) AssistantAccent else AssistantTextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                )
             }
         }
     }
@@ -210,7 +244,7 @@ private fun DrawerHeader(assistantName: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
-                .background(Brush.linearGradient(listOf(AssistantAccent, AssistantAccentPink))),
+                .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentPink))),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -277,4 +311,4 @@ fun AppTopBar(
 }
 
 /** Drawer surface colour, shared by the modal and permanent variants. */
-val AppDrawerContainerColor = AssistantSurface
+val AppDrawerContainerColor: Color get() = AssistantSurface

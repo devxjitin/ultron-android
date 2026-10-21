@@ -41,6 +41,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.assistant.app.ui.AssistantScreen
 import com.assistant.app.ui.theme.AssistantTheme
+import com.assistant.app.ui.theme.ActivePalette
+import com.assistant.app.ui.theme.ThemeMode
+import com.assistant.app.ui.theme.ThemePrefs
+import com.assistant.app.ui.theme.applyWindowColors
+import com.assistant.app.ui.theme.paletteFor
 import com.assistant.app.viewmodel.AssistantViewModel
 
 /** A missing declared size passes here; the streaming read enforces the limit in that case. */
@@ -157,6 +162,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        // Know the theme before the first frame so the window never flashes the other one.
+        val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        paletteFor(ThemePrefs.load(this), systemDark).also {
+            ActivePalette.current = it
+            applyWindowColors(this, it)
+        }
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableImmersiveMode()
         AppForegroundService.start(this)
@@ -260,7 +272,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            AssistantTheme {
+            var themeMode by remember { mutableStateOf(ThemePrefs.load(this@MainActivity)) }
+            AssistantTheme(themeMode) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val uiState by viewModel.uiState.collectAsState()
                     LaunchedEffect(uiState.googleConsent) {
@@ -298,6 +311,11 @@ class MainActivity : ComponentActivity() {
                         onChatNew = { viewModel.onChatNew() },
                         onChatNotice = { viewModel.onChatNotice(it) },
                         onShareConsumed = { viewModel.onShareConsumed(it) },
+                        themeMode = themeMode,
+                        onThemeModeChange = { mode ->
+                            themeMode = mode
+                            ThemePrefs.save(this@MainActivity, mode)
+                        },
                         onOpenChat = { viewModel.onOpenChat(it) },
                         onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
                         onHomeTapped = { viewModel.onHomeTapped() },

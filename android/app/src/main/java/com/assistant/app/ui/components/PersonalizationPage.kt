@@ -30,6 +30,7 @@ import com.assistant.app.data.MAX_CUSTOM_INSTRUCTIONS_CHARS
 import com.assistant.app.data.Personalization
 import com.assistant.app.data.TraitLevel
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantTextMuted
@@ -122,7 +123,7 @@ fun PersonalizationPage(
             },
             enabled = textChanged,
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = AssistantAccent, contentColor = Color.White)
+            colors = ButtonDefaults.buttonColors(containerColor = AssistantAccentFill, contentColor = Color.White)
         ) { Text("Save") }
         if (!personalization.isDefault) {
             TextButton(onClick = { confirmingReset = true }, modifier = Modifier.fillMaxWidth()) {

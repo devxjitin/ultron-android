@@ -65,6 +65,7 @@ import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
 import com.assistant.app.ui.components.AppDrawerContent
+import com.assistant.app.ui.theme.ThemeMode
 import com.assistant.app.ui.components.AppTopBar
 import com.assistant.app.ui.components.AppTopBarHeight
 import com.assistant.app.network.ChatAttachment
@@ -104,6 +105,8 @@ fun AssistantScreen(
     onChatNew: () -> Unit = {},
     onChatNotice: (String) -> Unit = {},
     onShareConsumed: (Long) -> Unit = {},
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     onOpenChat: (String) -> Unit = {},
     onRequestPermission: () -> Unit,
     onOpenAppSettings: () -> Unit = {},
@@ -219,6 +222,8 @@ fun AssistantScreen(
                     guardedNav { onOpenChat(id) }
                 },
                 onDeleteChat = onDeleteChatSession,
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {

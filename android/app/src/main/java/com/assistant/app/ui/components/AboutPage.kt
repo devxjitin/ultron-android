@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.assistant.app.BuildConfig
 import com.assistant.app.network.UpdateInfo
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentPink
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantTextMuted
@@ -62,7 +63,7 @@ fun AboutPage(
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier.size(72.dp).clip(RoundedCornerShape(22.dp))
-                        .background(Brush.linearGradient(listOf(AssistantAccent, AssistantAccentPink))),
+                        .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentPink))),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -115,7 +116,7 @@ fun AboutPage(
             } else if (updateState == UpdateCheckState.AVAILABLE && availableUpdate != null) {
                 Button(
                     onClick = onUpdateNow, modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AssistantAccent, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = AssistantAccentFill, contentColor = Color.White)
                 ) { Text("Update now") }
             } else {
                 OutlinedButton(

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.assistant.app.data.MAX_MEMORY_TEXT_CHARS
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentPink
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
@@ -83,7 +84,7 @@ fun MemoryPage(
                 checked = enabled,
                 onCheckedChange = onEnabledChange,
                 colors = SwitchDefaults.colors(
-                    checkedTrackColor = AssistantAccent, checkedThumbColor = Color.White,
+                    checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
                     uncheckedTrackColor = AssistantFieldBackground, uncheckedBorderColor = AssistantOutline,
                     uncheckedThumbColor = AssistantTextMuted
                 )
@@ -104,7 +105,7 @@ fun MemoryPage(
             Spacer(Modifier.size(10.dp))
             Box(
                 Modifier.size(52.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Brush.linearGradient(listOf(AssistantAccent, AssistantAccentPink)))
+                    .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentPink)))
                     .clickable(enabled = draft.isNotBlank()) { onAdd(draft); draft = "" },
                 contentAlignment = Alignment.Center
             ) {

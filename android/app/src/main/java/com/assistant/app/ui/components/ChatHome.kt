@@ -113,6 +113,7 @@ import androidx.compose.ui.unit.sp
 import com.assistant.app.data.DocxText
 import com.assistant.app.network.ChatAttachment
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
@@ -334,7 +335,7 @@ fun ChatHome(
                 val pressScale by animateFloatAsState(if (pressed) 0.88f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "sendPress")
                 Box(
                     Modifier.size(48.dp).scale(pressScale).clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(AssistantAccent.copy(alpha = 0.85f), AssistantAccent)))
+                        .background(Brush.linearGradient(listOf(AssistantAccentFill.copy(alpha = 0.85f), AssistantAccentFill)))
                         .clickable(interactionSource = buttonSource, indication = null, enabled = !isSending || !hasContent) {
                             if (hasContent) send() else onVoiceClick()
                         },
@@ -509,7 +510,7 @@ private fun TypingDots() {
             val wave = if (phase < 0.5f) kotlin.math.sin(phase * 2f * Math.PI.toFloat()) else 0f
             Box(
                 Modifier.size(8.dp).graphicsLayer { translationY = -6.dp.toPx() * wave; alpha = 0.45f + 0.55f * wave }
-                    .clip(CircleShape).background(AssistantAccent)
+                    .clip(CircleShape).background(AssistantAccentFill)
             )
         }
     }

@@ -35,9 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAmber
-import com.assistant.app.ui.theme.AssistantError
+import com.assistant.app.ui.theme.AssistantErrorFill
 import com.assistant.app.ui.theme.AssistantPrimaryLight
 import com.assistant.app.ui.theme.AssistantSurfaceElevated
 import com.assistant.app.ui.theme.AssistantTextPrimary
@@ -72,9 +72,9 @@ fun AssistantToastHost(
         val shape = RoundedCornerShape(50)
         val (accentColor, icon) = when (type) {
             AppNotificationType.SUCCESS -> AssistantPrimaryLight to Icons.Filled.Check
-            AppNotificationType.ERROR -> AssistantError to Icons.Filled.Error
+            AppNotificationType.ERROR -> AssistantErrorFill to Icons.Filled.Error
             AppNotificationType.WARNING -> AssistantAmber to Icons.Filled.Warning
-            AppNotificationType.INFO -> AssistantAccent to Icons.Filled.Info
+            AppNotificationType.INFO -> AssistantAccentFill to Icons.Filled.Info
         }
         Row(
             modifier = Modifier

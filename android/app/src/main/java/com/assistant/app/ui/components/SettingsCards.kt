@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.theme.AssistantAccent
+import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantSelectedBg
 import com.assistant.app.ui.theme.AssistantSurface
@@ -104,7 +105,7 @@ fun ToggleCard(title: String, checked: Boolean, onChange: (Boolean) -> Unit, hin
         Switch(
             checked = checked, onCheckedChange = onChange,
             colors = SwitchDefaults.colors(
-                checkedTrackColor = AssistantAccent, checkedThumbColor = Color.White,
+                checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
                 uncheckedTrackColor = AssistantOutline, uncheckedBorderColor = AssistantOutline,
                 uncheckedThumbColor = Color.White
             )
