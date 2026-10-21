@@ -1440,7 +1440,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (_uiState.value.updateDownloadProgress != null) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                getApplication<Application>().cacheDir.listFiles()?.forEach { runCatching { it.deleteRecursively() } }
+                val updateBusy = prefetchJob?.isActive == true
+                val downloadBusy = com.assistant.app.data.YouTubeDownloader.running.get() > 0
+                val previewCutoff = System.currentTimeMillis() - 10 * 60_000L
+                getApplication<Application>().cacheDir.listFiles()?.forEach { entry ->
+                    // Leave alone what is still in use: a running update or video download, and previews opened recently.
+                    val inUse = (updateBusy && entry.name == "updates") ||
+                        (downloadBusy && entry.name.startsWith("yt-")) ||
+                        (entry.name.startsWith("preview") && entry.lastModified() > previewCutoff)
+                    if (!inUse) runCatching { entry.deleteRecursively() }
+                }
             }
             downloadedUpdate = null
             refreshCacheSize()

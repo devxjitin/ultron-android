@@ -1,5 +1,6 @@
 package com.assistant.app.network
 
+import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -145,6 +146,7 @@ class GeminiChatClient(
                 val raw = JSONArray()
                 var promptTokens = 0
                 var answerTokens = 0
+                var finishReason: String? = null
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val line = source.readUtf8Line() ?: break
@@ -152,6 +154,11 @@ class GeminiChatClient(
                     val chunk = line.removePrefix("data:").trim()
                     if (chunk.isEmpty()) continue
                     val json = runCatching { JSONObject(chunk) }.getOrNull() ?: continue
+                    json.optJSONObject("error")?.let { throw UserMessageException(it.optString("message").ifBlank { "The model reported an error." }.take(160)) }
+                    json.optJSONObject("promptFeedback")?.optString("blockReason")?.takeIf { it.isNotEmpty() }?.let {
+                        throw UserMessageException("This message was blocked by the model's safety filter ($it).")
+                    }
+                    json.optJSONArray("candidates")?.optJSONObject(0)?.optString("finishReason")?.takeIf { it.isNotEmpty() }?.let { finishReason = it }
                     json.optJSONObject("usageMetadata")?.let {
                         promptTokens = it.optInt("promptTokenCount", promptTokens)
                         answerTokens = it.optInt("candidatesTokenCount") + it.optInt("thoughtsTokenCount")
@@ -179,6 +186,15 @@ class GeminiChatClient(
                     }
                 }
                 if (promptTokens > 0 || answerTokens > 0) listener.onUsage(promptTokens, answerTokens)
+                // Only a clean STOP is a finished reply; anything else must not be saved as one.
+                when (finishReason) {
+                    "STOP" -> {}
+                    null -> throw UserMessageException("The connection ended before the reply was finished. Please try again.")
+                    "MAX_TOKENS" -> throw UserMessageException("The reply was cut off because it reached the length limit.")
+                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY" ->
+                        throw UserMessageException("The reply was stopped by the model's safety filter.")
+                    else -> throw UserMessageException("The reply stopped early ($finishReason).")
+                }
                 return StreamTurn(text.toString(), calls, raw)
             }
         } finally {

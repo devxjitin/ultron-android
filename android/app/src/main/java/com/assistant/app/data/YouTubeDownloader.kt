@@ -102,10 +102,12 @@ class YouTubeDownloader(private val context: Context) {
     /** Each download works in its own folder, so two running together never touch each other's temporary files. */
     private fun download(url: String, audioOnly: Boolean, height: Int, notice: Progress): Saved {
         val workDir = File(context.cacheDir, "yt-" + UUID.randomUUID()).apply { mkdirs() }
+        running.incrementAndGet()
         try {
             return downloadIn(workDir, url, audioOnly, height, notice)
         } finally {
             workDir.deleteRecursively()
+            running.decrementAndGet()
         }
     }
 
@@ -369,6 +371,8 @@ class YouTubeDownloader(private val context: Context) {
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val notificationIds = AtomicInteger(4000)
+        /** Downloads currently using their work folders; Clear cache leaves those folders alone. */
+        val running = AtomicInteger(0)
         /** At most two downloads run at once; the rest wait their turn. */
         val gate = kotlinx.coroutines.sync.Semaphore(2)
         val client: OkHttpClient by lazy {
