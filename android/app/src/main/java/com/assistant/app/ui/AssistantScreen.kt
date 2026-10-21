@@ -100,7 +100,7 @@ fun AssistantScreen(
     micPermissionPermanentlyDenied: Boolean = false,
     onMicTapped: () -> Unit,
     onMuteToggled: () -> Unit = {},
-    onChatSend: (String, List<ChatAttachment>) -> Unit = { _, _ -> },
+    onChatSend: (String, List<ChatAttachment>) -> Boolean = { _, _ -> false },
     onChatEdit: (Long, String) -> Unit = { _, _ -> },
     onChatNew: () -> Unit = {},
     onChatNotice: (String) -> Unit = {},
@@ -228,18 +228,18 @@ fun AssistantScreen(
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
                         NavTab.HOME -> guardedNav(onHomeTapped)
-                        NavTab.SEARCH -> onSearchTapped()
-                        NavTab.LIBRARY -> onLibraryTapped()
-                        NavTab.PERSONALIZATION -> onPersonalizationTapped()
-                        NavTab.USAGE -> onUsageTapped()
-                        NavTab.STORAGE -> onStorageTapped()
-                        NavTab.KNOWLEDGE -> onKnowledgeTapped()
+                        NavTab.SEARCH -> guardedNav(onSearchTapped)
+                        NavTab.LIBRARY -> guardedNav(onLibraryTapped)
+                        NavTab.PERSONALIZATION -> guardedNav(onPersonalizationTapped)
+                        NavTab.USAGE -> guardedNav(onUsageTapped)
+                        NavTab.STORAGE -> guardedNav(onStorageTapped)
+                        NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
                         NavTab.MARKETPLACE -> guardedNav(onMarketplaceTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
-                        NavTab.SETTINGS -> onSettingsTapped()
-                        NavTab.DEVELOPER -> onDeveloperTapped()
-                        NavTab.ABOUT -> onAboutTapped()
+                        NavTab.SETTINGS -> guardedNav(onSettingsTapped)
+                        NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
+                        NavTab.ABOUT -> guardedNav(onAboutTapped)
                     }
                 },
                 modifier = drawerModifier.windowInsetsPadding(WindowInsets.displayCutout)
@@ -256,6 +256,7 @@ fun AssistantScreen(
                 greeting = uiState.settings.greeting,
                 errorMessage = uiState.errorMessage.takeIf { uiState.voiceState == VoiceState.ERROR },
                 onSend = onChatSend,
+                chatKey = uiState.activeChatId,
                 onEdit = onChatEdit,
                 onNotice = onChatNotice,
                 incomingShare = uiState.incomingShare,

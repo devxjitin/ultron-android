@@ -185,7 +185,7 @@ private val PhoneCatalog = listOf(
     phone("photos", "Photos", "Count and list your recent photos.",
         Category.MEDIA, Icons.Outlined.PhotoLibrary, Color(0xFFF9AB00), Kind.Local(listOf(photosPermission()))),
     phone("location", "Location", "Know where you are and get directions.",
-        Category.MEDIA, Icons.Outlined.LocationOn, Color(0xFF0F9D58), Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION))),
+        Category.MEDIA, Icons.Outlined.LocationOn, Color(0xFF0F9D58), Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
     phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
         Category.PHONE, Icons.Outlined.QueryStats, Color(0xFF78909C), Kind.Local(access = Access.USAGE_ACCESS)),
     phone("duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
@@ -270,12 +270,17 @@ fun ConnectorsPage(
     fun connected(c: Connector): Boolean = when (val kind = c.kind) {
         is Kind.GitHub -> githubLogin.isNotEmpty()
         is Kind.Google -> kind.service.id in googleAccounts
-        is Kind.Local -> c.tools.any { it in enabledTools } && accessGranted(kind)
+        // Added means its tools are on; a revoked permission leaves it listed so it can be repaired.
+        is Kind.Local -> c.tools.any { it in enabledTools }
         is Kind.Online -> c.tools.any { it in enabledTools }
     }
 
-    /** An added online connector whose sign-in no longer works: it is shown with Reconnect instead of Connected. */
-    fun needsReconnect(c: Connector): Boolean = connected(c) && c.kind !is Kind.Local && c.kind !is Kind.Online && c.id in issues
+    /** An added connector that no longer works (sign-in rejected, or Android access taken away): shown with Reconnect instead of Connected. */
+    fun needsReconnect(c: Connector): Boolean = connected(c) && when (val kind = c.kind) {
+        is Kind.Local -> !accessGranted(kind)
+        is Kind.Online -> false
+        else -> c.id in issues
+    }
 
     fun connect(c: Connector) {
         when (val kind = c.kind) {
@@ -325,6 +330,7 @@ fun ConnectorsPage(
             connected = connected(c) && !broken,
             reconnect = broken,
             subtitle = when {
+                broken && c.kind is Kind.Local -> "Permission needed"
                 broken -> "Sign-in stopped working"
                 c.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
                 c.kind is Kind.Google && c.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[c.kind.service.id]}"
@@ -347,6 +353,7 @@ fun ConnectorsPage(
             connected = connected(detail) && !broken,
             reconnect = broken,
             subtitle = when {
+                broken && detail.kind is Kind.Local -> "Permission needed"
                 detail.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
                 detail.kind is Kind.Google && detail.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[detail.kind.service.id]}"
                 else -> detail.subtitle
@@ -466,7 +473,12 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
         }
         mode == AppOpsManager.MODE_ALLOWED
     }
-    Access.NONE -> kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+    // Approximate location is enough for the Location connector, so either of its two permissions counts.
+    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions) {
+        kind.permissions.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+    } else {
+        kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+    }
 }
 
 @Composable

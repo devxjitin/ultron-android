@@ -280,3 +280,4 @@
 [2026-10-21 16:17] [Claude] [Fix: Rounds 3-5 audit - chat request ownership+cancel, checked DNS, unique YT dirs, MCP RPC validation, Gmail reply headers, Docs tabs, SSE, no stream delay; compile pass]
 [2026-10-21 16:23] [Claude] [Fix: Round 6 audit - stream finish checks, atomic notes, RAG revision reload, safe Clear cache; compile + RAG tests pass]
 [2026-10-21 16:27] [Claude] [Fix: Round 7 audit - Google 401 refresh+retry, 22s op deadline, paging/offset reads, $ref/union schema conversion; compile pass]
+[2026-10-21 16:32] [Claude] [Fix: Round 8 audit - tools off main thread, debounced search, chat draft, nav guard, preview errors, connector repair; compile pass]

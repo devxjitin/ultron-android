@@ -40,6 +40,7 @@ object LinkPreviews {
     private const val MAX_PAGE_BYTES = 300_000
     private const val MAX_IMAGE_BYTES = 2_000_000
     private const val MAX_IMAGE_WIDTH = 800
+    private const val MAX_IMAGE_PIXELS = 1_500_000L
     private const val BROWSER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
 
     // Balanced brackets stay in the address (Wikipedia style), the closing bracket of a Markdown link does not.
@@ -148,7 +149,13 @@ object LinkPreviews {
         if (bounds.outWidth <= 0) return null
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= MAX_IMAGE_WIDTH) sample *= 2
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        // A very tall image is narrow, so width alone would not bound it; limit the decoded pixels too.
+        while (bounds.outWidth.toLong() / sample * (bounds.outHeight / sample) > MAX_IMAGE_PIXELS) sample *= 2
+        return try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        } catch (e: OutOfMemoryError) {
+            null
+        }
     }
 
     /** What can be shown at once, before anything is fetched: the video thumbnail, or the site name. */

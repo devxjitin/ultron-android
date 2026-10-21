@@ -475,14 +475,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var textChatStartedAtMillis = 0L
 
     /** Sends a typed message (with any attached files) and streams the reply. The chat can use cloud connectors only. */
-    fun onChatSend(text: String, attachments: List<ChatAttachment> = emptyList()) {
+    fun onChatSend(text: String, attachments: List<ChatAttachment> = emptyList()): Boolean {
         val message = text.trim()
-        if ((message.isEmpty() && attachments.isEmpty()) || _uiState.value.isChatSending) return
+        if ((message.isEmpty() && attachments.isEmpty()) || _uiState.value.isChatSending) return false
         val apiKey = resolveApiKey()
         val azure = _uiState.value.azure.takeIf { it.isActive }
         if (azure == null && apiKey.isBlank()) {
             showToast("Add a Gemini or Azure API key in Developer settings first.", AppNotificationType.ERROR)
-            return
+            return false
         }
         val userMessage = ChatMessage(++chatMessageId, fromUser = true, text = message, attachments = attachments)
         val replyId = ++chatMessageId
@@ -608,6 +608,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         return listOf(
             0L to "Uploading $kind…",
+        return true
             1_200L to "Analysing $kind…",
             3_500L to "Reading through the details…",
             6_000L to "Thinking…"

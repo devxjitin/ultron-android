@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,6 +46,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.ChatSession
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
@@ -69,7 +73,7 @@ private fun searchChats(sessions: List<ChatSession>, tokens: List<String>): List
         }
         val haystack = (session.title + "\n" + body).lowercase()
         if (!tokens.all { haystack.contains(it) }) return@mapNotNull null
-        val matches = tokens.sumOf { token -> haystack.windowed(token.length).count { it == token } }
+        val matches = tokens.sumOf { token -> countOccurrences(haystack, token) }
         val at = body.lowercase().indexOf(tokens.first())
         val snippet = if (at >= 0) {
             val start = (at - 40).coerceIn(0, body.length)
@@ -79,6 +83,16 @@ private fun searchChats(sessions: List<ChatSession>, tokens: List<String>): List
         } else null
         SearchHit(session, snippet, matches)
     }.sortedByDescending { it.matches }.take(MAX_RESULTS)
+
+private fun countOccurrences(haystack: String, token: String): Int {
+    var count = 0
+    var index = haystack.indexOf(token)
+    while (index >= 0) {
+        count++
+        index = haystack.indexOf(token, index + token.length)
+    }
+    return count
+}
 
 private fun highlight(text: String, tokens: List<String>): AnnotatedString = buildAnnotatedString {
     append(text)
@@ -100,7 +114,17 @@ fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String) -> Unit, mo
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
     val tokens = remember(query) { query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() } }
-    val hits = remember(sessions, tokens) { if (tokens.isEmpty()) emptyList() else searchChats(sessions, tokens) }
+    // Searched off the main thread after a short pause, so typing stays smooth with a long history; null while searching.
+    val hits by produceState<List<SearchHit>?>(null, sessions, tokens) {
+        if (tokens.isEmpty()) {
+            value = emptyList()
+            return@produceState
+        }
+        value = null
+        delay(150)
+        value = withContext(Dispatchers.Default) { searchChats(sessions, tokens) }
+    }
+    val found = hits
 
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         TextField(
@@ -126,15 +150,15 @@ fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String) -> Unit, mo
             )
         )
         Spacer(Modifier.height(12.dp))
-        val shown = if (tokens.isEmpty()) sessions.take(15).map { SearchHit(it, null, 0) } else hits
+        val shown = if (tokens.isEmpty()) sessions.take(15).map { SearchHit(it, null, 0) } else found.orEmpty()
         val caption = when {
             tokens.isEmpty() -> if (shown.isEmpty()) null else "Recent chats"
-            hits.isEmpty() -> null
-            else -> "${hits.size} ${if (hits.size == 1) "chat" else "chats"} found"
+            found.isNullOrEmpty() -> null
+            else -> "${found.size} ${if (found.size == 1) "chat" else "chats"} found"
         }
         LazyColumn(Modifier.fillMaxSize()) {
             if (caption != null) item { PageLabel(caption, Modifier.padding(top = 4.dp)) }
-            if (shown.isEmpty()) {
+            if (shown.isEmpty() && (tokens.isEmpty() || found != null)) {
                 item {
                     Text(
                         if (tokens.isEmpty()) "You have no saved chats yet." else "No chat has all of those words.",

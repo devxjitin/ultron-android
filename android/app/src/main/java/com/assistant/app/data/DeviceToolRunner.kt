@@ -98,7 +98,8 @@ class DeviceToolRunner(
     }
 
     suspend fun run(tool: DeviceTool, args: JSONObject): String = try {
-        execute(tool, args)
+        // Content providers, usage stats and local files can be slow, so they never run on the main thread.
+        if (tool in BLOCKING_TOOLS) withContext(Dispatchers.IO) { execute(tool, args) } else execute(tool, args)
     } catch (e: ActivityNotFoundException) {
         "status=unavailable\nNo app on this device can do that."
     } catch (e: SecurityException) {
@@ -965,6 +966,13 @@ class DeviceToolRunner(
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
-        const val MISSING = "status=invalid\nA required value was missing."
+        /** Tools that query contacts, calendar, photos, usage stats, notifications, apps or local notes. */
+        val BLOCKING_TOOLS = setOf(
+            DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
+            DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
+            DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
+            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP
+        )
+        const val MISSING ="status=invalid\nA required value was missing."
     }
 }

@@ -102,20 +102,21 @@ private fun DocxPreview(file: ChatAttachment) {
 @Composable
 private fun VideoPreview(file: ChatAttachment) {
     val context = LocalContext.current
-    val temp by produceState<File?>(null, file) {
-        value = withContext(Dispatchers.IO) {
+    val temp by produceState<Loaded<File>?>(null, file) {
+        value = Loaded(withContext(Dispatchers.IO) {
             runCatching { File.createTempFile("preview", ".mp4", context.cacheDir).also { it.writeBytes(file.data) } }.getOrNull()
-        }
+        })
     }
     DisposableEffect(temp) {
-        val toDelete = temp
+        val toDelete = temp?.value
         onDispose { if (toDelete != null) CoroutineScope(Dispatchers.IO).launch { runCatching { toDelete.delete() } } }
     }
-    val video = temp
-    if (video == null) {
+    val loadedVideo = temp
+    if (loadedVideo == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
         return
     }
+    val video = loadedVideo.value ?: run { PreviewFailed(); return }
     androidx.compose.ui.viewinterop.AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
@@ -130,6 +131,16 @@ private fun VideoPreview(file: ChatAttachment) {
     )
 }
 
+/** The result of preparing a preview: [value] is null when it could not be prepared. */
+private class Loaded<T>(val value: T?)
+
+@Composable
+private fun PreviewFailed() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("This file can't be previewed.", color = Color(0xFFEDEDED), fontSize = 14.sp)
+    }
+}
+
 @Composable
 private fun TextPreview(file: ChatAttachment) {
     val text by produceState("", file) { value = withContext(Dispatchers.IO) { file.data.toString(Charsets.UTF_8).take(100_000) } }
@@ -142,15 +153,18 @@ private fun TextPreview(file: ChatAttachment) {
 
 @Composable
 private fun ImagePreview(file: ChatAttachment) {
-    val bitmap by produceState<Bitmap?>(null, file) { value = withContext(Dispatchers.IO) { decodeSampled(file.data, 2048) } }
+    val bitmap by produceState<Loaded<Bitmap>?>(null, file) {
+        value = Loaded(withContext(Dispatchers.IO) { runCatching { decodeSampled(file.data, 2048) }.getOrNull() })
+    }
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
-    val shown = bitmap
-    if (shown == null) {
+    val loadedImage = bitmap
+    if (loadedImage == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
         return
     }
+    val shown = loadedImage.value ?: run { PreviewFailed(); return }
     Image(
         shown.asImageBitmap(), contentDescription = file.name, contentScale = ContentScale.Fit,
         modifier = Modifier.fillMaxSize()
@@ -167,25 +181,33 @@ private fun ImagePreview(file: ChatAttachment) {
 @Composable
 private fun PdfPreview(file: ChatAttachment) {
     val context = LocalContext.current
-    val opened by produceState<OpenedPdf?>(null, file) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val temp = File.createTempFile("preview", ".pdf", context.cacheDir).also { it.writeBytes(file.data) }
-                val descriptor = ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)
+    val opened by produceState<Loaded<OpenedPdf>?>(null, file) {
+        value = Loaded(withContext(Dispatchers.IO) {
+            var temp: File? = null
+            var descriptor: ParcelFileDescriptor? = null
+            try {
+                temp = File.createTempFile("preview", ".pdf", context.cacheDir).also { it.writeBytes(file.data) }
+                descriptor = ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)
                 OpenedPdf(temp, descriptor, PdfRenderer(descriptor))
-            }.getOrNull()
-        }
+            } catch (e: Exception) {
+                // Encrypted or damaged PDFs fail here; release what was opened so nothing stays behind.
+                runCatching { descriptor?.close() }
+                runCatching { temp?.delete() }
+                null
+            }
+        })
     }
     DisposableEffect(opened) {
-        val toClose = opened
+        val toClose = opened?.value
         // Not tied to this composition's scope, which is already cancelled when this runs.
         onDispose { if (toClose != null) CoroutineScope(Dispatchers.IO).launch { toClose.close() } }
     }
-    val pdf = opened
-    if (pdf == null) {
+    val loadedPdf = opened
+    if (loadedPdf == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
         return
     }
+    val pdf = loadedPdf.value ?: run { PreviewFailed(); return }
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp)) {
         items((0 until pdf.renderer.pageCount).toList()) { index ->
             val page by produceState<Bitmap?>(null, pdf, index) { value = pdf.render(index) }
