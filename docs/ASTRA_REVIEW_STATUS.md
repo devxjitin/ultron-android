@@ -1,0 +1,134 @@
+# Ultron project review (GPT 6 Astra) — what is done and what is left
+
+Review date: 21 October 2026. Reviewed checkout: `bf47ffc`. This file keeps the review's findings in one place and
+tracks what has been fixed since. Fixes live on branch `claude/project-structure-correction-800912`; each round is one commit.
+
+**Scope of the original review:** a source and local-test audit of the Android app, the Python MCP services, the
+infrastructure template and the release script. It was not a production test: no live Google/GitHub mutations, AWS
+deployment, model requests, microphone sessions or device walkthroughs were run. P1 = fix before wider distribution,
+P2 = meaningful reliability or feature defect, P3 = cleanup.
+
+**Original baseline:** 134 Android unit tests passed (19 suites). Lint failed with 7 errors and 25 warnings.
+
+## Summary
+
+| | Count |
+|---|---|
+| Findings in the review | 37 |
+| Fixed (done) | 24 |
+| Partly fixed (a real piece is left) | 13 |
+| Not started | 0 |
+| All P1 findings (F01–F09, F31) | fixed in code; only F08 (durable downloads) has a follow-up piece left |
+
+Current checks: Kotlin compiles, `lintDebug` reports 0 errors, the new Kotlin tests (DOCX, address ranges, memory
+replace, schema, SSE, chat endings and cancel) and the 12 Python Lambda tests pass. The full Android unit suite has not
+been re-run after the changes, and nothing has been tried on a device or deployed.
+
+## Rounds and commits
+
+| Round | Commit | Findings |
+|---|---|---|
+| 1 | `22e9766` | F33 (JDK path), F01, F31, F02 |
+| 2 | `2d01c3b` | F09, F05, F06 (first part) |
+| 3 | `67507ed` | F04, F03 |
+| 4 | `3ca7e9d` | F07, F08 (first part) |
+| 5 | `dbf0b7a` | F10 (delay), F27, F26, F25, F22 (SSE), F17 (LRU) |
+| 6 | `4e54c5d` | F34, F29, F37, F30 |
+| 7 | `18348ce` | F21, F28, F24, F23 |
+| 8 | `98de44d` | F12, F11, F18, F19, F20, F35 |
+| 9 | `52728b3` | F32, F13, F14, F15 |
+| 10 | `26e86b4` | F16, F36 (reminder tools), F22 (cancel), lint errors, README |
+| 11 | `c0bc03f` | tests; fixed a cancelled call surfacing as an IOException |
+| 12 | `9d5b6cc` | F33 (release id), F32 (usage scope), F19, F35 (Repair, photos), F02 check |
+| 13 | `eddfc23` | F09 (recovery/export), F05 (forget, restore), F17 (disclosure, export), F06 (streaming parser), F18 (drafts) |
+
+## Findings
+
+Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column says what remains.
+
+| ID | P | Finding | Status | Left |
+|---|---|---|---|---|
+| F01 | P1 | New Function URLs lacked `lambda:InvokeFunction` permission | Done (R1) | Not deployed; `InvokedViaFunctionUrl` not validated with CloudFormation |
+| F02 | P1 | Reminders failed unless an unrelated connector was on | Done (R1, R12) | Device test on a fresh install plus reboot |
+| F03 | P1 | Cancelling chat did not cancel the HTTP request | Done (R3, R11) | — |
+| F04 | P1 | A cancelled reply could unlock a newer chat request | Done (R3) | No ViewModel-level test |
+| F05 | P1 | Memory replace could delete unrelated facts | Done (R2, R11, R13) | Notes are still matched by words, not IDs shown to the model; ambiguous matches delete nothing and removed notes can be restored from the Memory page |
+| F06 | P1 | DOCX size limit did not bound decompressed content | Done (R2, R11, R13) | — (XML is scanned as a stream; unreadable and too-large files say so) |
+| F07 | P1 | Link preview address check separate from the connection's DNS | Done (R4, R11) | — |
+| F08 | P1 | Concurrent YouTube downloads shared temp files | Partial (R4) | Durable foreground service or worker, resumable downloads |
+| F09 | P1 | Corrupt chat metadata could delete attachments | Done (R2, R13) | — (Storage page can save or delete the set-aside chats; cleanup resumes afterwards) |
+| F10 | P2 | Artificial text pacing and repeated Markdown parsing | Partial (R5) | Incremental Markdown rendering |
+| F11 | P2 | Chat search scanned full history on the UI thread | Partial (R8) | Indexed search, scope filters, jump to the matching turn |
+| F12 | P2 | Voice tools blocked the main thread | Done (R8) | — |
+| F13 | P2 | Token accounting missed auxiliary model work | Partial (R9) | Per-request ledger with purpose, opt-in auto-titling, daily budget |
+| F14 | P2 | Context limited by message count, not tokens | Partial (R9) | Output caps, summarising old turns, choosing tool groups per turn |
+| F15 | P2 | Knowledge edits overwrote the manual voice prompt and blocked the app | Partial (R9) | Opt-in/reviewable updates, dismissible dialog |
+| F16 | P2 | Editing or trimming turns leaked attachment files | Done (R10) | — |
+| F17 | P2 | Saved conversations silently evicted | Partial (R5, R13) | Limit is now disclosed and chats can be exported as text; moving to a database is left |
+| F18 | P2 | Composer draft cleared on rejection, not scoped to a chat | Done (R8, R13) | Typed text survives page changes; attached files do not survive the app process being killed |
+| F19 | P2 | Some destinations bypassed the unsaved-changes guard | Done (R8, R12) | — |
+| F20 | P2 | Preview failures looked like endless loading; image decode unbounded | Done (R8) | — |
+| F21 | P2 | Expired Google tokens stayed cached | Partial (R7) | Structured auth errors from the server |
+| F22 | P2 | MCP SSE waited for the whole connection to close | Done (R5, R10, R11) | Protocol-negotiation compatibility tests |
+| F23 | P2 | MCP schema conversion changed argument types | Partial (R7, R11) | Reject or mark unsupported tools; give Azure the original schema |
+| F24 | P2 | Google list/read tools returned incomplete data | Partial (R7, R11) | Sheets and Slides range reads, shared drives |
+| F25 | P2 | Docs reads ignored all but the first tab | Done (R5, R11) | — |
+| F26 | P2 | Gmail reply draft lacked threading headers | Done (R5, R11) | — |
+| F27 | P2 | MCP handlers crashed on valid JSON that is not an RPC object | Done (R5, R11) | — |
+| F28 | P2 | Timeout budgets did not fit multi-step operations | Partial (R7) | Reconcile after a write times out, fewer Gmail round trips, infra timeout |
+| F29 | P2 | Notes not atomic or locked across store instances | Done (R6) | Concurrency test needs an Android context |
+| F30 | P2 | Clear cache could remove active downloads and previews | Partial (R6) | Real lease tracking (today a 10-minute rule for previews) |
+| F31 | P1 | Calling an ambiguous contact picked the first match | Done (R1) | — |
+| F32 | P2 | Voice errors undercounted session time | Done (R9, R12) | — |
+| F33 | P2 | Release script JDK path broken; minute-based release ids | Done (R1, R12) | Script not run end to end |
+| F34 | P2 | Streams saved as complete without a successful ending | Done (R6, R11) | — |
+| F35 | P2 | Revoked permissions hid connectors | Done (R8, R12) | — |
+| F36 | P3 | General automation code unreachable | Partial (R10, R12) | List/cancel reminder tools added; rule engine kept for old saved rules, decision pending |
+| F37 | P2 | Retrieval could mix new vectors with old chunk text | Done (R6) | — |
+
+## Android lint
+
+| Diagnostic | Status |
+|---|---|
+| 2 × Bluetooth `MissingPermission` | Done — permission is checked before the adapter is read |
+| 2 × `NewApi` navigation-bar attributes | Done — moved to `values-v27` and `values-night-v27` |
+| 2 × `ProtectedPermissions` (WRITE_SETTINGS, PACKAGE_USAGE_STATS) | Done — documented and suppressed; the permissions and their Settings flows stay |
+| Optional telephony hardware | Done — `required="false"` |
+| `SelectedPhotoAccess` | Done — Android 14 partial photo access handled |
+| 25 warnings (dependency versions, backup/transfer rules, unused colours and round icon, monochrome icon, minor Compose/ABI) | Left |
+| AGP 8.5.2 tested only up to compileSdk 34, project uses 35 | Left — upgrade as one tested unit |
+
+## Review sections not covered by findings
+
+| Area | Status |
+|---|---|
+| Architecture changes (chat controller, voice in a service, transactional database, one knowledge store, tool registry, parallel reads, request ledger, shared RPC transport) | Left — treated as a separate project |
+| Import improvements (batched embeddings, dedupe by content hash, checkpoints), offline BM25 fallback, query cache, source links | Left |
+| Shared billable API keys inside the APK; release signing channel documentation | Left |
+| Feature-by-feature UX suggestions (Stop/Retry, reconnect state, reminder list UI, usage labels, TalkBack and font-scale checks) | Left |
+| Dead code and docs: `ToolGroup.WEB`, old comments, the web-extract Lambda decision | Left (README partly corrected in R10) |
+| Regression tests | Partly done in R11: DOCX cap, address ranges, memory replace, schema, SSE, chat endings and cancel, Lambda handlers. Still missing: corrupt-history quarantine, concurrent notes, Compose draft/navigation tests |
+| Device matrix (API 26/29/33/35+, denied permissions, offline, background, large history, rebooted reminders, OTA signing) | Left — needs a phone |
+| Staging deploy of both Lambdas and `infra/ultron.yaml` | Left — needs AWS access |
+
+## Release gates from the review
+
+| Gate | State |
+|---|---|
+| Zero known P1 findings | Code fixed; F05, F06, F08, F09 follow-ups left |
+| Cancellation reliably ends blocked requests | Done and tested against a silent server |
+| No stale request can change another chat | Done in code, no ViewModel test |
+| No automatic delete after a corrupt read | Done in code, no test (needs an Android context) |
+| Reminder delivery works with only its own connector on | Done in code, not tried on a device |
+| Large history does not block input | Search moved off the main thread; not measured |
+| Usage totals explain every app-initiated request | Partly — title, persona and PDF calls counted; no per-request ledger |
+
+## Planned next rounds
+
+| Round | Content |
+|---|---|
+| 14 | F21, F23, F28, F24, F22 tests |
+| 15 | F13, F14, F15 |
+| 16 | F10, F11, F08, F30 |
+| 17 | Lint warnings, AGP/compileSdk upgrade, README and dead code |
+| 18 | Device and deploy verification (needs a phone and AWS access) |
