@@ -797,7 +797,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Opens a saved chat on the home screen; new messages continue it. */
-    fun onOpenChat(sessionId: String) {
+    fun onOpenChat(sessionId: String, turnIndex: Int? = null) {
         val session = _uiState.value.chatSessions.firstOrNull { it.id == sessionId } ?: return
         chatRequestSeq++
         chatJob?.cancel()
@@ -806,18 +806,27 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (state.voiceState != VoiceState.IDLE && state.voiceState != VoiceState.ERROR) stopSession()
         textChatSessionId = session.id
         textChatStartedAtMillis = session.startedAtMillis
-        val messages = sessionMessages(session)
+        val perTurn = sessionMessagesByTurn(session)
+        val messages = perTurn.flatten()
+        // A search result opens the chat at the exchange that matched.
+        val focus = turnIndex?.takeIf { it in perTurn.indices }?.let { perTurn.take(it).sumOf { turn -> turn.size } }
         clearAdminDrafts()
         _uiState.update {
             it.copy(
-                chatMessages = messages, isChatSending = false, activeChatId = session.id,
+                chatMessages = messages, chatFocusIndex = focus, isChatSending = false, activeChatId = session.id,
                 showSettings = false, showConnectors = false, showMemory = false
             )
         }
     }
 
     /** The messages of a saved chat as the home screen shows them; files that are gone are left out. */
-    private fun sessionMessages(session: com.assistant.app.data.ChatSession): List<ChatMessage> = session.turns.flatMap { turn ->
+    private fun sessionMessages(session: com.assistant.app.data.ChatSession): List<ChatMessage> = sessionMessagesByTurn(session).flatten()
+
+    fun onChatFocusConsumed() {
+        _uiState.update { it.copy(chatFocusIndex = null) }
+    }
+
+    private fun sessionMessagesByTurn(session: com.assistant.app.data.ChatSession): List<List<ChatMessage>> = session.turns.map { turn ->
         val files = turn.attachments.mapNotNull { chatAttachmentStore.load(it) }
         listOfNotNull(
             (turn.userText.isNotBlank() || files.isNotEmpty()).takeIf { it }
@@ -1595,13 +1604,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val updateBusy = prefetchJob?.isActive == true
-                val downloadBusy = com.assistant.app.data.YouTubeDownloader.running.get() > 0
-                val previewCutoff = System.currentTimeMillis() - 10 * 60_000L
+                // A just-shared export may still be read by the app it was sent to.
+                val exportCutoff = System.currentTimeMillis() - 10 * 60_000L
                 getApplication<Application>().cacheDir.listFiles()?.forEach { entry ->
-                    // Leave alone what is still in use: a running update or video download, and previews opened recently.
-                    val inUse = (updateBusy && entry.name == "updates") ||
-                        (downloadBusy && entry.name.startsWith("yt-")) ||
-                        (entry.name.startsWith("preview") && entry.lastModified() > previewCutoff)
+                    // Leave alone what is in use: downloads and open previews hold a lease on their files.
+                    val inUse = (updateBusy && entry.name == "updates") || com.assistant.app.data.CacheLeases.isLeased(entry.name) ||
+                        (entry.name == "exports" && entry.lastModified() > exportCutoff)
                     if (!inUse) runCatching { entry.deleteRecursively() }
                 }
             }

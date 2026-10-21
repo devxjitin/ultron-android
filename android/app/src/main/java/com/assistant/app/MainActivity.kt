@@ -349,6 +349,8 @@ class MainActivity : ComponentActivity() {
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
+                        onOpenChatAt = { id, turn -> viewModel.onOpenChat(id, turn) },
+                        onChatFocusConsumed = { viewModel.onChatFocusConsumed() },
                         onAutoTitleToggled = { viewModel.onAutoTitleToggled(it) },
                         onAutoPersonaToggled = { viewModel.onAutoPersonaToggled(it) },
                         onDailyBudgetChanged = { viewModel.onDailyBudgetChanged(it) },

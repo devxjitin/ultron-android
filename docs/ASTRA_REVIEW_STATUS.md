@@ -15,8 +15,8 @@ P2 = meaningful reliability or feature defect, P3 = cleanup.
 | | Count |
 |---|---|
 | Findings in the review | 37 |
-| Fixed (done) | 30 |
-| Partly fixed (a real piece is left) | 7 |
+| Fixed (done) | 33 |
+| Partly fixed (a real piece is left) | 4 |
 | Not started | 0 |
 | All P1 findings (F01–F09, F31) | fixed in code; only F08 (durable downloads) has a follow-up piece left |
 
@@ -43,6 +43,7 @@ been re-run after the changes, and nothing has been tried on a device or deploye
 | 13 | `eddfc23` | F09 (recovery/export), F05 (forget, restore), F17 (disclosure, export), F06 (streaming parser), F18 (drafts) |
 | 14 | `9041aa4` | F21, F23, F28 (partly), F24, F22 (protocol tests) |
 | 15 | `ccdfc81` | F13 (purposes, budget, opt-in titles), F14 (reply cap, older-turn digest), F15 (opt-in persona, dismissible notice) |
+| 16 | not committed yet | F10, F11, F08 (foreground service, resume), F30 (leases) |
 
 ## Findings
 
@@ -57,10 +58,10 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | F05 | P1 | Memory replace could delete unrelated facts | Done (R2, R11, R13) | Notes are still matched by words, not IDs shown to the model; ambiguous matches delete nothing and removed notes can be restored from the Memory page |
 | F06 | P1 | DOCX size limit did not bound decompressed content | Done (R2, R11, R13) | — (XML is scanned as a stream; unreadable and too-large files say so) |
 | F07 | P1 | Link preview address check separate from the connection's DNS | Done (R4, R11) | — |
-| F08 | P1 | Concurrent YouTube downloads shared temp files | Partial (R4) | Durable foreground service or worker, resumable downloads |
+| F08 | P1 | Concurrent YouTube downloads shared temp files | Done (R4, R16) | A foreground service keeps the process alive while downloads run; a dropped connection resumes from the saved bytes (3 tries). A download is not restarted after the app process is killed; foreground service not tried on a device |
 | F09 | P1 | Corrupt chat metadata could delete attachments | Done (R2, R13) | — (Storage page can save or delete the set-aside chats; cleanup resumes afterwards) |
-| F10 | P2 | Artificial text pacing and repeated Markdown parsing | Partial (R5) | Incremental Markdown rendering |
-| F11 | P2 | Chat search scanned full history on the UI thread | Partial (R8) | Indexed search, scope filters, jump to the matching turn |
+| F10 | P2 | Artificial text pacing and repeated Markdown parsing | Done (R5, R16) | — (finished paragraphs are parsed once and drawn per block; tested equal to a full parse at every length) |
+| F11 | P2 | Chat search scanned full history on the UI thread | Done (R8, R16) | — (index built once per chat list, scope chips, result opens at the matching exchange) |
 | F12 | P2 | Voice tools blocked the main thread | Done (R8) | — |
 | F13 | P2 | Token accounting missed auxiliary model work | Done (R9, R15) | Usage is kept per day and per purpose (chat, names, instructions, PDF), not per single request; AI chat names are now off by default; optional daily token limit |
 | F14 | P2 | Context limited by message count, not tokens | Partial (R9, R15) | Reply cap (16K tokens) and a short digest of older messages added; choosing tool groups per turn and model-written summaries are left |
@@ -79,7 +80,7 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | F27 | P2 | MCP handlers crashed on valid JSON that is not an RPC object | Done (R5, R11) | — |
 | F28 | P2 | Timeout budgets did not fit multi-step operations | Partial (R7, R14) | Create event/file are looked up after a timeout and Gmail search is one batch call; other writes only say the outcome is unknown. Batch format and 30 s infra timeout not checked against live Gmail/AWS |
 | F29 | P2 | Notes not atomic or locked across store instances | Done (R6) | Concurrency test needs an Android context |
-| F30 | P2 | Clear cache could remove active downloads and previews | Partial (R6) | Real lease tracking (today a 10-minute rule for previews) |
+| F30 | P2 | Clear cache could remove active downloads and previews | Done (R6, R16) | Downloads and open previews hold leases; the update folder is still guarded by the running-download check and exports by a 10-minute rule |
 | F31 | P1 | Calling an ambiguous contact picked the first match | Done (R1) | — |
 | F32 | P2 | Voice errors undercounted session time | Done (R9, R12) | — |
 | F33 | P2 | Release script JDK path broken; minute-based release ids | Done (R1, R12) | Script not run end to end |
@@ -129,6 +130,5 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 
 | Round | Content |
 |---|---|
-| 16 | F10, F11, F08, F30 |
 | 17 | Lint warnings, AGP/compileSdk upgrade, README and dead code |
 | 18 | Device and deploy verification (needs a phone and AWS access) |

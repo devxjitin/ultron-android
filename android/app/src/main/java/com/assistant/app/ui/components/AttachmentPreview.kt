@@ -109,7 +109,12 @@ private fun VideoPreview(file: ChatAttachment) {
     }
     DisposableEffect(temp) {
         val toDelete = temp?.value
-        onDispose { if (toDelete != null) CoroutineScope(Dispatchers.IO).launch { runCatching { toDelete.delete() } } }
+        // Clear cache leaves the file alone while the video is open.
+        val lease = toDelete?.let { com.assistant.app.data.CacheLeases.acquire(it.name) }
+        onDispose {
+            lease?.close()
+            if (toDelete != null) CoroutineScope(Dispatchers.IO).launch { runCatching { toDelete.delete() } }
+        }
     }
     val loadedVideo = temp
     if (loadedVideo == null) {
@@ -199,8 +204,12 @@ private fun PdfPreview(file: ChatAttachment) {
     }
     DisposableEffect(opened) {
         val toClose = opened?.value
+        val lease = toClose?.let { com.assistant.app.data.CacheLeases.acquire(it.temp.name) }
         // Not tied to this composition's scope, which is already cancelled when this runs.
-        onDispose { if (toClose != null) CoroutineScope(Dispatchers.IO).launch { toClose.close() } }
+        onDispose {
+            lease?.close()
+            if (toClose != null) CoroutineScope(Dispatchers.IO).launch { toClose.close() }
+        }
     }
     val loadedPdf = opened
     if (loadedPdf == null) {

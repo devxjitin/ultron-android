@@ -15,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.assistant.app.DownloadService
 import com.assistant.app.network.HttpClients
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -78,17 +79,24 @@ class YouTubeDownloader(private val context: Context) {
     fun start(video: String, audioOnly: Boolean, height: Int): String {
         val url = toUrl(video) ?: return "status=invalid\nGive a YouTube link or video id."
         val id = notificationIds.getAndIncrement()
+        // While anything is queued or running, a foreground service keeps Android from stopping the app's downloads.
+        val app = context.applicationContext
+        if (waiting.getAndIncrement() == 0) DownloadService.begin(app)
         scope.launch {
-          gate.withPermit {
-            val notice = Progress(context, id)
-            notice.update("Preparing download", 0)
             try {
-                val saved = download(url, audioOnly, height, notice)
-                notice.done("Download finished", "${saved.name} is in Downloads/Ultron", saved.uri)
-            } catch (e: Exception) {
-                notice.done("Download failed", e.message?.take(120) ?: "Could not download this video.", null)
+                gate.withPermit {
+                    val notice = Progress(context, id)
+                    notice.update("Preparing download", 0)
+                    try {
+                        val saved = download(url, audioOnly, height, notice)
+                        notice.done("Download finished", "${saved.name} is in Downloads/Ultron", saved.uri)
+                    } catch (e: Exception) {
+                        notice.done("Download failed", e.message?.take(120) ?: "Could not download this video.", null)
+                    }
+                }
+            } finally {
+                if (waiting.decrementAndGet() == 0) DownloadService.end(app)
             }
-          }
         }
         return "status=ok\nDownload started in the background. A notification shows progress, and the file will be in " +
             "Downloads/Ultron when it finishes."
@@ -102,12 +110,13 @@ class YouTubeDownloader(private val context: Context) {
     /** Each download works in its own folder, so two running together never touch each other's temporary files. */
     private fun download(url: String, audioOnly: Boolean, height: Int, notice: Progress): Saved {
         val workDir = File(context.cacheDir, "yt-" + UUID.randomUUID()).apply { mkdirs() }
-        running.incrementAndGet()
+        // Clear cache skips the folder while this lease is held.
+        val lease = CacheLeases.acquire(workDir.name)
         try {
             return downloadIn(workDir, url, audioOnly, height, notice)
         } finally {
             workDir.deleteRecursively()
-            running.decrementAndGet()
+            lease.close()
         }
     }
 
@@ -216,17 +225,36 @@ class YouTubeDownloader(private val context: Context) {
         }
     }
 
-    /** Downloads [url] to [target] in 8 MB ranges, which YouTube serves at full speed, reporting progress between [from] and [to] percent. */
+    /**
+     * Downloads [url] to [target]. When the connection drops part-way, the bytes already saved are kept and the
+     * download continues from there, a few times, before giving up.
+     */
     private fun fetch(url: String, target: File, notice: Progress, label: String, from: Int, to: Int) {
         target.delete()
-        var offset = 0L
+        var failures = 0
+        while (true) {
+            try {
+                fetchRanges(url, target, notice, label, from, to)
+                return
+            } catch (e: IOException) {
+                if (++failures > MAX_RESUMES || !target.exists() || target.length() == 0L) throw e
+                notice.update("$label (reconnecting)", from)
+                Thread.sleep(2_000L * failures)
+            }
+        }
+    }
+
+    /** Appends to [target] from where it ends, in 8 MB ranges, which YouTube serves at full speed, reporting progress between [from] and [to] percent. */
+    private fun fetchRanges(url: String, target: File, notice: Progress, label: String, from: Int, to: Int) {
+        var offset = target.length()
         var total = -1L
-        target.outputStream().buffered().use { out ->
+        java.io.FileOutputStream(target, true).buffered().use { out ->
             while (total < 0 || offset < total) {
                 val end = offset + CHUNK_BYTES - 1
                 val request = HttpRequest.Builder().url(url).header("User-Agent", USER_AGENT)
                     .header("Range", "bytes=$offset-$end").build()
                 client.newCall(request).execute().use { response ->
+                    if (response.code == 416 && offset > 0) { total = offset; return@use } // everything was already saved
                     if (response.code != 206 && response.code != 200) throw IOException("YouTube refused the download (HTTP ${response.code}).")
                     val range = response.header("Content-Range")
                     if (total < 0) total = range?.substringAfter('/')?.toLongOrNull() ?: response.body?.contentLength() ?: -1L
@@ -371,8 +399,9 @@ class YouTubeDownloader(private val context: Context) {
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val notificationIds = AtomicInteger(4000)
-        /** Downloads currently using their work folders; Clear cache leaves those folders alone. */
-        val running = AtomicInteger(0)
+        /** Downloads queued or running; the foreground service lives while this is above zero. */
+        val waiting = AtomicInteger(0)
+        const val MAX_RESUMES = 3
         /** At most two downloads run at once; the rest wait their turn. */
         val gate = kotlinx.coroutines.sync.Semaphore(2)
         val client: OkHttpClient by lazy {

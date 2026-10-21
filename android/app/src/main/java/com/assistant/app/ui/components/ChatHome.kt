@@ -155,6 +155,9 @@ fun ChatHome(
     onVoiceClick: () -> Unit,
     /** Id of the open saved chat; switching to another chat (or to a new one) drops the unsent draft. */
     chatKey: String? = null,
+    /** Message to bring into view once (a search result); null for the usual "stay at the bottom". */
+    focusIndex: Int? = null,
+    onFocusConsumed: () -> Unit = {},
     /** The unsent message and files from when this screen was last left, so a trip to another page loses nothing. */
     initialInput: String = "",
     initialFiles: List<ChatAttachment> = emptyList(),
@@ -223,8 +226,15 @@ fun ChatHome(
             if (moving) followBottom = !more else if (!more) followBottom = true
         }
     }
+    LaunchedEffect(focusIndex, messages.size) {
+        if (focusIndex != null && focusIndex in messages.indices) {
+            followBottom = false
+            listState.scrollToItem(focusIndex)
+            onFocusConsumed()
+        }
+    }
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.isNotEmpty() && focusIndex == null) {
             followBottom = true
             listState.scrollToItem(messages.lastIndex)
             listState.scrollBy(100_000f)

@@ -88,6 +88,8 @@ data class AssistantUiState(
     val cacheBytes: Long = 0L,
     /** The unsent chat message and files, kept while the user visits another page. */
     val chatDraftText: String = "",
+    /** Position in [chatMessages] to scroll to once, after a chat was opened from a search result. */
+    val chatFocusIndex: Int? = null,
     val chatDraftFiles: List<ChatAttachment> = emptyList(),
     /** Chats that could not be read and were set aside (shown in Storage so they can be saved or deleted). */
     val unreadableChats: Int = 0,

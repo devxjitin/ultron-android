@@ -138,6 +138,8 @@ fun AssistantScreen(
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
+    onOpenChatAt: (String, Int?) -> Unit = { _, _ -> },
+    onChatFocusConsumed: () -> Unit = {},
     onAutoTitleToggled: (Boolean) -> Unit = {},
     onAutoPersonaToggled: (Boolean) -> Unit = {},
     onDailyBudgetChanged: (Long) -> Unit = {},
@@ -274,6 +276,8 @@ fun AssistantScreen(
                 errorMessage = uiState.errorMessage.takeIf { uiState.voiceState == VoiceState.ERROR },
                 onSend = onChatSend,
                 chatKey = uiState.activeChatId,
+                focusIndex = uiState.chatFocusIndex,
+                onFocusConsumed = onChatFocusConsumed,
                 initialInput = uiState.chatDraftText,
                 initialFiles = uiState.chatDraftFiles,
                 onDraftSaved = onChatDraftSaved,
@@ -422,7 +426,7 @@ fun AssistantScreen(
         if (uiState.showSettings) {
             val pageModifier = Modifier.padding(top = topReserve)
             when (uiState.adminPage) {
-                AdminPage.SEARCH -> ChatSearchPage(uiState.chatSessions, onOpenChat = onOpenChat, modifier = pageModifier)
+                AdminPage.SEARCH -> ChatSearchPage(uiState.chatSessions, onOpenChat = onOpenChatAt, modifier = pageModifier)
                 AdminPage.LIBRARY -> {
                     val files = remember(uiState.chatSessions) { libraryItems(uiState.chatSessions) }
                     LibraryPage(files, load = onLoadAttachment, onOpenChat = onOpenChat, onDelete = onLibraryDelete, onNotice = onChatNotice, modifier = pageModifier)
