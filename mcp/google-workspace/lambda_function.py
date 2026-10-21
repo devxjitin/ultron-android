@@ -226,6 +226,19 @@ def gm_draft(a, t):
     mail["To"], mail["Subject"] = a["to"], a["subject"]
     if a.get("cc"):
         mail["Cc"] = a["cc"]
+    if a.get("thread_id"):
+        # A reply must point at the message it answers, or mail apps will not thread it.
+        thread = _google("GET", f"{GM}/threads/{_q(a['thread_id'])}", t,
+                         {"format": "metadata", "metadataHeaders": ["Message-ID", "References", "Subject"]})
+        last = (thread.get("messages") or [{}])[-1]
+        message_id = _header(last, "Message-ID")
+        if message_id:
+            mail["In-Reply-To"] = message_id
+            mail["References"] = ((_header(last, "References") or "") + " " + message_id).strip()
+        original = _header(thread.get("messages", [{}])[0], "Subject")
+        if original:
+            del mail["Subject"]
+            mail["Subject"] = original if original.lower().startswith("re:") else "Re: " + original
     mail.set_content(a["body"])
     raw = base64.urlsafe_b64encode(mail.as_bytes()).decode()
     body = {"message": {"raw": raw}}
@@ -334,16 +347,35 @@ def _doc_text(content):
     return "".join(out)
 
 
+def _flat_tabs(tabs):
+    for tab in tabs:
+        yield tab
+        yield from _flat_tabs(tab.get("childTabs", []))
+
+
 def docs_read(a, t):
-    doc = _google("GET", f"{DOCS}/{_q(a['document_id'])}", t)
-    return f"# {doc.get('title')}\n" + _text(_doc_text(doc.get("body", {}).get("content", [])))
+    doc = _google("GET", f"{DOCS}/{_q(a['document_id'])}", t, {"includeTabsContent": "true"})
+    tabs = list(_flat_tabs(doc.get("tabs", [])))
+    if not tabs:
+        return f"# {doc.get('title')}\n" + _text(_doc_text(doc.get("body", {}).get("content", [])))
+    sections = [f"## Tab: {tab.get('tabProperties', {}).get('title', '')} (tab_id {tab.get('tabProperties', {}).get('tabId')})\n"
+                + _doc_text(tab.get("documentTab", {}).get("body", {}).get("content", [])) for tab in tabs]
+    return f"# {doc.get('title')}\n" + _text("\n".join(sections))
 
 
 def docs_append(a, t):
-    doc = _google("GET", f"{DOCS}/{_q(a['document_id'])}", t, {"fields": "body(content(endIndex))"})
-    end = doc["body"]["content"][-1]["endIndex"] - 1
+    tab_id = a.get("tab_id")
+    if tab_id:
+        doc = _google("GET", f"{DOCS}/{_q(a['document_id'])}", t, {"includeTabsContent": "true"})
+        tab = next((x for x in _flat_tabs(doc.get("tabs", [])) if x.get("tabProperties", {}).get("tabId") == tab_id), None)
+        if tab is None:
+            return f"status=not_found\nNo tab with tab_id {tab_id}. Use read_doc to list the tabs."
+        location = {"index": tab["documentTab"]["body"]["content"][-1]["endIndex"] - 1, "tabId": tab_id}
+    else:
+        doc = _google("GET", f"{DOCS}/{_q(a['document_id'])}", t, {"fields": "body(content(endIndex))"})
+        location = {"index": doc["body"]["content"][-1]["endIndex"] - 1}
     _google("POST", f"{DOCS}/{_q(a['document_id'])}:batchUpdate", t,
-            body={"requests": [{"insertText": {"location": {"index": end}, "text": a["text"]}}]})
+            body={"requests": [{"insertText": {"location": location, "text": a["text"]}}]})
     return "Text added at the end of the document."
 
 
@@ -355,7 +387,7 @@ def docs_replace(a, t):
 
 DOCS_TOOLS = [
     _tool("read_doc", "Read a Google Doc as text.", _obj({"document_id": S}, ["document_id"]), docs_read, True),
-    _tool("append_text", "Add text at the end of a Google Doc.", _obj({"document_id": S, "text": S}, ["document_id", "text"]), docs_append, False),
+    _tool("append_text", "Add text at the end of a Google Doc.", _obj({"document_id": S, "text": S, "tab_id": _s("Optional. Add to this tab (ids are shown by read_doc); default is the first tab.")}, ["document_id", "text"]), docs_append, False),
     _tool("replace_text", "Replace every occurrence of a text in a Google Doc.",
           _obj({"document_id": S, "find": S, "replace": S}, ["document_id", "find", "replace"]), docs_replace, False),
 ]
@@ -447,6 +479,8 @@ def _public(tool):
 
 
 def _rpc(msg, tools, token):
+    if not isinstance(msg, dict):
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}}
     method, mid = msg.get("method"), msg.get("id")
     if mid is None:
         return None
@@ -459,6 +493,9 @@ def _rpc(msg, tools, token):
         result = {"tools": [_public(t) for t in tools]}
     elif method == "tools/call":
         params = msg.get("params", {})
+        arguments = params.get("arguments", {}) if isinstance(params, dict) else None
+        if not isinstance(params, dict) or not isinstance(arguments, dict):
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "Invalid params"}}
         tool = next((t for t in tools if t["name"] == params.get("name")), None)
         if tool is None:
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "Unknown tool"}}
@@ -466,7 +503,7 @@ def _rpc(msg, tools, token):
             text, is_error = "No Google access token was sent. Sign in to the Google service again.", True
         else:
             try:
-                text, is_error = tool["fn"](params.get("arguments", {}), token), False
+                text, is_error = tool["fn"](arguments, token), False
             except KeyError as e:
                 text, is_error = f"Missing argument: {e}", True
             except Exception as e:  # surface failures to the model, not as protocol errors
@@ -475,6 +512,9 @@ def _rpc(msg, tools, token):
     else:
         return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "Method not found"}}
     return {"jsonrpc": "2.0", "id": mid, "result": result}
+
+
+MAX_BODY_CHARS = 1_000_000
 
 
 def _resp(status, body=None):
@@ -490,9 +530,14 @@ def lambda_handler(event, context):
         return _resp(405, {"error": "use POST"})
     auth = (event.get("headers") or {}).get("authorization", "")
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    raw = event.get("body") or ""
+    if len(raw) > MAX_BODY_CHARS:
+        return _resp(413, {"error": "request too large"})
     try:
-        body = json.loads(event.get("body") or "")
-    except ValueError:
+        if event.get("isBase64Encoded"):
+            raw = base64.b64decode(raw).decode("utf-8")
+        body = json.loads(raw)
+    except ValueError:  # includes bad base64 and bad UTF-8
         return _resp(400, {"error": "invalid json"})
     tools = SERVICES[parts[1]]
     if isinstance(body, list):

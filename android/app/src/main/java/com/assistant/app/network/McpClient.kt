@@ -117,6 +117,15 @@ class McpClient(
         sessionId?.let { builder.header("Mcp-Session-Id", it) }
         http.newCall(builder.build()).execute().use { response ->
             response.header("Mcp-Session-Id")?.let { sessionId = it }
+            val streaming = response.isSuccessful && expectBody &&
+                response.header("Content-Type").orEmpty().contains("text/event-stream")
+            if (streaming) {
+                // Answer as soon as the matching event arrives; the server may keep the stream open afterwards.
+                val body = response.body ?: throw McpException("The server sent no answer.")
+                val message = readEvents(body.source(), id)
+                message.optJSONObject("error")?.let { throw McpException(it.optString("message", "The server returned an error.")) }
+                return message.optJSONObject("result") ?: JSONObject()
+            }
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 android.util.Log.w("McpClient", "HTTP ${response.code}: ${text.take(400)}")
@@ -129,19 +138,31 @@ class McpClient(
                 throw McpException(reason, response.code)
             }
             if (!expectBody) return JSONObject()
-            val message = if (response.header("Content-Type").orEmpty().contains("text/event-stream")) pickEvent(text, id) else JSONObject(text)
+            val message = JSONObject(text)
             message.optJSONObject("error")?.let { throw McpException(it.optString("message", "The server returned an error.")) }
             return message.optJSONObject("result") ?: JSONObject()
         }
     }
 
-    /** Finds the JSON-RPC answer for [id] inside a server-sent-events body. */
-    private fun pickEvent(stream: String, id: Int): JSONObject {
-        for (line in stream.lineSequence()) {
-            if (!line.startsWith("data:")) continue
-            val message = runCatching { JSONObject(line.removePrefix("data:").trim()) }.getOrNull() ?: continue
-            if (message.optInt("id", -1) == id) return message
+    /** Reads server-sent events until the JSON-RPC answer for [id] arrives; events may span several `data:` lines. */
+    private fun readEvents(source: okio.BufferedSource, id: Int): JSONObject {
+        val data = StringBuilder()
+        fun dispatch(): JSONObject? {
+            if (data.isEmpty()) return null
+            val message = runCatching { JSONObject(data.toString()) }.getOrNull()
+            data.setLength(0)
+            return message?.takeIf { it.optInt("id", -1) == id }
         }
+        while (true) {
+            val line = source.readUtf8Line() ?: break
+            if (line.isEmpty()) {
+                dispatch()?.let { return it }
+            } else if (line.startsWith("data:")) {
+                if (data.isNotEmpty()) data.append("\n")
+                data.append(line.removePrefix("data:").removePrefix(" "))
+            }
+        }
+        dispatch()?.let { return it }
         throw McpException("The server sent no answer.")
     }
 

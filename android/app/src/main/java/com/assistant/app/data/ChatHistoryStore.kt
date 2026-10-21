@@ -61,7 +61,9 @@ class ChatHistoryStore(private val context: Context) {
             val index = all.indexOfFirst { it.id == sessionId }
             if (index >= 0) {
                 val existing = all[index]
-                all[index] = existing.copy(turns = (existing.turns + turn).takeLast(MAX_TURNS_PER_SESSION))
+                // A chat that is being used moves to the newest end, so the cap drops the least recently used one.
+                all.removeAt(index)
+                all.add(existing.copy(turns = (existing.turns + turn).takeLast(MAX_TURNS_PER_SESSION)))
             } else {
                 all.add(ChatSession(sessionId, startedAtMillis, listOf(turn)))
             }
@@ -162,8 +164,6 @@ class ChatHistoryStore(private val context: Context) {
                 bad += item.toString()
             }
         }
-    }
-}
         return Decoded(sessions, bad)
     }
 
@@ -188,3 +188,5 @@ class ChatHistoryStore(private val context: Context) {
                 )
             }
         )
+    }
+}

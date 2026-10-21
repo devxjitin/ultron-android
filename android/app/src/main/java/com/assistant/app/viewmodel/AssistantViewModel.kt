@@ -504,7 +504,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
             val incoming = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.UNLIMITED)
-            // The model sends text in bursts; this hands it to the screen a few characters at a time so it reads as streaming.
+            // The model sends text in bursts; this hands it to the screen in small batches instead of one update per fragment.
             val revealer = launch {
                 val pending = StringBuilder()
                 val shown = StringBuilder()
@@ -519,13 +519,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         pending.append(next.getOrNull().orEmpty())
                         continue
                     }
-                    // Paced so the reply is seen being written; only a long backlog speeds it up.
-                    val count = (pending.length / 40).coerceIn(2, 12).coerceAtMost(pending.length)
-                    shown.append(pending, 0, count)
-                    pending.delete(0, count)
+                    // Whatever has arrived is shown at once, at most every 40 ms, so a long reply never lags behind the model.
+                    shown.append(pending)
+                    pending.setLength(0)
                     val visible = shown.toString()
                     updateReply { it.copy(text = visible, status = null) }
-                    delay(16)
+                    delay(40)
                 }
             }
             var usedInput = 0L
@@ -735,8 +734,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Starts a fresh typed chat; the old one stays in History. */
-        chatRequestSeq++
     fun onChatNew() {
+        chatRequestSeq++
         chatJob?.cancel()
         chatJob = null
         textChatSessionId = null
@@ -753,8 +752,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Opens a saved chat on the home screen; new messages continue it. */
     fun onOpenChat(sessionId: String) {
-        chatRequestSeq++
         val session = _uiState.value.chatSessions.firstOrNull { it.id == sessionId } ?: return
+        chatRequestSeq++
         chatJob?.cancel()
         chatJob = null
         val state = _uiState.value
@@ -958,6 +957,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             append("status=ok\n")
             append(if (result.added) "Saved to memory." else "That is already remembered or empty.")
             if (result.replaced.isNotEmpty()) append(" Replaced: ").append(result.replaced.joinToString("; ")).append(".")
+            if (result.ambiguous.isNotEmpty()) {
+                append("\nNothing was deleted because the replaces hint matched several notes: ").append(result.ambiguous.joinToString("; ")).append(". ")
+                append("Call save_memory again with replaces set to the exact old note, or ask the user which one is outdated.")
+            }
             if (result.related.isNotEmpty()) {
                 append("\nRelated older notes still saved: ").append(result.related.joinToString("; ")).append(". ")
                 append("If any of them is now outdated or contradicted, call save_memory again with the same fact and replaces set to that note.")
@@ -965,10 +968,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-            if (result.ambiguous.isNotEmpty()) {
-                append("\nNothing was deleted because the replaces hint matched several notes: ").append(result.ambiguous.joinToString("; ")).append(". ")
-                append("Call save_memory again with replaces set to the exact old note, or ask the user which one is outdated.")
-            }
     /** Marks a connector as needing to be reconnected (or clears the mark) so Connectors can show "Reconnect". */
     private fun setConnectorIssue(id: String, issue: Boolean) {
         _uiState.update { state ->

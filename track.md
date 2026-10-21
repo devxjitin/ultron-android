@@ -276,3 +276,5 @@
 [2026-10-21 15:26] [Claude] [Refactor: moved summarize_latency.py to scripts/, Idea.md to docs/, removed android/track.md; README structure updated]
 [2026-10-21 15:35] [Claude] [Update: Marketplace shows all connectors, Available (not added) first then Added; compile check pass]
 [2026-10-21 16:06] [Claude] [Fix: Round 1 audit - JDK path, Lambda InvokeFunction perm, ambiguous contact call, reminder auth; compile pass]
+[2026-10-21 16:10] [Claude] [Fix: Round 2 audit - corrupt chat history quarantine, safe memory replace, bounded DOCX read; compile pass]
+[2026-10-21 16:17] [Claude] [Fix: Rounds 3-5 audit - chat request ownership+cancel, checked DNS, unique YT dirs, MCP RPC validation, Gmail reply headers, Docs tabs, SSE, no stream delay; compile pass]
