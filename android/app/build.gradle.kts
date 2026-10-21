@@ -104,6 +104,9 @@ android {
     // These JVM tests exercise pure classifiers; Android logging is a no-op.
     testOptions { unitTests.isReturnDefaultValues = true }
 
+    // local.properties is written by Android Studio (with the SDK path) and never ships; newer lint flags its backslashes.
+    lint { disable += "PropertyEscape" }
+
     buildFeatures {
         compose = true
         buildConfig = true

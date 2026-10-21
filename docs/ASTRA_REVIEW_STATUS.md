@@ -21,8 +21,8 @@ P2 = meaningful reliability or feature defect, P3 = cleanup.
 | All P1 findings (F01–F09, F31) | fixed in code; only F08 (durable downloads) has a follow-up piece left |
 
 Current checks: Kotlin compiles, `lintDebug` reports 0 errors, the new Kotlin tests (DOCX, address ranges, memory
-replace, schema, SSE, chat endings and cancel) and the 12 Python Lambda tests pass. The full Android unit suite has not
-been re-run after the changes, and nothing has been tried on a device or deployed.
+replace, schema, SSE, chat endings and cancel) and the 12 Python Lambda tests pass. After Round 17 the full Android unit suite (31 suites, 199 tests) and the 22 Lambda tests were re-run and pass.
+Nothing has been tried on a device or deployed.
 
 ## Rounds and commits
 

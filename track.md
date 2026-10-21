@@ -291,3 +291,5 @@
 [2026-10-21 17:28] [Claude] [Fix: audit round 15 - token purposes + daily budget, AI titles/persona opt-in, reply cap, older-turn digest]
 [2026-10-21 17:43] [Claude] [Fix: audit round 16 - incremental Markdown, indexed chat search with scopes + jump, download foreground service + resume, cache leases]
 [2026-10-21 17:51] [Claude] [Fix: audit round 17 - lint warnings (backup rules, icons, colours, modifier order, autoboxing); deps/AGP left for approval]
+[2026-10-21 17:53] [Claude] [Docs: full Android unit suite (199 tests) and 22 Lambda tests re-run after round 17, all pass]
+[2026-10-21 18:12] [Claude] [Update: Gradle 8.14.6 + AGP 8.13.2; full suite and lint pass]
