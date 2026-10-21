@@ -59,13 +59,21 @@ class MemoryStore(private val context: Context) {
         val replaced = ArrayList<String>()
         var added = false
         var related = emptyList<String>()
+        var ambiguous = emptyList<String>()
         context.memoryDataStore.edit { prefs ->
             var existing = decode(prefs[itemsKey])
             val oldWords = contentWords(replaces.orEmpty())
             if (oldWords.isNotEmpty()) {
-                val (gone, kept) = existing.partition { overlap(oldWords, contentWords(it.text)) >= REPLACE_OVERLAP }
-                replaced += gone.map { it.text }
-                existing = kept
+                // Delete only a single clear match; several equally good matches are left for the model to choose.
+                val scored = existing.map { it to overlap(oldWords, contentWords(it.text)) }.filter { it.second >= REPLACE_OVERLAP }
+                val best = scored.maxOfOrNull { it.second } ?: 0.0
+                val top = scored.filter { it.second == best }
+                if (top.size == 1 && best >= REPLACE_CLEAR_MATCH) {
+                    replaced += top[0].first.text
+                    existing = existing.filterNot { it.id == top[0].first.id }
+                } else if (scored.isNotEmpty()) {
+                    ambiguous = scored.map { it.first.text }.take(3)
+                }
             }
             if (existing.none { it.text.equals(clean, ignoreCase = true) }) {
                 existing = (existing + MemoryItem(UUID.randomUUID().toString(), clean, System.currentTimeMillis()))
@@ -77,7 +85,7 @@ class MemoryStore(private val context: Context) {
                 .filter { newWords.intersect(contentWords(it.text)).size >= 2 }.map { it.text }.take(3)
             prefs[itemsKey] = encode(existing)
         }
-        return SaveResult(added, replaced, related)
+        return SaveResult(added, replaced, related, ambiguous)
     }
 
     private fun contentWords(text: String): Set<String> =
@@ -141,9 +149,11 @@ class MemoryStore(private val context: Context) {
     }
 }
 
-data class SaveResult(val added: Boolean, val replaced: List<String>, val related: List<String>)
+/** [ambiguous] lists older notes that matched the replace hint equally well, so none of them was deleted. */
+data class SaveResult(val added: Boolean, val replaced: List<String>, val related: List<String>, val ambiguous: List<String> = emptyList())
 
 private const val REPLACE_OVERLAP = 0.5
+private const val REPLACE_CLEAR_MATCH = 0.8
 
 /** Lower-cased words of [text]; letters, digits and combining marks count, so Hindi (Devanagari) works too. */
 private fun splitWords(text: String): List<String> =

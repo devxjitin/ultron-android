@@ -328,7 +328,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     // Once per launch, drop saved files of chats that no longer exist.
                     if (!chatAttachmentsPruned) {
                         chatAttachmentsPruned = true
-                        launch(Dispatchers.IO) { chatAttachmentStore.prune(sessions.map { it.id }.toSet()) }
+                        launch(Dispatchers.IO) {
+                            // An unreadable history looks empty; never delete files on that basis.
+                            if (chatHistoryStore.isReadable()) chatAttachmentStore.prune(sessions.map { it.id }.toSet())
+                        }
                     }
                 }
         }
@@ -954,6 +957,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+            if (result.ambiguous.isNotEmpty()) {
+                append("\nNothing was deleted because the replaces hint matched several notes: ").append(result.ambiguous.joinToString("; ")).append(". ")
+                append("Call save_memory again with replaces set to the exact old note, or ask the user which one is outdated.")
+            }
     /** Marks a connector as needing to be reconnected (or clears the mark) so Connectors can show "Reconnect". */
     private fun setConnectorIssue(id: String, issue: Boolean) {
         _uiState.update { state ->
