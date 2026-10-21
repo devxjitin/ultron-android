@@ -250,7 +250,7 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 ├── mcp/                             AWS Lambda servers
 │   ├── google-workspace/            Google Workspace MCP server (REST APIs)
 │   ├── ultron-updates/              Update check and download-link service
-│   └── web-extract/                 Web page content and metadata extraction server
+│   └── web-extract/                 Web page content and metadata extraction server (optional: not deployed and not used by the app yet)
 ├── infra/ultron.yaml                CloudFormation template for the AWS backend
 ├── scripts/
 │   ├── publish-update.ps1           Build and publish an over-the-air update

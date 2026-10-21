@@ -104,7 +104,7 @@ fun UsagePage(
                 val values = dates.map { byDay[it.toString()]?.value(metric) ?: 0.0 }
                 BarChart(values)
                 Spacer(Modifier.height(8.dp))
-                val format = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+                val format = DateTimeFormatter.ofPattern("d MMM", androidx.compose.ui.platform.LocalConfiguration.current.locales[0])
                 Row(Modifier.fillMaxWidth()) {
                     Text(dates.first().format(format), color = AssistantTextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(dates.last().format(format), color = AssistantTextMuted, fontSize = 12.sp)

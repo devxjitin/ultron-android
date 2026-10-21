@@ -100,8 +100,9 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | Optional telephony hardware | Done — `required="false"` |
 | `SelectedPhotoAccess` | Done — Android 14 partial photo access handled |
 | Warnings: backup/transfer rules, unused colours and round icon, monochrome icon, obsolete icon folder, Modifier order, autoboxing, notification constant, free-space note | Done (R17) |
-| Warnings: 11 dependency versions, x86_64 ABI for ChromeOS | Left — need your approval (version upgrades change the build; x86_64 grows the APK) |
-| AGP 8.5.2 tested only up to compileSdk 34, project uses 35 | Left — upgrade as one tested unit |
+| Warnings: dependency versions | Done where possible: Compose BOM 2026.04.01, activity, lifecycle 2.10, core 1.18, datastore, material, security-crypto, play-services-auth, coroutines. The newest lifecycle/core/Compose need AGP 9.1+, which is a separate migration; okhttp 5 and the test libraries stay on 4.x |
+| Warnings: x86_64 ABI for ChromeOS; "use KTX" style hints | Left on purpose — no ChromeOS target (x86_64 would grow the APK); KTX hints are style only |
+| AGP 8.5.2 tested only up to compileSdk 34, project uses 35 | Done — Gradle 8.14.6, AGP 8.13.2, Kotlin 2.3.21, compileSdk 36 (targetSdk stays 35) |
 
 ## Review sections not covered by findings
 
@@ -111,7 +112,7 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 | Import improvements (batched embeddings, dedupe by content hash, checkpoints), offline BM25 fallback, query cache, source links | Left |
 | Shared billable API keys inside the APK; release signing channel documentation | Left |
 | Feature-by-feature UX suggestions (Stop/Retry, reconnect state, reminder list UI, usage labels, TalkBack and font-scale checks) | Left |
-| Dead code and docs | `ToolGroup.WEB` is in use (internet speed test), so nothing to remove. Web-extract Lambda decision and rules-engine decision (F36) left for you |
+| Dead code and docs | `ToolGroup.WEB` is in use (internet speed test), so nothing to remove. Decided: the web-extract Lambda is kept and marked optional in the README (nothing deploys or calls it); the rules engine stays because reminders use it (F36) |
 | Regression tests | Partly done in R11: DOCX cap, address ranges, memory replace, schema, SSE, chat endings and cancel, Lambda handlers. Still missing: corrupt-history quarantine, concurrent notes, Compose draft/navigation tests |
 | Device matrix (API 26/29/33/35+, denied permissions, offline, background, large history, rebooted reminders, OTA signing) | Left — needs a phone |
 | Staging deploy of both Lambdas and `infra/ultron.yaml` | Left — needs AWS access |
@@ -132,5 +133,4 @@ Status: **Done** = fixed in code, **Partial** = fixed in part, the "Left" column
 
 | Round | Content |
 |---|---|
-| 17 (rest) | Dependency and AGP/compileSdk upgrade, ChromeOS ABI, web-extract and rules-engine decisions |
 | 18 | Device and deploy verification (needs a phone and AWS access) |
