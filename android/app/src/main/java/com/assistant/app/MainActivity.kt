@@ -329,7 +329,6 @@ class MainActivity : ComponentActivity() {
                         onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
                         onHomeTapped = { viewModel.onHomeTapped() },
                         onConnectorsTapped = { viewModel.onConnectorsTapped() },
-                        onMarketplaceTapped = { viewModel.onMarketplaceTapped() },
                         onInstallUpdate = { viewModel.onInstallUpdate() },
                         onDismissUpdate = { viewModel.onDismissUpdate() },
                         onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },

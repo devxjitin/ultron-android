@@ -121,11 +121,6 @@ import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-private enum class Category(val label: String) {
-    PRODUCTIVITY("Productivity"), DEVELOPER("Developer"), COMMUNICATION("Communication"),
-    MEDIA("Media & location"), PHONE("Phone"), AUTOMATION("Automation")
-}
-
 /** Extra Android access a connector needs before its tools work. */
 private enum class Access { NONE, NOTIFICATION_ACCESS, ACCESSIBILITY, USAGE_ACCESS }
 
@@ -144,7 +139,6 @@ private class Connector(
     val name: String,
     val description: String,
     val subtitle: String,
-    val category: Category,
     val icon: ImageVector,
     val kind: Kind,
     val tools: List<DeviceTool> = emptyList(),
@@ -163,80 +157,78 @@ private const val PHONE = "On your phone"
 
 /** A phone-side connector: its tools and whether it reaches the chat come from [PhoneConnectors]. */
 private fun phone(
-    id: String, name: String, description: String, category: Category, icon: ImageVector,
+    id: String, name: String, description: String, icon: ImageVector,
     kind: Kind = Kind.Local(), subtitle: String = PHONE
 ) = Connector(
-    id, name, description, subtitle, category, icon, kind, PhoneConnectors.tools(id),
+    id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id),
     automation = PhoneConnectors.surface(id) == Surface.VOICE
 )
 
 private val PhoneCatalog = listOf(
     phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps, light level and an internet speed test.",
-        Category.PHONE, Icons.Outlined.PhoneAndroid),
+        Icons.Outlined.PhoneAndroid),
     phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
-        Category.PHONE, Icons.Outlined.Tune),
+        Icons.Outlined.Tune),
     phone("alarms_notes", "Alarms & notes", "Set alarms, timers and reminders, and keep quick notes on this device.",
-        Category.PRODUCTIVITY, Icons.Outlined.Alarm),
+        Icons.Outlined.Alarm),
     phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
-        Category.PRODUCTIVITY, Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
+        Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
     phone("contacts", "Contacts", "Find people and see their birthdays from your phone's address book.",
-        Category.COMMUNICATION, Icons.Outlined.Contacts, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
+        Icons.Outlined.Contacts, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
     phone("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
-        Category.COMMUNICATION, Icons.Outlined.Notifications, Kind.Local(access = Access.NOTIFICATION_ACCESS)),
+        Icons.Outlined.Notifications, Kind.Local(access = Access.NOTIFICATION_ACCESS)),
     phone("photos", "Photos", "Count and list your recent photos.",
-        Category.MEDIA, Icons.Outlined.PhotoLibrary, Kind.Local(photosPermissions())),
+        Icons.Outlined.PhotoLibrary, Kind.Local(photosPermissions())),
     phone("location", "Location", "Know where you are and get directions.",
-        Category.MEDIA, Icons.Outlined.LocationOn, Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
+        Icons.Outlined.LocationOn, Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
     phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
-        Category.PHONE, Icons.Outlined.QueryStats, Kind.Local(access = Access.USAGE_ACCESS)),
+        Icons.Outlined.QueryStats, Kind.Local(access = Access.USAGE_ACCESS)),
     phone("duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
-        Category.PRODUCTIVITY, Icons.Outlined.Language, Kind.Online, "Free, no sign-in"),
+        Icons.Outlined.Language, Kind.Online, "Free, no sign-in"),
     phone("weather", "Weather", "Current weather and the forecast for where you are or any city.",
-        Category.PRODUCTIVITY, Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
+        Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
     phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
-        Category.MEDIA, Icons.Outlined.PlayCircle),
+        Icons.Outlined.PlayCircle),
     // Automation connectors (voice only).
     phone("calls", "Calls", "Dial a number, call a contact by name and save new contacts.",
-        Category.COMMUNICATION, Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
+        Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
     phone("messages", "Messages", "Send a text message to a number or to a contact by name right away, without opening any screen.",
-        Category.COMMUNICATION, Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS))),
+        Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS))),
     phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, change the wallpaper, use the clipboard and show notifications.",
-        Category.AUTOMATION, Icons.Outlined.Apps),
+        Icons.Outlined.Apps),
     phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
-        Category.AUTOMATION, Icons.Outlined.Explore, Kind.Local(access = Access.ACCESSIBILITY)),
+        Icons.Outlined.Explore, Kind.Local(access = Access.ACCESSIBILITY)),
     phone("screen", "Screen control", "Read what is on screen, tap, type and wait for text. Sends screen text to Gemini.",
-        Category.AUTOMATION, Icons.Outlined.TouchApp, Kind.Local(access = Access.ACCESSIBILITY))
+        Icons.Outlined.TouchApp, Kind.Local(access = Access.ACCESSIBILITY))
 )
 
 private val GitHubConnector = Connector(
     "github", "GitHub", "Ask about your repositories, issues, pull requests and code.",
-    "Sign in with GitHub", Category.DEVELOPER, Icons.Outlined.Code, Kind.GitHub
+    "Sign in with GitHub", Icons.Outlined.Code, Kind.GitHub
 )
 
-private fun googleConnector(service: GoogleService, description: String, category: Category, icon: ImageVector) =
-    Connector(service.id, service.label, description, "Sign in with Google", category, icon, Kind.Google(service))
+private fun googleConnector(service: GoogleService, description: String, icon: ImageVector) =
+    Connector(service.id, service.label, description, "Sign in with Google", icon, Kind.Google(service))
 
 private val GoogleConnectors = listOf(
     googleConnector(GoogleService.CALENDAR, "See your schedule, find a free slot, create and answer events in Google Calendar.",
-        Category.PRODUCTIVITY, Icons.Outlined.CalendarMonth),
+        Icons.Outlined.CalendarMonth),
     googleConnector(GoogleService.GMAIL, "Search your inbox, read and summarize threads, and draft replies.",
-        Category.COMMUNICATION, Icons.Outlined.Mail),
+        Icons.Outlined.Mail),
     googleConnector(GoogleService.DRIVE, "Find, read and upload files in Google Drive.",
-        Category.PRODUCTIVITY, Icons.Outlined.Folder),
+        Icons.Outlined.Folder),
     googleConnector(GoogleService.DOCS, "Read, summarize and edit your Google Docs.",
-        Category.PRODUCTIVITY, Icons.Outlined.Description),
+        Icons.Outlined.Description),
     googleConnector(GoogleService.SHEETS, "Read, analyze and update your Google Sheets.",
-        Category.PRODUCTIVITY, Icons.Outlined.TableChart),
+        Icons.Outlined.TableChart),
     googleConnector(GoogleService.SLIDES, "Read and edit slides in your Google Slides presentations.",
-        Category.PRODUCTIVITY, Icons.Outlined.Slideshow)
+        Icons.Outlined.Slideshow)
 )
 
 private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector + GoogleConnectors
 
 @Composable
 fun ConnectorsPage(
-    /** True for the Marketplace (find and add connectors); false for Connectors (the ones already added). */
-    marketplace: Boolean,
     /** Ids of added connectors whose sign-in stopped working. */
     issues: Set<String>,
     githubLogin: String,
@@ -265,7 +257,7 @@ fun ConnectorsPage(
     }
 
     var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf<Category?>(null) }
+    var automationTab by rememberSaveable { mutableStateOf(false) }
     var setupNeeded by remember { mutableStateOf(false) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -280,7 +272,7 @@ fun ConnectorsPage(
         is Kind.Online -> c.tools.any { it in enabledTools }
     }
 
-    // Evaluated once per change of its inputs: accessGranted() queries the system, and the Marketplace lists the whole catalog.
+    // Evaluated once per change of its inputs: accessGranted() queries the system, and the page lists the whole catalog.
     val connectedIds = remember(resumeTick, enabledTools, githubLogin, googleAccounts) {
         Catalog.filter { isConnected(it) }.map { it.id }.toSet()
     }
@@ -323,11 +315,11 @@ fun ConnectorsPage(
         }
     }
 
-    val matching = Catalog.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
-    // Marketplace: every connector (never automation, which has its own section), filtered by category; the ones still to add come first.
-    // Connectors: Installed (added, voice and chat) and Automation (voice only, always listed so it can be switched on).
-    val shown = if (marketplace) matching.filter { !it.automation && (category == null || it.category == category) }
-    else matching.filter { if (it.automation) true else connected(it) }
+    // Every connector, connected or not, A-Z. Installed holds the voice and chat ones; Automation the voice-only ones.
+    val shown = Catalog
+        .filter { it.automation == automationTab }
+        .filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
+        .sortedBy { it.name.lowercase() }
 
     val detail = detailId?.let { id -> Catalog.firstOrNull { it.id == id } }
     BackHandler(enabled = detail != null) { detailId = null }
@@ -352,20 +344,13 @@ fun ConnectorsPage(
                 c.kind is Kind.Google && c.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[c.kind.service.id]}"
                 else -> c.subtitle
             },
-            connectLabel = if (marketplace) "Add" else "Connect",
+            connectLabel = "Connect",
             onRemove = { disconnecting = c },
-            connectedLabel = if (marketplace) "Added" else "Connected",
+            connectedLabel = "Connected",
             onConnect = { connect(c) },
-            onDisconnect = { if (marketplace) detailId = c.id else disconnecting = c },
+            onDisconnect = { disconnecting = c },
             onOpen = { detailId = c.id }
         )
-    }
-
-    @Composable
-    fun Section(title: String, items: List<Connector>) {
-        if (items.isEmpty()) return
-        SectionHeading(title)
-        items.forEach { Card(it) }
     }
 
     if (detail != null) {
@@ -382,7 +367,7 @@ fun ConnectorsPage(
                 else -> detail.subtitle
             },
             tools = toolLines(detail),
-            connectLabel = if (marketplace) "Add" else "Connect",
+            connectLabel = "Connect",
             onConnect = { connect(detail) },
             onDisconnect = { disconnecting = detail },
             onBack = { detailId = null },
@@ -390,7 +375,7 @@ fun ConnectorsPage(
         )
     } else Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (marketplace) "Marketplace" else "Your connectors", color = AssistantTextPrimary, fontSize = 20.sp,
+            Text("Connectors", color = AssistantTextPrimary, fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }
         TextField(
@@ -411,38 +396,19 @@ fun ConnectorsPage(
             ),
             modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
         )
-        if (marketplace) {
-            val categories = Category.entries.filter { it != Category.AUTOMATION }
-            ChoiceDropdown(
-                options = listOf("all" to "All") + categories.map { it.name to it.label },
-                selectedId = category?.name ?: "all",
-                onSelect = { id -> category = categories.firstOrNull { it.name == id } },
-                modifier = Modifier.padding(vertical = 14.dp)
-            )
-        } else Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip("Installed", !automationTab) { automationTab = false }
+            TabChip("Automation", automationTab) { automationTab = true }
+        }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            if (marketplace) {
-                if (shown.isEmpty()) {
-                    Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
-                } else {
-                    val (added, available) = shown.partition { connected(it) }
-                    Section("Available", available)
-                    Section("Added", added)
-                }
-            } else {
-                val installed = shown.filter { !it.automation }
-                val automation = shown.filter { it.automation }
-                SectionHeading("Installed")
-                if (installed.isEmpty()) {
-                    Text(if (query.isBlank()) "Nothing installed yet. Open Marketplace from the menu to add connectors." else "No installed connector matches your search.",
-                        color = AssistantTextMuted, modifier = Modifier.padding(vertical = 12.dp))
-                }
-                installed.forEach { Card(it) }
-                if (automation.isNotEmpty()) {
-                    SectionHeading("Automation connectors (voice only)")
-                    automation.forEach { Card(it) }
-                }
+            if (automationTab) {
+                Text("These act on the phone itself, so they work in voice only.", color = AssistantTextMuted, fontSize = 13.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
             }
+            if (shown.isEmpty()) {
+                Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
+            }
+            shown.forEach { Card(it) }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -457,7 +423,7 @@ fun ConnectorsPage(
                 Text(
                     when (c.kind) {
                         is Kind.GitHub -> "The saved sign-in is removed from this device. You can connect again any time."
-                        is Kind.Google -> "The account is removed from this app. You can add it again from Marketplace. To fully revoke access, remove the app in your Google account's security settings."
+                        is Kind.Google -> "The account is removed from this app. You can connect it again from this page. To fully revoke access, remove the app in your Google account's security settings."
                         is Kind.Online -> "The assistant stops using this service."
                         is Kind.Local -> "The assistant stops using these tools. Android's own permission or access stays until you remove it in the phone's settings."
                     }
@@ -504,6 +470,21 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
 private fun SectionHeading(text: String) {
     Text(text.uppercase(), color = AssistantTextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 10.dp))
+}
+
+/** One of the two buttons above the connector list (Installed / Automation). */
+@Composable
+private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        Modifier.clip(shape)
+            .background(if (selected) AssistantAccent.copy(alpha = 0.18f) else AssistantFieldBackground)
+            .border(BorderStroke(1.dp, if (selected) AssistantAccent else AssistantOutline), shape)
+            .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 9.dp)
+    ) {
+        Text(label, color = if (selected) AssistantAccent else AssistantTextSecondary, fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+    }
 }
 
 /** Says where a connector works: Voice + Chat, or Voice only (automation). */
