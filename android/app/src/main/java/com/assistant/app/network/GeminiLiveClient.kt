@@ -47,7 +47,7 @@ class GeminiLiveClient(
         fun onTurnComplete() {}
         fun onInterrupted() {}
         /** The model wants to call one or more functions before continuing this turn -- it will
-         *  not speak again until a matching [sendToolResponse] is sent for every call id here. */
+         *  not speak again until a matching [sendToolResponses] is sent for every call id here. */
         fun onToolCall(calls: List<FunctionCall>) {}
         /** The server abandoned the listed calls, normally because the visitor interrupted the
          *  model while a local tool was still running. Their results must not be sent late. */
@@ -353,18 +353,22 @@ class GeminiLiveClient(
         }
     }
 
-    /** Answers a [FunctionCall] the model asked for -- must be sent for every call id in a
-     *  `toolCall` message before the model will speak again this turn. */
-    fun sendToolResponse(id: String, name: String, resultText: String): Boolean {
-        val functionResponse = JSONObject()
-            .put("id", id)
-            .put("name", name)
-            .put("response", JSONObject().put("result", resultText))
+    /** One answer to a [FunctionCall]: its id and name, and the tool's result text. */
+    data class ToolResult(val id: String, val name: String, val resultText: String)
 
-        val message = JSONObject().put(
-            "toolResponse",
-            JSONObject().put("functionResponses", JSONArray().put(functionResponse))
-        )
+    /** Answers the [FunctionCall]s of one `toolCall` message together, in a single `toolResponse`. Sent one at a time,
+     *  a NON_BLOCKING model starts a fresh spoken reply after each answer, so three tools meant three replies. */
+    fun sendToolResponses(results: List<ToolResult>): Boolean {
+        val functionResponses = JSONArray()
+        results.forEach {
+            functionResponses.put(
+                JSONObject()
+                    .put("id", it.id)
+                    .put("name", it.name)
+                    .put("response", JSONObject().put("result", it.resultText))
+            )
+        }
+        val message = JSONObject().put("toolResponse", JSONObject().put("functionResponses", functionResponses))
         return webSocket?.send(message.toString()) == true
     }
 

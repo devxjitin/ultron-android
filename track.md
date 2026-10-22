@@ -303,3 +303,6 @@
 [2026-10-22 09:39] [Claude] [Fix: signature conflict - uninstalled debug-key app, installed OTA 29877360 (ultron key) via adb]
 [2026-10-22 09:51] [Claude] [Fix: light-mode text invisible after dark start (typography colours frozen); publish script no longer hardcodes JDK]
 [2026-10-22 09:55] [Claude] [Update: installed build 29877400 on phone via adb; light-mode text verified readable after dark start]
+[2026-10-22 10:37] [Claude] [Update: Ultron persona darker (voice + chat), casual Hinglish, old defaults migrate]
+[2026-10-22 10:37] [Claude] [Fix: voice tool results ek toolResponse me - 3 baar reply bug]
+[2026-10-22 10:37] [Claude] [Update: installed build 29877501 on phone via adb (ultron key)]
