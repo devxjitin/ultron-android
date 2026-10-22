@@ -21,16 +21,24 @@ data class UsageDay(
     val voiceSeconds: Long = 0,
     val toolCalls: Int = 0,
     /** Tokens by what they were spent on (see [PURPOSE_CHAT]); already part of [inputTokens] and [outputTokens]. */
-    val purposes: Map<String, Long> = emptyMap()
+    val purposes: Map<String, Long> = emptyMap(),
+    /** Typed-chat and helper tokens by the model that spent them (model id -> tokens); part of [inputTokens] and [outputTokens]. */
+    val modelInput: Map<String, Long> = emptyMap(),
+    val modelOutput: Map<String, Long> = emptyMap()
 ) {
     val tokens: Long get() = inputTokens + outputTokens
 
     operator fun plus(other: UsageDay) = UsageDay(
         day, chatMessages + other.chatMessages, inputTokens + other.inputTokens, outputTokens + other.outputTokens,
         voiceSessions + other.voiceSessions, voiceSeconds + other.voiceSeconds, toolCalls + other.toolCalls,
-        (purposes.keys + other.purposes.keys).associateWith { (purposes[it] ?: 0L) + (other.purposes[it] ?: 0L) }
+        (purposes.keys + other.purposes.keys).associateWith { (purposes[it] ?: 0L) + (other.purposes[it] ?: 0L) },
+        merge(modelInput, other.modelInput),
+        merge(modelOutput, other.modelOutput)
     )
 }
+
+private fun merge(a: Map<String, Long>, b: Map<String, Long>) =
+    (a.keys + b.keys).associateWith { (a[it] ?: 0L) + (b[it] ?: 0L) }
 
 /** Counts how much the app is used, per day, on this phone only. Nothing here is ever sent anywhere. */
 class UsageStore(private val context: Context) {
@@ -68,6 +76,8 @@ class UsageStore(private val context: Context) {
                 it.day, JSONObject().put("m", it.chatMessages).put("i", it.inputTokens).put("o", it.outputTokens)
                     .put("vs", it.voiceSessions).put("vt", it.voiceSeconds).put("t", it.toolCalls)
                     .put("p", JSONObject().also { p -> it.purposes.forEach { (name, tokens) -> p.put(name, tokens) } })
+                    .put("mi", JSONObject().also { m -> it.modelInput.forEach { (name, tokens) -> m.put(name, tokens) } })
+                    .put("mo", JSONObject().also { m -> it.modelOutput.forEach { (name, tokens) -> m.put(name, tokens) } })
             )
         }
         return root.toString()
@@ -80,9 +90,13 @@ class UsageStore(private val context: Context) {
             root.keys().asSequence().map { day ->
                 val o = root.getJSONObject(day)
                 val spent = o.optJSONObject("p")
+                val modelIn = o.optJSONObject("mi")
+                val modelOut = o.optJSONObject("mo")
                 UsageDay(
                     day, o.optInt("m"), o.optLong("i"), o.optLong("o"), o.optInt("vs"), o.optLong("vt"), o.optInt("t"),
-                    spent?.keys()?.asSequence()?.associateWith { name -> spent.optLong(name) } ?: emptyMap()
+                    spent?.keys()?.asSequence()?.associateWith { name -> spent.optLong(name) } ?: emptyMap(),
+                    modelIn?.keys()?.asSequence()?.associateWith { name -> modelIn.optLong(name) } ?: emptyMap(),
+                    modelOut?.keys()?.asSequence()?.associateWith { name -> modelOut.optLong(name) } ?: emptyMap()
                 )
             }.sortedBy { it.day }.toList()
         } catch (e: Exception) {
