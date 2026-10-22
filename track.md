@@ -299,3 +299,4 @@
 [2026-10-22 06:56] [Claude] [Fix: connectors connected() ek baar compute, Added tap par detail khule, Section helper]
 [2026-10-22 07:18] [Claude] [Refactor: Docker build hataya (Dockerfile, gradle hook); README/publish script ab local Gradle + Android CLI]
 [2026-10-22 07:49] [Claude] [Update: merged project-structure-correction branch (audit rounds, Kotlin 2.3.21) with Docker removal; compile + unit tests pass]
+[2026-10-22 09:37] [Claude] [Update: published OTA build code 29877360 from main 39bca7c (phone had unpublished local 29877348)]
