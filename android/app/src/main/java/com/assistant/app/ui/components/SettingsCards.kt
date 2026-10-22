@@ -38,45 +38,6 @@ import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-/** One choice in a row of selectable cards: [id] is what gets reported, the rest is what the user sees. */
-class CardOption(val id: String, val title: String, val subtitle: String = "")
-
-/** A white rounded card that turns light blue with blue text when it is the selected choice. */
-@Composable
-fun SelectableCard(option: CardOption, selected: Boolean, width: Dp?, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(18.dp)
-    Column(
-        Modifier.then(if (width != null) Modifier.widthIn(min = width, max = width) else Modifier.fillMaxWidth())
-            .clip(shape)
-            .background(if (selected) AssistantSelectedBg else AssistantSurface, shape)
-            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) AssistantAccent else AssistantOutline), shape)
-            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp)
-    ) {
-        Text(
-            option.title, color = if (selected) AssistantAccent else AssistantTextPrimary, fontSize = 16.sp,
-            fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis
-        )
-        if (option.subtitle.isNotEmpty()) {
-            Spacer(Modifier.height(2.dp))
-            Text(
-                option.subtitle, color = if (selected) AssistantAccent else AssistantTextMuted, fontSize = 13.sp,
-                lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-/** Selectable cards laid out in a horizontally scrolling row, like the voice picker in modern voice apps. */
-@Composable
-fun CardChoiceRow(options: List<CardOption>, selectedId: String, cardWidth: Dp, onSelect: (String) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        options.forEach { SelectableCard(it, it.id == selectedId, cardWidth) { onSelect(it.id) } }
-    }
-}
-
 /** Heading above a group of settings. */
 @Composable
 fun SettingsHeading(text: String) {

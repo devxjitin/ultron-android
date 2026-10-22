@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import com.assistant.app.ui.theme.AppButtonShape
 import com.assistant.app.ui.theme.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,8 +65,8 @@ fun PersonalizationPage(
     PageColumn(modifier) {
         PageLabel("Base style and tone")
         SettingsDropdown(
-            value = personalization.baseStyle.label + if (personalization.baseStyle == BaseStyle.DEFAULT) "" else " · ${personalization.baseStyle.hint}",
-            options = BaseStyle.entries.map { it.name to "${it.label} · ${it.hint}" },
+            value = personalization.baseStyle.label + if (personalization.baseStyle == BaseStyle.DEFAULT) "" else ": ${personalization.baseStyle.hint}",
+            options = BaseStyle.entries.map { it.name to "${it.label}: ${it.hint}" },
             selectedId = personalization.baseStyle.name,
             onSelect = { onChange(personalization.copy(baseStyle = BaseStyle.fromStored(it))) },
             hint = "Sets the overall personality of $assistantName's replies. The options below fine-tune it."
@@ -123,6 +124,7 @@ fun PersonalizationPage(
 
         Spacer(Modifier.height(16.dp))
         Button(
+            shape = AppButtonShape,
             onClick = {
                 onChange(personalization.copy(customInstructions = custom, nickname = nickname, occupation = occupation, aboutMore = aboutMore))
             },
@@ -165,9 +167,11 @@ private fun Divider() {
 private fun TraitRow(title: String, hint: String, level: TraitLevel, onLevel: (TraitLevel) -> Unit) {
     Column {
         Text(title, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-        Text(hint, color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            TraitLevel.entries.forEach { ChoiceChip(it.label, it == level, onClick = { onLevel(it) }) }
-        }
+        Text(hint, color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+        ChoiceDropdown(
+            options = TraitLevel.entries.map { it.name to it.label },
+            selectedId = level.name,
+            onSelect = { id -> onLevel(TraitLevel.entries.first { it.name == id }) }
+        )
     }
 }

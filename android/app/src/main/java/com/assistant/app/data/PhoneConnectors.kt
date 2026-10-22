@@ -31,12 +31,15 @@ object PhoneConnectors {
         PhoneConnector("notifications", Surface.BOTH, listOf(DeviceTool.READ_NOTIFICATIONS)),
         PhoneConnector("app_usage", Surface.BOTH, listOf(DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE)),
         PhoneConnector("duckduckgo", Surface.BOTH, listOf(DeviceTool.WEB_SEARCH)),
+        PhoneConnector("weather", Surface.BOTH, listOf(DeviceTool.GET_WEATHER)),
         PhoneConnector("youtube", Surface.BOTH, listOf(
             DeviceTool.YOUTUBE_SEARCH, DeviceTool.YOUTUBE_INFO, DeviceTool.YOUTUBE_TRANSCRIPT, DeviceTool.YOUTUBE_CHANNEL,
             DeviceTool.YOUTUBE_DOWNLOAD_OPTIONS, DeviceTool.DOWNLOAD_YOUTUBE
         )),
+        // Calls and messages go out right away, so the chat may use them as well as voice.
+        PhoneConnector("calls", Surface.BOTH, listOf(DeviceTool.DIAL, DeviceTool.CALL_CONTACT, DeviceTool.CREATE_CONTACT)),
+        PhoneConnector("messages", Surface.BOTH, listOf(DeviceTool.SEND_SMS, DeviceTool.SEND_SMS_CONTACT)),
         // Automation: these act on the phone itself, so they stay in the voice assistant.
-        PhoneConnector("calls", Surface.VOICE, listOf(DeviceTool.DIAL, DeviceTool.CALL_CONTACT, DeviceTool.CREATE_CONTACT)),
         PhoneConnector("apps_settings", Surface.VOICE, listOf(
             DeviceTool.OPEN_APP, DeviceTool.OPEN_CAMERA, DeviceTool.OPEN_APP_SETTINGS, DeviceTool.OPEN_SETTINGS,
             DeviceTool.SET_WALLPAPER, DeviceTool.GET_CLIPBOARD, DeviceTool.SET_CLIPBOARD, DeviceTool.SHOW_NOTIFICATION

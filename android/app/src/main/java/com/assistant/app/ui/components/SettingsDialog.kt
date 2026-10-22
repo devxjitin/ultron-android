@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import com.assistant.app.ui.theme.AppButtonShape
 import com.assistant.app.ui.theme.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -308,6 +309,7 @@ fun SettingsPage(
                     SectionLabel("Voice agent prompt")
                     Spacer(Modifier.height(8.dp))
                     androidx.compose.material3.OutlinedButton(
+                        shape = AppButtonShape,
                         onClick = onGeneratePromptFromKnowledgeBase,
                         enabled = !isGeneratingPrompt,
                         modifier = Modifier.fillMaxWidth()
@@ -434,6 +436,7 @@ fun SettingsPage(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         androidx.compose.material3.FilledTonalButton(
+                            shape = AppButtonShape,
                             onClick = { showAddDocumentDialog = true },
                             enabled = !isSavingKnowledgeDocument && !knowledgeStoreCorrupt
                         ) {
@@ -442,6 +445,7 @@ fun SettingsPage(
                             Text("Add document")
                         }
                         androidx.compose.material3.OutlinedButton(
+                            shape = AppButtonShape,
                             onClick = onUploadMarkdownFile,
                             enabled = !isSavingKnowledgeDocument && !knowledgeStoreCorrupt
                         ) {
@@ -516,7 +520,7 @@ fun SettingsPage(
                             color = AssistantError,
                             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
                         )
-                        androidx.compose.material3.OutlinedButton(onClick = { confirmingResetKnowledge = true }) {
+                        androidx.compose.material3.OutlinedButton(shape = AppButtonShape, onClick = { confirmingResetKnowledge = true }) {
                             Text("Reset knowledge", color = AssistantError)
                         }
                     } else if (knowledgeDocuments.isEmpty()) {
@@ -590,7 +594,7 @@ fun SettingsPage(
                     containerColor = AssistantAccentFill,
                     contentColor = androidx.compose.ui.graphics.Color.White
                 ),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                shape = AppButtonShape,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp)
             ) { Text("Save changes") }
         }
@@ -844,8 +848,8 @@ private fun GeneralSettingsContent(
         SettingsHeading("Voice")
         SettingsDropdown(
             value = AssistantOptions.voices.firstOrNull { it.name == settings.voiceName }
-                ?.let { "${it.name} · ${it.gender} · ${it.style}" } ?: settings.voiceName,
-            options = AssistantOptions.voices.map { it.name to "${it.name} · ${it.gender} · ${it.style}" },
+                ?.let { "${it.name}, ${it.gender}, ${it.style}" } ?: settings.voiceName,
+            options = AssistantOptions.voices.map { it.name to "${it.name}, ${it.gender}, ${it.style}" },
             selectedId = settings.voiceName,
             onSelect = onVoiceSelected
         )
@@ -857,9 +861,9 @@ private fun GeneralSettingsContent(
             onSelect = onLanguageSelected
         )
         SettingsHeading("Microphone sensitivity")
-        CardChoiceRow(
-            options = MicSensitivity.entries.map { CardOption(it.name, it.label, micHints.getValue(it)) },
-            selectedId = settings.micSensitivity.name, cardWidth = 150.dp,
+        ChoiceDropdown(
+            options = MicSensitivity.entries.map { it.name to "${it.label}: ${micHints.getValue(it)}" },
+            selectedId = settings.micSensitivity.name,
             onSelect = { name -> onMicSensitivitySelected(MicSensitivity.fromStoredValue(name)) }
         )
         Spacer(Modifier.height(22.dp))
@@ -925,11 +929,11 @@ private fun AzureChatSection(azure: AzureConfig, onSave: (AzureConfig) -> Unit) 
 
     SectionLabel("Chat model (Azure)")
     Spacer(Modifier.height(8.dp))
-    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = mode == AzureMode.OFF, onClick = { mode = AzureMode.OFF }, label = { Text("Gemini") })
-        FilterChip(selected = mode == AzureMode.API_KEY, onClick = { mode = AzureMode.API_KEY }, label = { Text("Azure API key") })
-        FilterChip(selected = mode == AzureMode.ENDPOINT, onClick = { mode = AzureMode.ENDPOINT }, label = { Text("Azure OpenAI endpoint") })
-    }
+    ChoiceDropdown(
+        options = listOf(AzureMode.OFF.name to "Gemini", AzureMode.API_KEY.name to "Azure API key", AzureMode.ENDPOINT.name to "Azure OpenAI endpoint"),
+        selectedId = mode.name,
+        onSelect = { id -> mode = AzureMode.valueOf(id) }
+    )
     if (mode != AzureMode.OFF) {
         Spacer(Modifier.height(8.dp))
         if (mode == AzureMode.ENDPOINT) {
@@ -963,11 +967,11 @@ private fun AzureChatSection(azure: AzureConfig, onSave: (AzureConfig) -> Unit) 
             colors = assistantTextFieldColors()
         )
         Spacer(Modifier.height(8.dp))
-        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AZURE_CHAT_MODELS.forEach { (id, label) ->
-                FilterChip(selected = model == id, onClick = { model = id }, label = { Text(label) })
-            }
-        }
+        ChoiceDropdown(
+            options = AZURE_CHAT_MODELS.map { (id, label) -> id to label },
+            selectedId = model,
+            onSelect = { model = it }
+        )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = model,

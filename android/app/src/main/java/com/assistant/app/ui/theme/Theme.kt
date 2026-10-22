@@ -80,10 +80,13 @@ private fun colorSchemeFor(p: AssistantPalette) =
             secondaryContainer = p.selectedBg, onSecondaryContainer = p.accent,
             outline = p.outline, outlineVariant = p.outline,
             error = p.error, onError = White,
-            inverseSurface = p.textPrimary, inverseOnSurface = p.background, inversePrimary = p.accentPink,
+            inverseSurface = p.textPrimary, inverseOnSurface = p.background, inversePrimary = p.accentAlt,
             scrim = Color.Black
         )
     }
+
+/** Every button: a slight corner, about 12% of the button height, instead of a full pill. */
+val AppButtonShape = RoundedCornerShape(6.dp)
 
 // Softer, rounder corners everywhere: text fields, buttons, menus and dialogs all read these.
 private val AssistantShapes = Shapes(

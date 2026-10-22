@@ -34,9 +34,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.BuildConfig
 import com.assistant.app.network.UpdateInfo
+import com.assistant.app.ui.theme.AppButtonShape
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
-import com.assistant.app.ui.theme.AssistantAccentPink
+import com.assistant.app.ui.theme.AssistantAccentAlt
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
@@ -61,16 +62,7 @@ fun AboutPage(
     PageColumn(modifier) {
         PageCard {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    Modifier.size(72.dp).clip(RoundedCornerShape(22.dp))
-                        .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentPink))),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        assistantName.trim().take(1).uppercase().ifEmpty { "A" }, color = Color.White,
-                        fontSize = 32.sp, fontWeight = FontWeight.Bold
-                    )
-                }
+                AppIconTile(72.dp)
                 Spacer(Modifier.height(14.dp))
                 Text(assistantName, color = AssistantTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                 Text(
@@ -115,11 +107,13 @@ fun AboutPage(
                 Text("Downloading ${(downloadProgress * 100).toInt()}%", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
             } else if (updateState == UpdateCheckState.AVAILABLE && availableUpdate != null) {
                 Button(
+                    shape = AppButtonShape,
                     onClick = onUpdateNow, modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = AssistantAccentFill, contentColor = Color.White)
                 ) { Text("Update now") }
             } else {
                 OutlinedButton(
+                    shape = AppButtonShape,
                     onClick = onCheckForUpdates, enabled = updateState != UpdateCheckState.CHECKING, modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(

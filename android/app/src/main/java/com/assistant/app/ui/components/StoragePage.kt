@@ -64,8 +64,8 @@ fun StoragePage(
     PageColumn(modifier) {
         PageLabel("On this phone")
         PageCard {
-            PageRow("Chats", "$chatCount · $messageCount messages")
-            PageRow("Library files", if (libraryFiles == 0) "None" else "$libraryFiles · ${formatBytes(libraryBytes)}")
+            PageRow("Chats", "$chatCount, $messageCount messages")
+            PageRow("Library files", if (libraryFiles == 0) "None" else "$libraryFiles, ${formatBytes(libraryBytes)}")
             PageRow("Memory", "$memoryCount ${if (memoryCount == 1) "fact" else "facts"}")
             PageRow("Knowledge documents", knowledgeCount.toString())
             PageRow("Cache", formatBytes(cacheBytes))

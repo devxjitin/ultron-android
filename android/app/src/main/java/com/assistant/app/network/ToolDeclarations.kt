@@ -11,6 +11,14 @@ import org.json.JSONObject
 /** Upper limit for one typed-chat reply (thinking included), so a runaway answer cannot spend unlimited tokens. */
 internal const val CHAT_REPLY_TOKEN_CAP = 16_384
 
+/** What goes before the text of a chat request that continues [reply] after a tool call: a paragraph break, unless the reply is empty or already ends in one. */
+internal fun roundSeparator(reply: CharSequence): String = when {
+    reply.isBlank() -> ""
+    reply.endsWith("\n\n") -> ""
+    reply.endsWith("\n") -> "\n"
+    else -> "\n\n"
+}
+
 /** Function declarations in the shape Gemini expects, shared by the Live voice session and the typed chat. */
 object ToolDeclarations {
 

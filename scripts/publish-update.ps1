@@ -7,6 +7,8 @@ Needs: Android SDK 35 + JDK (ANDROID_HOME / JAVA_HOME), and `aws login` done on 
 param(
     [string]$Notes = "",
     [string]$VersionName = "1.0.0",
+    # Raise the build number when a phone already runs a higher one (a side-loaded build); Android refuses downgrades.
+    [int]$MinVersionCode = 0,
     [string]$Bucket = "ultron-app-updates-143920986615",
     # Android SDK (the one Android CLI manages) and the system JDK 17+; JAVA_HOME must be set.
     [string]$Sdk = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:USERPROFILE\Android\Sdk" }),
@@ -24,6 +26,7 @@ if (-not (Get-Command aws -ErrorAction SilentlyContinue)) { throw "The AWS CLI (
 $liveCode = $null
 try { $liveCode = [int]((aws s3 cp "s3://$Bucket/latest.json" - --only-show-errors | ConvertFrom-Json).versionCode) } catch { }
 if ($liveCode -and $versionCode -le $liveCode) { $versionCode = $liveCode + 1 }
+if ($versionCode -lt $MinVersionCode) { $versionCode = $MinVersionCode }
 
 Write-Host "Building version $VersionName (code $versionCode)..."
 if (-not ((Test-Path "$Sdk\platforms") -and (Test-Path "$Jdk\bin\java.exe"))) {

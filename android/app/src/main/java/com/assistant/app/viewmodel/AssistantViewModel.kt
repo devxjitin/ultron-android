@@ -152,6 +152,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How long the mic has to stay quiet (after having heard real speech) before assuming
          *  the user is done talking and the assistant is now "thinking". */
         const val SILENCE_TO_PROCESSING_MS = 900L
+        /** Tools that place a phone call; see the voice tool handler. */
+        val CALL_TOOLS = setOf(DeviceTool.DIAL, DeviceTool.CALL_CONTACT)
     }
 
     private val conversationStore = ConversationStore(application)
@@ -237,6 +239,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  finishes, rather than treating the protocol's tool boundary as a completed conversation. */
     private val pendingToolCallIds = mutableSetOf<String>()
     private val pendingToolJobs = mutableMapOf<String, Job>()
+    /** Finished results waiting for the rest of their `toolCall` message, by call id; see [flushToolBatch]. */
+    private val toolBatches = mutableListOf<ToolBatch>()
+
+    /** The calls of one `toolCall` message. Their results go back to the model in one `toolResponse`. */
+    private class ToolBatch(val ids: List<String>) {
+        val results = linkedMapOf<String, GeminiLiveClient.ToolResult>()
+        val traces = mutableMapOf<String, Pair<com.assistant.app.util.LatencyTool?, Long>>()
+    }
     private var awaitingToolContinuation = false
 
     /** A session opened ahead of time (while idle, before the user taps the mic) so the model
@@ -274,13 +284,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val lastUser = last?.userText?.takeIf { it.isNotBlank() }?.let { "You: " + clip(it) }
         val lastReply = last?.assistantText?.takeIf { it.isNotBlank() }?.let { "Ultron: " + clip(it) }
         return when {
-            tool != null -> "Ultron · Working" to "Using tool: " + tool.replace('_', ' ')
-            state == VoiceState.CONNECTING || state == VoiceState.RESETTING -> "Ultron · Connecting" to "Opening a voice session…"
-            state == VoiceState.LISTENING -> "Ultron · Listening" to (lastReply ?: "Waiting for your command.")
-            state == VoiceState.PROCESSING -> "Ultron · Thinking" to (lastUser ?: "Working on your request…")
-            state == VoiceState.SPEAKING -> "Ultron · Speaking" to (lastReply ?: lastUser ?: "Replying…")
-            state == VoiceState.ERROR -> "Ultron · Error" to (_uiState.value.errorMessage ?: "Something went wrong.")
-            else -> "Ultron · Idle" to (lastReply ?: lastUser ?: "Standing by.")
+            tool != null -> "Ultron: Working" to "Using tool: " + tool.replace('_', ' ')
+            state == VoiceState.CONNECTING || state == VoiceState.RESETTING -> "Ultron: Connecting" to "Opening a voice session…"
+            state == VoiceState.LISTENING -> "Ultron: Listening" to (lastReply ?: "Waiting for your command.")
+            state == VoiceState.PROCESSING -> "Ultron: Thinking" to (lastUser ?: "Working on your request…")
+            state == VoiceState.SPEAKING -> "Ultron: Speaking" to (lastReply ?: lastUser ?: "Replying…")
+            state == VoiceState.ERROR -> "Ultron: Error" to (_uiState.value.errorMessage ?: "Something went wrong.")
+            else -> "Ultron: Idle" to (lastReply ?: lastUser ?: "Standing by.")
         }
     }
 
@@ -2361,8 +2371,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 cancelTurnTimeout()
                 if (pendingToolCallIds.isNotEmpty()) {
                     // The model has yielded for local retrieval. Its eventual audio belongs to
-                    // the same user/assistant transcript pair, so do not persist or unmute yet.
+                    // the same user/assistant transcript pair, so do not persist it yet. The filler
+                    // it spoke ("one moment") still drains and hands the mic back, so a slow tool
+                    // does not leave the screen on Speaking with the mic muted.
                     resetIdleTimeout()
+                    audioPlayer?.notifyTurnComplete()
                     return
                 }
                 // awaitingToolContinuation can still be set here: every tool response was already
@@ -2386,7 +2399,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (liveClient !== client) return
                 client.latency.cancel("interrupted")
                 cancelTurnTimeout()
-                cancelPendingToolCalls()
+                // Running tools are not cancelled here: the server names the calls it abandons in
+                // toolCallCancellation. A non-blocking call (a text being sent) is still wanted after
+                // the user talks over the filler, and dropping it lost the result the model waits for.
                 resetIdleTimeout()
                 // Close out the interrupted reply as its own turn so it isn't merged with
                 // whatever the user says next.
@@ -2402,10 +2417,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 resetIdleTimeout()
                 awaitingToolContinuation = true
                 recordUsage(UsageDay("", toolCalls = calls.size))
-                calls.forEach { call ->
-                    // Duplicate delivery of a function-call frame must not execute retrieval
-                    // twice or produce two responses for the same protocol ID.
-                    if (!pendingToolCallIds.add(call.id)) return@forEach
+                // Duplicate delivery of a function-call frame must not execute retrieval
+                // twice or produce two responses for the same protocol ID.
+                val fresh = calls.filter { pendingToolCallIds.add(it.id) }
+                if (fresh.isEmpty()) return
+                val batch = ToolBatch(fresh.map { it.id }).also { toolBatches.add(it) }
+                fresh.forEach { call ->
                     val trace = client.latency.turn()?.tool()
                     announceTool(toolDisplayName(call.name))
                     val job = toolSearchScope?.launch {
@@ -2466,30 +2483,29 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         if (BuildConfig.DEBUG) {
                             Log.d("AssistantLatency", "knowledge-search=${SystemClock.elapsedRealtime() - searchStartedAt}ms")
                         }
+                        // A placed phone call takes over the speaker and mic. The voice session ends so
+                        // its reply does not play into the call and its audio mode does not fight the call's.
+                        if (deviceTool in CALL_TOOLS && resultText.startsWith("status=ok") && liveClient === client) {
+                            stopSession()
+                            showToast("Call started. Tap the mic to talk to Ultron again.", AppNotificationType.INFO)
+                            return@launch
+                        }
                         // A cancellation, new session, or interruption may happen while an HTTP
                         // embedding request is in flight. Never revive an abandoned turn by
                         // sending its result after that point.
                         if (liveClient === client && pendingToolCallIds.contains(call.id)) {
-                            // Arm the model's response watchdog only after network-bound
-                            // retrieval has finished and every tool response has been sent.
-                            val accepted = client.sendToolResponse(call.id, call.name, resultText)
-                            trace?.event("tool_response_sent", mapOf(
-                                "accepted" to accepted, "context_chars" to resultText.length,
-                                "duration_ms" to (SystemClock.elapsedRealtime() - searchStartedAt)
-                            ))
-                            if (!accepted) trace?.failure()
-                            pendingToolCallIds.remove(call.id)
+                            batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, resultText)
+                            batch.traces[call.id] = trace to searchStartedAt
                             pendingToolJobs.remove(call.id)
-                            // Gemini waits for every response in a toolCall message. Start one
-                            // full reply timeout only after the final response is actually sent.
-                            if (accepted && pendingToolCallIds.isEmpty()) startTurnTimeout()
                             clearToolLater(toolDisplayName(call.name))
+                            flushToolBatch(client, batch)
                         }
                     }
                     if (job == null) {
                         pendingToolCallIds.remove(call.id)
                         trace?.failure()
                         clearToolLater(toolDisplayName(call.name))
+                        flushToolBatch(client, batch)
                     } else {
                         pendingToolJobs[call.id] = job
                     }
@@ -2502,6 +2518,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     pendingToolCallIds.remove(id)
                     pendingToolJobs.remove(id)?.cancel()
                 }
+                // The calls left in a batch may all be done now that the cancelled ones no longer count.
+                toolBatches.toList().forEach { flushToolBatch(client, it) }
                 if (pendingToolCallIds.isEmpty()) {
                     awaitingToolContinuation = false
                     _uiState.update { it.copy(activeTool = null) }
@@ -2865,10 +2883,32 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         assistantTextBuffer.clear()
     }
 
+    /** Sends a batch's results once every call in it that is still wanted has one. Gemini waits for every response in a
+     *  toolCall message, so the reply watchdog starts only after the last of them is actually sent. */
+    private fun flushToolBatch(client: GeminiLiveClient, batch: ToolBatch) {
+        val wanted = batch.ids.filter { it in pendingToolCallIds }
+        if (wanted.any { it !in batch.results }) return
+        toolBatches.remove(batch)
+        val results = wanted.mapNotNull { batch.results[it] }
+        if (results.isEmpty()) return
+        val accepted = liveClient === client && client.sendToolResponses(results)
+        val now = SystemClock.elapsedRealtime()
+        results.forEach { result ->
+            val (trace, startedAt) = batch.traces[result.id] ?: (null to now)
+            trace?.event("tool_response_sent", mapOf(
+                "accepted" to accepted, "context_chars" to result.resultText.length, "duration_ms" to (now - startedAt)
+            ))
+            if (!accepted) trace?.failure()
+            pendingToolCallIds.remove(result.id)
+        }
+        if (accepted && pendingToolCallIds.isEmpty()) startTurnTimeout()
+    }
+
     private fun cancelPendingToolCalls() {
         pendingToolJobs.values.forEach { it.cancel() }
         pendingToolJobs.clear()
         pendingToolCallIds.clear()
+        toolBatches.clear()
         awaitingToolContinuation = false
     }
 
@@ -3016,7 +3056,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             // A short interruption (navigation prompt, notification sound): pause the mic and carry on afterwards.
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                if (isSessionActive(_uiState.value.voiceState)) {
+                // A ringing or answered phone call also arrives as a short loss, but it needs the
+                // speaker, mic and audio mode this session holds, so the session ends instead.
+                val phoneCall = audioManager.mode == AudioManager.MODE_RINGTONE || audioManager.mode == AudioManager.MODE_IN_CALL
+                if (phoneCall && isSessionActive(_uiState.value.voiceState)) {
+                    stopSession()
+                } else if (isSessionActive(_uiState.value.voiceState)) {
                     pausedByFocusLoss = true
                     micStreamer?.setMuted(true)
                 }
