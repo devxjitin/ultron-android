@@ -307,3 +307,5 @@
 [2026-10-22 10:37] [Claude] [Update: Ultron persona darker (voice + chat), casual Hinglish, old defaults migrate]
 [2026-10-22 10:37] [Claude] [Fix: voice tool results ek toolResponse me - 3 baar reply bug]
 [2026-10-22 10:37] [Claude] [Update: installed build 29877501 on phone via adb (ultron key)]
+[2026-10-22 11:04] [Claude] [Update: merged indigo theme 7f3668b into dark-persona branch; build + unit tests pass]
+[2026-10-22 11:04] [Claude] [Update: published OTA build 29877601 to AWS (publish script: added -MinVersionCode)]
