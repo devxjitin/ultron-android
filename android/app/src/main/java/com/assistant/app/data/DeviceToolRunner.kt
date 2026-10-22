@@ -638,11 +638,11 @@ class DeviceToolRunner(
                 SmsRules.refund()
                 return "status=failed\nAndroid refused to send the message. No message was sent."
             }
-            val code = withTimeoutOrNull(20_000L) { outcome.await() }
+            val code = withTimeoutOrNull(SMS_CONFIRM_WAIT_MS) { outcome.await() }
             return when (code) {
                 Activity.RESULT_OK -> "status=ok\nMessage sent to $label."
-                null -> "status=unconfirmed\nThe message was handed to the network, but the phone has not confirmed it was sent. " +
-                    "Do not say it was delivered."
+                null -> "status=submitted\nThe message was passed to the phone's messaging service for $label; its confirmation has not arrived. " +
+                    "Say it was sent, but do not say it was delivered."
                 SmsManager.RESULT_ERROR_NO_SERVICE -> "status=failed\nThere is no mobile network, so the message was not sent."
                 SmsManager.RESULT_ERROR_RADIO_OFF -> "status=failed\nAirplane mode or the radio is off, so the message was not sent."
                 else -> "status=failed\nThe message could not be sent (error $code)."
@@ -1092,6 +1092,8 @@ class DeviceToolRunner(
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT
         )
+        /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
+        private const val SMS_CONFIRM_WAIT_MS = 4_000L
         const val MISSING ="status=invalid\nA required value was missing."
     }
 }
