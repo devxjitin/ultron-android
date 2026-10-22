@@ -267,12 +267,18 @@ fun ConnectorsPage(
 
     fun accessGranted(kind: Kind.Local): Boolean = localAccessGranted(context, kind, resumeTick)
 
-    fun connected(c: Connector): Boolean = when (val kind = c.kind) {
+    fun isConnected(c: Connector): Boolean = when (val kind = c.kind) {
         is Kind.GitHub -> githubLogin.isNotEmpty()
         is Kind.Google -> kind.service.id in googleAccounts
         is Kind.Local -> c.tools.any { it in enabledTools } && accessGranted(kind)
         is Kind.Online -> c.tools.any { it in enabledTools }
     }
+
+    // Evaluated once per change of its inputs: accessGranted() queries the system, and the Marketplace lists the whole catalog.
+    val connectedIds = remember(resumeTick, enabledTools, githubLogin, googleAccounts) {
+        Catalog.filter { isConnected(it) }.map { it.id }.toSet()
+    }
+    fun connected(c: Connector): Boolean = c.id in connectedIds
 
     /** An added online connector whose sign-in no longer works: it is shown with Reconnect instead of Connected. */
     fun needsReconnect(c: Connector): Boolean = connected(c) && c.kind !is Kind.Local && c.kind !is Kind.Online && c.id in issues
@@ -334,9 +340,16 @@ fun ConnectorsPage(
             onRemove = { disconnecting = c },
             connectedLabel = if (marketplace) "Added" else "Connected",
             onConnect = { connect(c) },
-            onDisconnect = { if (!marketplace) disconnecting = c },
+            onDisconnect = { if (marketplace) detailId = c.id else disconnecting = c },
             onOpen = { detailId = c.id }
         )
+    }
+
+    @Composable
+    fun Section(title: String, items: List<Connector>) {
+        if (items.isEmpty()) return
+        SectionHeading(title)
+        items.forEach { Card(it) }
     }
 
     if (detail != null) {
@@ -396,14 +409,8 @@ fun ConnectorsPage(
                     Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
                 } else {
                     val (added, available) = shown.partition { connected(it) }
-                    if (available.isNotEmpty()) {
-                        SectionHeading("Available")
-                        available.forEach { Card(it) }
-                    }
-                    if (added.isNotEmpty()) {
-                        SectionHeading("Added")
-                        added.forEach { Card(it) }
-                    }
+                    Section("Available", available)
+                    Section("Added", added)
                 }
             } else {
                 val installed = shown.filter { !it.automation }
