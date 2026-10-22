@@ -323,3 +323,5 @@
 [2026-10-22 15:02] [Claude] [Fix: calls via Telecom, end voice session on call, duplicate contact numbers]
 [2026-10-22 15:02] [Claude] [Fix: chat text after tools, last tool round, malformed call retry]
 [2026-10-22 15:02] [Claude] [Update: OTA build 29877804 published to AWS]
+[2026-10-22 15:26] [Claude] [Add: calendar connector adds events directly and cancel_calendar_event tool, no forms; WRITE_CALENDAR]
+[2026-10-22 15:26] [Claude] [Update: published OTA build code 29877805 (calendar auto add/cancel), not tested on device]

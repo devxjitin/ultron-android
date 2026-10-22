@@ -16,6 +16,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentUris
+import android.content.ContentValues
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -74,6 +75,7 @@ import com.assistant.app.network.WeatherClient
 import com.assistant.app.network.WeatherPlace
 import okhttp3.Request
 import org.json.JSONObject
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
@@ -231,11 +233,14 @@ class DeviceToolRunner(
                     ?: return "status=invalid\nUse date as YYYY-MM-DD and time as HH:MM."
                 val begin = start.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val minutes = (number("duration_minutes") ?: 60).coerceIn(5, 1440)
-                start(Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
-                    .putExtra(CalendarContract.Events.TITLE, title)
-                    .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
-                    .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, begin + minutes * 60_000L))
-                "status=ok\nNew event form opened. The user must press save."
+                missingPermission(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)?.let { return it }
+                addCalendarEvent(title, begin, begin + minutes * 60_000L, text("location"))
+            }
+            DeviceTool.CANCEL_EVENT -> {
+                val title = text("title") ?: return MISSING
+                missingPermission(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)?.let { return it }
+                val day = text("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() ?: return "status=invalid\nUse date as YYYY-MM-DD." }
+                cancelCalendarEvent(title, day)
             }
             DeviceTool.LOCATION -> currentLocation()
             DeviceTool.DIRECTIONS -> {
@@ -700,6 +705,84 @@ class DeviceToolRunner(
         )
     }
 
+    /** Saves the event into the first calendar the user can write to (their own account's before read-only or local ones). */
+    private fun addCalendarEvent(title: String, begin: Long, end: Long, place: String?): String {
+        val resolver = app.contentResolver
+        var calendarId = -1L
+        var rank = Int.MAX_VALUE
+        resolver.query(
+            CalendarContract.Calendars.CONTENT_URI, arrayOf(CalendarContract.Calendars._ID, CalendarContract.Calendars.IS_PRIMARY, CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL, CalendarContract.Calendars.ACCOUNT_TYPE),
+            "${CalendarContract.Calendars.VISIBLE} = 1 AND ${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ?",
+            arrayOf(CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR.toString()), null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val score = (if (cursor.getInt(1) == 1) 0 else 2) + (if (cursor.getString(3) == CalendarContract.ACCOUNT_TYPE_LOCAL) 1 else 0)
+                if (score < rank) { rank = score; calendarId = cursor.getLong(0) }
+            }
+        }
+        if (calendarId < 0) return "status=unavailable\nNo calendar on this phone can be written to. Add a Google account or calendar first."
+        val values = ContentValues().apply {
+            put(CalendarContract.Events.CALENDAR_ID, calendarId)
+            put(CalendarContract.Events.TITLE, title)
+            put(CalendarContract.Events.DTSTART, begin)
+            put(CalendarContract.Events.DTEND, end)
+            put(CalendarContract.Events.EVENT_TIMEZONE, ZoneId.systemDefault().id)
+            place?.takeIf { it.isNotBlank() }?.let { put(CalendarContract.Events.EVENT_LOCATION, it) }
+            put(CalendarContract.Events.HAS_ALARM, 1)
+        }
+        val uri = resolver.insert(CalendarContract.Events.CONTENT_URI, values)
+            ?: return "status=error\nThe calendar did not accept the event."
+        val eventId = ContentUris.parseId(uri)
+        runCatching {
+            resolver.insert(CalendarContract.Reminders.CONTENT_URI, ContentValues().apply {
+                put(CalendarContract.Reminders.EVENT_ID, eventId)
+                put(CalendarContract.Reminders.MINUTES, 10)
+                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+            })
+        }
+        val whenText = java.time.Instant.ofEpochMilli(begin).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("EEE d MMM, hh:mm a", Locale.ENGLISH))
+        return "status=ok\nAdded \"$title\" to the calendar for $whenText, with a reminder 10 minutes before."
+    }
+
+    /** Deletes the one upcoming, non-repeating event whose title matches; says so when none or several match. */
+    private fun cancelCalendarEvent(title: String, day: LocalDate?): String {
+        val zone = ZoneId.systemDefault()
+        val from = day?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis()
+        val until = day?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: (from + 90 * 86_400_000L)
+        val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+        ContentUris.appendId(builder, from)
+        ContentUris.appendId(builder, until)
+        class Match(val eventId: Long, val title: String, val begin: Long, val repeats: Boolean)
+        val matches = mutableListOf<Match>()
+        app.contentResolver.query(
+            builder.build(),
+            arrayOf(CalendarContract.Instances.EVENT_ID, CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN),
+            null, null, "begin ASC"
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(1).orEmpty()
+                if (name.contains(title, ignoreCase = true)) matches.add(Match(cursor.getLong(0), name, cursor.getLong(2), false))
+            }
+        }
+        if (matches.isEmpty()) return "status=not_found\nNo upcoming event matches \"$title\"."
+        val format = DateTimeFormatter.ofPattern("EEE d MMM, hh:mm a", Locale.ENGLISH)
+        fun describe(m: Match) = "${m.title} - " + java.time.Instant.ofEpochMilli(m.begin).atZone(zone).format(format)
+        val events = matches.distinctBy { it.eventId }
+        if (events.size > 1) {
+            return "status=ambiguous\nSeveral events match: ${matches.take(5).joinToString("; ") { describe(it) }}. " +
+                "Ask which one, then call again with its date."
+        }
+        val match = matches.first()
+        val repeating = app.contentResolver.query(
+            ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, match.eventId),
+            arrayOf(CalendarContract.Events.RRULE, CalendarContract.Events.RDATE), null, null, null
+        )?.use { it.moveToFirst() && (!it.getString(0).isNullOrBlank() || !it.getString(1).isNullOrBlank()) } ?: false
+        if (repeating) return "status=unsupported\n\"${match.title}\" repeats, so it is not deleted automatically. Tell the user to remove it in the calendar app."
+        val deleted = app.contentResolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, match.eventId), null, null)
+        return if (deleted > 0) "status=ok\nCancelled ${describe(match)}." else "status=error\nThe calendar did not delete the event."
+    }
+
     private fun calendarConflicts(begin: Long, end: Long): String {
         val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
         ContentUris.appendId(builder, begin)
@@ -1104,7 +1187,7 @@ class DeviceToolRunner(
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
-            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER
+            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L

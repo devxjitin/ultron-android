@@ -24,7 +24,7 @@ object PhoneConnectors {
             DeviceTool.SET_ALARM, DeviceTool.SET_TIMER, DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER,
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE
         )),
-        PhoneConnector("calendar", Surface.BOTH, listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT)),
+        PhoneConnector("calendar", Surface.BOTH, listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT)),
         PhoneConnector("contacts", Surface.BOTH, listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY)),
         PhoneConnector("location", Surface.BOTH, listOf(DeviceTool.LOCATION, DeviceTool.DIRECTIONS)),
         PhoneConnector("photos", Surface.BOTH, listOf(DeviceTool.RECENT_PHOTOS)),
