@@ -312,3 +312,4 @@
 [2026-10-22 13:14] [Claude] [Fix: gradle debug/OTA signing pinned to ~/.ultron-android key; verified cert FB:11:8C]
 [2026-10-22 13:38] [Claude] [Add: Messages connector (voice): auto-send SMS, number/rate checks, SEND_SMS permission]
 [2026-10-22 13:38] [Claude] [Add: Weather connector (voice+chat) via Open-Meteo, place name or GPS; unit tests added]
+[2026-10-22 13:46] [Claude] [Update: published OTA build 29877702 (Messages + Weather connectors) to AWS]
