@@ -68,6 +68,18 @@ android {
     }
 
     signingConfigs {
+        // The phone's installed app is signed with this one key. A different key makes Android refuse every update
+        // ("signatures do not match"), so debug and OTA builds always use it instead of whatever key the machine
+        // would pick by default (~/.android/debug.keystore). Never regenerate or replace this file.
+        val ultronKey = File(System.getProperty("user.home"), ".ultron-android/debug.keystore")
+        if (ultronKey.exists()) {
+            getByName("debug") {
+                storeFile = ultronKey
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         if (hasReleaseSigningConfig) {
             create("release") {
                 storeFile = rootProject.file(releaseStoreFile)

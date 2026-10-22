@@ -309,3 +309,4 @@
 [2026-10-22 10:37] [Claude] [Update: installed build 29877501 on phone via adb (ultron key)]
 [2026-10-22 11:04] [Claude] [Update: merged indigo theme 7f3668b into dark-persona branch; build + unit tests pass]
 [2026-10-22 11:04] [Claude] [Update: published OTA build 29877601 to AWS (publish script: added -MinVersionCode)]
+[2026-10-22 13:14] [Claude] [Fix: gradle debug/OTA signing pinned to ~/.ultron-android key; verified cert FB:11:8C]
