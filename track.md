@@ -335,3 +335,4 @@
 [2026-10-22 17:07] [Claude] [Update: published OTA build 29877813 (usage split, auto titles), not tested on device]
 [2026-10-22 17:12] [Claude] [Update: Usage shows input/output tokens and per-model cost in rupees; removed duplicate tokens list]
 [2026-10-22 17:15] [Claude] [Update: published OTA build 29877822 (usage INR cost), not tested on device]
+[2026-10-22 17:23] [Claude] [Update: model prices checked online (Gemini, gpt-6-luna), USD to INR 97]

@@ -120,7 +120,7 @@ fun UsagePage(
                     }
                 }
                 Text(
-                    "Estimate from list prices at about ₹${USD_TO_INR.toInt()} per US dollar. ~ means the model's own price is not published yet, so a similar model's rate is used.",
+                    "Estimate from public list prices at about ₹${USD_TO_INR.toInt()} per US dollar. Output tokens include thinking tokens.",
                     color = AssistantTextMuted, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp)
                 )
             }

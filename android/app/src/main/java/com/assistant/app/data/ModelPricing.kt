@@ -4,7 +4,7 @@ package com.assistant.app.data
 data class ModelRate(val inputUsd: Double, val outputUsd: Double, val estimated: Boolean = false)
 
 /** Rough rupee conversion for the Usage page; adjust when the exchange rate moves. */
-const val USD_TO_INR = 88.0
+const val USD_TO_INR = 97.0
 
 /**
  * What each model costs. Rates are list prices from public trackers, not read from a bill; models missing
@@ -12,8 +12,10 @@ const val USD_TO_INR = 88.0
  */
 private val MODEL_RATES = mapOf(
     "gpt-5.4-mini" to ModelRate(0.75, 4.50),
-    "gemini-3.5-flash-lite" to ModelRate(0.25, 1.50, estimated = true),
-    "gemini-3.8-flash" to ModelRate(0.50, 3.00, estimated = true)
+    "gemini-3.5-flash-lite" to ModelRate(0.30, 2.50),
+    // Introductory rate; Google lists $1.50 / $7.50 from 2027-01-01.
+    "gemini-3.8-flash" to ModelRate(0.75, 3.75),
+    "gpt-6-luna" to ModelRate(0.10, 0.50)
 )
 
 fun modelRate(model: String): ModelRate? = MODEL_RATES[model]
