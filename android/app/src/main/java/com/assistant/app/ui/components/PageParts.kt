@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -71,20 +72,15 @@ fun PageRow(label: String, value: String) {
     }
 }
 
-/** A pill the user taps to pick one option from a short row. */
+/** A closed field that opens a menu of [options] (id to label); the pick is reported by id. */
 @Composable
-fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(50)
-    Text(
-        text,
-        color = if (selected) AssistantAccent else AssistantTextSecondary,
-        fontSize = 13.sp,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-        modifier = modifier.clip(shape)
-            .background(if (selected) AssistantSelectedBg else AssistantSurface, shape)
-            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) AssistantAccent else AssistantOutline), shape)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp)
-    )
+fun ChoiceDropdown(options: List<Pair<String, String>>, selectedId: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        SettingsDropdown(
+            value = options.firstOrNull { it.first == selectedId }?.second ?: selectedId,
+            options = options, selectedId = selectedId, onSelect = onSelect
+        )
+    }
 }
 
 /** "1.4 MB", "820 KB": a size in bytes in the unit people expect. */

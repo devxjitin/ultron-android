@@ -303,3 +303,4 @@
 [2026-10-22 09:39] [Claude] [Fix: signature conflict - uninstalled debug-key app, installed OTA 29877360 (ultron key) via adb]
 [2026-10-22 09:51] [Claude] [Fix: light-mode text invisible after dark start (typography colours frozen); publish script no longer hardcodes JDK]
 [2026-10-22 09:55] [Claude] [Update: installed build 29877400 on phone via adb; light-mode text verified readable after dark start]
+[2026-10-22 10:13] [Claude] [Update: indigo theme, mono connector icons, dropdowns for choices, 6dp buttons, no dot separators, gradient Home greeting, app icon in drawer/About, icon theme picker; build 29877500 on phone, unit tests pass]

@@ -59,7 +59,7 @@ const val DEFAULT_ASSISTANT_NAME = "Ultron"
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
 private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
-const val DEFAULT_GREETING = "Ultron online. State your command."
+const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
 const val MAX_GREETING_LENGTH = 60
 /** OAuth scopes requested at GitHub sign-in: profile and private repositories. The app only reads. */

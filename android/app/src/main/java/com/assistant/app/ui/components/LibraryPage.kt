@@ -106,12 +106,13 @@ fun LibraryPage(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, key = "filters") {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ChoiceChip("All · ${items.size}", filter == null, onClick = { filterIndex = -1 })
-                LibraryCategory.entries.forEach { category ->
-                    ChoiceChip("${category.label} · ${byCategory[category].orEmpty().size}", filter == category, onClick = { filterIndex = category.ordinal })
-                }
-            }
+            ChoiceDropdown(
+                options = listOf("all" to "All (${items.size})") +
+                    LibraryCategory.entries.map { it.name to "${it.label} (${byCategory[it].orEmpty().size})" },
+                selectedId = filter?.name ?: "all",
+                onSelect = { id -> filterIndex = LibraryCategory.entries.firstOrNull { it.name == id }?.ordinal ?: -1 },
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
         }
         if (items.isEmpty() || (filter != null && byCategory[filter].isNullOrEmpty())) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
@@ -127,7 +128,7 @@ fun LibraryPage(
             if (list.isEmpty()) return@forEach
             if (filter == null) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "header-${category.name}") {
-                    PageLabel("${category.label} · ${list.size}", Modifier.padding(top = 8.dp, bottom = 0.dp))
+                    PageLabel("${category.label} (${list.size})", Modifier.padding(top = 8.dp, bottom = 0.dp))
                 }
             }
             if (category == LibraryCategory.IMAGES || category == LibraryCategory.VIDEOS) {
@@ -148,7 +149,7 @@ fun LibraryPage(
         AlertDialog(
             onDismissRequest = { options = null },
             title = { Text(item.file.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            text = { Text("Sent in \"${item.chatTitle}\" · ${formatBytes(item.file.size.toLong())}") },
+            text = { Text("Sent in \"${item.chatTitle}\", ${formatBytes(item.file.size.toLong())}") },
             confirmButton = {
                 Row {
                     TextButton(onClick = { confirmDelete = item; options = null }) { Text("Delete", color = AssistantError) }
@@ -180,7 +181,7 @@ private fun MediaTile(item: LibraryItem, load: (AttachmentRef) -> ChatAttachment
     }
     Box(
         Modifier.fillMaxWidth().aspectRatio(1f).clip(shape)
-            .background(if (isImage) AssistantSelectedBg else Color(0xFF2A2326))
+            .background(if (isImage) AssistantSelectedBg else Color(0xFF232738))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = Alignment.Center
     ) {
@@ -215,7 +216,7 @@ private fun FileRow(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> U
         Column(Modifier.weight(1f)) {
             Text(item.file.name, color = AssistantTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${formatBytes(item.file.size.toLong())} · ${relativeDate(item.timestampMillis)} · ${item.chatTitle}",
+                "${formatBytes(item.file.size.toLong())}, ${relativeDate(item.timestampMillis)}, ${item.chatTitle}",
                 color = AssistantTextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
