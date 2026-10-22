@@ -338,3 +338,4 @@
 [2026-10-22 17:23] [Claude] [Update: model prices checked online (Gemini, gpt-6-luna), USD to INR 97]
 [2026-10-22 17:27] [Claude] [Update: published OTA build 29877834 (real prices, INR 97), not tested on device]
 [2026-10-22 19:20] [Claude] [Add: default assistant option, idle notification removed; wake word dropped]
+[2026-10-22 19:23] [Claude] [Update: published OTA build 29877950 (default assistant, no idle notification), not tested on device]
