@@ -2,4 +2,6 @@
 <paths>
     <!-- Downloaded app updates, handed to Android's installer. -->
     <cache-path name="updates" path="updates/" />
+    <!-- Chat backups the user shares from Storage. -->
+    <cache-path name="exports" path="exports/" />
 </paths>

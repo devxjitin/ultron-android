@@ -51,6 +51,7 @@ import android.provider.MediaStore
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.view.KeyEvent
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.AssistantNotificationListener
@@ -97,7 +98,8 @@ class DeviceToolRunner(
     }
 
     suspend fun run(tool: DeviceTool, args: JSONObject): String = try {
-        execute(tool, args)
+        // Content providers, usage stats and local files can be slow, so they never run on the main thread.
+        if (tool in BLOCKING_TOOLS) withContext(Dispatchers.IO) { execute(tool, args) } else execute(tool, args)
     } catch (e: ActivityNotFoundException) {
         "status=unavailable\nNo app on this device can do that."
     } catch (e: SecurityException) {
@@ -176,10 +178,17 @@ class DeviceToolRunner(
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val found = findContacts(name, 5)
-                val match = found.firstOrNull() ?: return "status=not_found\nNo contact matches \"$name\"."
-                start(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + match.second.filter { it.isDigit() || it == '+' })))
-                val others = if (found.map { it.first }.distinct().size > 1) " Other matches: " + found.drop(1).joinToString { it.first } else ""
-                "status=ok\nCalling ${match.first} now.$others"
+                if (found.isEmpty()) return "status=not_found\nNo contact matches \"$name\"."
+                // Only call when exactly one number matches; otherwise the user must pick one.
+                val numbers = found.map { it.second.filter { c -> c.isDigit() || c == '+' } }.distinct()
+                if (numbers.size > 1) {
+                    return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to call, " +
+                        "then use dial_number with that number. No call was placed.\n" +
+                        found.joinToString("\n") { "${it.first}: ${it.second}" }
+                }
+                val match = found.first()
+                start(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + numbers.first())))
+                "status=ok\nCalling ${match.first} now."
             }
             DeviceTool.CREATE_CONTACT -> {
                 val name = text("name") ?: return MISSING
@@ -250,6 +259,9 @@ class DeviceToolRunner(
             DeviceTool.SCHEDULE_REMINDER -> {
                 val minutes = number("minutes")?.takeIf { it in 1..1440 } ?: return "status=invalid\nMinutes must be 1-1440."
                 val message = text("message") ?: return MISSING
+                if (!NotificationManagerCompat.from(app).areNotificationsEnabled()) {
+                    return "status=unavailable\nNotifications are turned off for this app, so a reminder could not be shown."
+                }
                 // Saved like any scheduled action, so the reminder survives a restart of the phone.
                 val scheduled = AutomationEngine.schedule(
                     app, DeviceTool.SHOW_NOTIFICATION.functionName,
@@ -259,6 +271,8 @@ class DeviceToolRunner(
                 if (scheduled.startsWith("status=ok")) "status=ok\nReminder set for $minutes minutes from now. The time can be off by a few minutes."
                 else scheduled
             }
+            DeviceTool.LIST_REMINDERS -> AutomationEngine.listScheduled(app)
+            DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelScheduled(app, number("id"))
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
             DeviceTool.READ_NOTIFICATIONS -> readNotifications(number("limit") ?: 10)
@@ -365,10 +379,20 @@ class DeviceToolRunner(
                 calendarConflicts(begin, begin + (number("duration_minutes") ?: 60).coerceIn(5, 1440) * 60_000L)
             }
             DeviceTool.RECENT_PHOTOS -> {
-                val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
-                else Manifest.permission.READ_EXTERNAL_STORAGE
-                missingPermission(permission)?.let { return it }
-                recentPhotos((number("days") ?: 7).coerceIn(1, 90), (number("limit") ?: 5).coerceIn(1, 10))
+                fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
+                var onlySelected = false
+                if (Build.VERSION.SDK_INT >= 34) {
+                    onlySelected = !allowed(Manifest.permission.READ_MEDIA_IMAGES) && allowed(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                    if (!onlySelected) {
+                        missingPermission(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)?.let { return it }
+                    }
+                } else {
+                    val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
+                    else Manifest.permission.READ_EXTERNAL_STORAGE
+                    missingPermission(permission)?.let { return it }
+                }
+                val photos = recentPhotos((number("days") ?: 7).coerceIn(1, 90), (number("limit") ?: 5).coerceIn(1, 10))
+                if (onlySelected) "$photos\nNote: the user shared only some photos with the app, so this may not be everything." else photos
             }
             DeviceTool.SCREEN_TIMEOUT -> {
                 val seconds = number("seconds")?.takeIf { it in 15..1800 } ?: return "status=invalid\nSeconds must be 15-1800."
@@ -745,8 +769,13 @@ class DeviceToolRunner(
     private fun bluetooth(): String {
         val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
             ?: return "status=unavailable\nThis device has no Bluetooth."
+        // Even reading whether Bluetooth is on needs this permission on Android 12+, so it is checked first.
+        if (Build.VERSION.SDK_INT >= 31 &&
+            ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return missingPermission(Manifest.permission.BLUETOOTH_CONNECT).orEmpty()
+        }
         if (!adapter.isEnabled) return "status=ok\nBluetooth is off."
-        if (Build.VERSION.SDK_INT >= 31) missingPermission(Manifest.permission.BLUETOOTH_CONNECT)?.let { return it }
         val names = adapter.bondedDevices.map { it.name ?: "unknown device" }
         return "status=ok\nBluetooth is on. Paired devices: ${if (names.isEmpty()) "none" else names.joinToString()}."
     }
@@ -954,6 +983,13 @@ class DeviceToolRunner(
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
-        const val MISSING = "status=invalid\nA required value was missing."
+        /** Tools that query contacts, calendar, photos, usage stats, notifications, apps or local notes. */
+        val BLOCKING_TOOLS = setOf(
+            DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
+            DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
+            DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
+            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP
+        )
+        const val MISSING ="status=invalid\nA required value was missing."
     }
 }

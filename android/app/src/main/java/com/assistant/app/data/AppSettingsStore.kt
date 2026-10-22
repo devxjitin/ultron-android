@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.assistant.app.util.UserInputException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "assistant_settings")
@@ -141,7 +142,13 @@ data class AssistantSettings(
     /** Number of ranked knowledge chunks returned to the voice model per query. */
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
-    val enabledDeviceTools: Set<DeviceTool> = DeviceTool.entries.toSet()
+    val enabledDeviceTools: Set<DeviceTool> = DeviceTool.entries.toSet(),
+    /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
+    val autoTitleChats: Boolean = false,
+    /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
+    val autoPersonaUpdate: Boolean = false,
+    /** Tokens per day after which the app stops starting chats and automatic model work; 0 means no limit. */
+    val dailyTokenBudget: Long = 0L
 )
 
 /** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
@@ -167,12 +174,17 @@ class AppSettingsStore(private val context: Context) {
     private val occupationKey = stringPreferencesKey("p_occupation")
     private val aboutMoreKey = stringPreferencesKey("p_about")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
+    /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
+    private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
     private val chatPromptKey = stringPreferencesKey("chat_prompt")
     private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val greetingKey = stringPreferencesKey("greeting")
     private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
     private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
+    private val autoTitleKey = booleanPreferencesKey("auto_title_chats")
+    private val autoPersonaUpdateKey = booleanPreferencesKey("auto_persona_update")
+    private val dailyBudgetKey = stringPreferencesKey("daily_token_budget")
 
     val settings: Flow<AssistantSettings> = context.settingsDataStore.data.map { prefs ->
         AssistantSettings(
@@ -216,7 +228,10 @@ class AppSettingsStore(private val context: Context) {
             retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
                 ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
                 ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
-            enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey])
+            enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey]),
+            autoTitleChats = prefs[autoTitleKey] ?: false,
+            autoPersonaUpdate = prefs[autoPersonaUpdateKey] ?: false,
+            dailyTokenBudget = prefs[dailyBudgetKey]?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
         )
     }
 
@@ -279,6 +294,18 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit { it[memoryEnabledKey] = enabled }
     }
 
+    suspend fun setAutoTitleChats(enabled: Boolean) {
+        context.settingsDataStore.edit { it[autoTitleKey] = enabled }
+    }
+
+    suspend fun setAutoPersonaUpdate(enabled: Boolean) {
+        context.settingsDataStore.edit { it[autoPersonaUpdateKey] = enabled }
+    }
+
+    suspend fun setDailyTokenBudget(tokens: Long) {
+        context.settingsDataStore.edit { if (tokens <= 0) it.remove(dailyBudgetKey) else it[dailyBudgetKey] = tokens.toString() }
+    }
+
     suspend fun setBargeInEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[bargeInKey] = enabled }
     }
@@ -296,8 +323,20 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setAutoPersona(persona: String?) {
         val trimmed = persona?.trim()
         context.settingsDataStore.edit {
-            if (trimmed.isNullOrBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = trimmed
+            if (trimmed.isNullOrBlank()) {
+                it.remove(systemPromptKey)
+                it.remove(systemPromptAutoKey)
+            } else {
+                it[systemPromptKey] = trimmed
+                it[systemPromptAutoKey] = true
+            }
         }
+    }
+
+    /** True when the agent prompt is empty or was generated, so a new draft may replace it; a prompt the user wrote is kept. */
+    suspend fun canReplacePersona(): Boolean {
+        val prefs = context.settingsDataStore.data.first()
+        return prefs[systemPromptKey].isNullOrBlank() || prefs[systemPromptAutoKey] == true
     }
 
     /** Applies the Developer form together so its fields never save as unrelated partial edits. */
@@ -317,6 +356,8 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit {
             if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
             if (cleanGreeting.isBlank()) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
+            // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
+            if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
             if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
             if (cleanChatPrompt.isBlank()) it.remove(chatPromptKey) else it[chatPromptKey] = cleanChatPrompt
             if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)

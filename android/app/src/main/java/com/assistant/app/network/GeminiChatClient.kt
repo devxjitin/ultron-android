@@ -1,5 +1,6 @@
 package com.assistant.app.network
 
+import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -43,7 +44,9 @@ interface ChatStreamListener {
  */
 class GeminiChatClient(
     private val apiKey: String,
-    private val model: String = CHAT_MODEL
+    private val model: String = CHAT_MODEL,
+    /** Overridable so tests can point the client at a local server. */
+    private val baseUrl: String = "https://generativelanguage.googleapis.com"
 ) {
 
     companion object {
@@ -121,17 +124,18 @@ class GeminiChatClient(
         val bodyJson = JSONObject()
             .put("contents", contents)
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
-        if (tools != null) bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", tools)))
+            .put("generationConfig", JSONObject().put("maxOutputTokens", CHAT_REPLY_TOKEN_CAP))
+        if (tools != null) bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", ToolDeclarations.withoutPrivateFields(tools))))
         // Key goes in a header, not the URL, so it can't leak through logged URLs.
         val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/$model:streamGenerateContent?alt=sse")
+            .url("$baseUrl/v1beta/models/$model:streamGenerateContent?alt=sse")
             .header("x-goog-api-key", apiKey)
             .post(bodyJson.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         val call = client.newCall(request)
         // Cancelling the coroutine (new chat, app closed) must also drop the open HTTP stream.
-        val onCancel = currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
+        val onCancel = watchCancellation(call)
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
@@ -145,6 +149,7 @@ class GeminiChatClient(
                 val raw = JSONArray()
                 var promptTokens = 0
                 var answerTokens = 0
+                var finishReason: String? = null
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val line = source.readUtf8Line() ?: break
@@ -152,6 +157,11 @@ class GeminiChatClient(
                     val chunk = line.removePrefix("data:").trim()
                     if (chunk.isEmpty()) continue
                     val json = runCatching { JSONObject(chunk) }.getOrNull() ?: continue
+                    json.optJSONObject("error")?.let { throw UserMessageException(it.optString("message").ifBlank { "The model reported an error." }.take(160)) }
+                    json.optJSONObject("promptFeedback")?.optString("blockReason")?.takeIf { it.isNotEmpty() }?.let {
+                        throw UserMessageException("This message was blocked by the model's safety filter ($it).")
+                    }
+                    json.optJSONArray("candidates")?.optJSONObject(0)?.optString("finishReason")?.takeIf { it.isNotEmpty() }?.let { finishReason = it }
                     json.optJSONObject("usageMetadata")?.let {
                         promptTokens = it.optInt("promptTokenCount", promptTokens)
                         answerTokens = it.optInt("candidatesTokenCount") + it.optInt("thoughtsTokenCount")
@@ -179,10 +189,23 @@ class GeminiChatClient(
                     }
                 }
                 if (promptTokens > 0 || answerTokens > 0) listener.onUsage(promptTokens, answerTokens)
+                // Only a clean STOP is a finished reply; anything else must not be saved as one.
+                when (finishReason) {
+                    "STOP" -> {}
+                    null -> throw UserMessageException("The connection ended before the reply was finished. Please try again.")
+                    "MAX_TOKENS" -> throw UserMessageException("The reply was cut off because it reached the length limit.")
+                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY" ->
+                        throw UserMessageException("The reply was stopped by the model's safety filter.")
+                    else -> throw UserMessageException("The reply stopped early ($finishReason).")
+                }
                 return StreamTurn(text.toString(), calls, raw)
             }
+        } catch (e: java.io.IOException) {
+            // A cancelled call fails with an IOException; report it as the cancellation it is.
+            currentCoroutineContext().ensureActive()
+            throw e
         } finally {
-            onCancel?.dispose()
+            onCancel.cancel()
         }
     }
 

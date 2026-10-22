@@ -148,20 +148,44 @@ fun ChatHome(
     assistantName: String,
     greeting: String,
     errorMessage: String?,
-    onSend: (String, List<ChatAttachment>) -> Unit,
+    /** Returns true when the message was accepted; a rejected one (for example no API key) keeps the draft. */
+    onSend: (String, List<ChatAttachment>) -> Boolean,
     onEdit: (Long, String) -> Unit,
     onNotice: (String) -> Unit,
     onVoiceClick: () -> Unit,
+    /** Id of the open saved chat; switching to another chat (or to a new one) drops the unsent draft. */
+    modifier: Modifier = Modifier,
+    chatKey: String? = null,
+    /** Message to bring into view once (a search result); null for the usual "stay at the bottom". */
+    focusIndex: Int? = null,
+    onFocusConsumed: () -> Unit = {},
+    /** The unsent message and files from when this screen was last left, so a trip to another page loses nothing. */
+    initialInput: String = "",
+    initialFiles: List<ChatAttachment> = emptyList(),
+    onDraftSaved: (String, List<ChatAttachment>) -> Unit = { _, _ -> },
     incomingShare: IncomingShare? = null,
-    onShareConsumed: (Long) -> Unit = {},
-    modifier: Modifier = Modifier
+    onShareConsumed: (Long) -> Unit = {}
 ) {
-    var input by rememberSaveable { mutableStateOf("") }
-    val pending = remember { mutableStateListOf<ChatAttachment>() }
+    var input by rememberSaveable { mutableStateOf(initialInput) }
+    val pending = remember { mutableStateListOf<ChatAttachment>().apply { addAll(initialFiles) } }
+    val latestDraftSaved by androidx.compose.runtime.rememberUpdatedState(onDraftSaved)
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { latestDraftSaved(input, pending.toList()) }
+    }
     var previewFile by remember { mutableStateOf<ChatAttachment?>(null) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // A chat's first save gives it an id (null -> id) and keeps the draft; leaving a saved chat clears it.
+    var shownChatKey by remember { mutableStateOf(chatKey) }
+    LaunchedEffect(chatKey) {
+        if (shownChatKey != null && shownChatKey != chatKey) {
+            input = ""
+            pending.clear()
+        }
+        shownChatKey = chatKey
+    }
 
     // Used by the "+" picker and by files shared from other apps.
     val addFiles: suspend (List<Uri>) -> Unit = { uris ->
@@ -202,8 +226,15 @@ fun ChatHome(
             if (moving) followBottom = !more else if (!more) followBottom = true
         }
     }
+    LaunchedEffect(focusIndex, messages.size) {
+        if (focusIndex != null && focusIndex in messages.indices) {
+            followBottom = false
+            listState.scrollToItem(focusIndex)
+            onFocusConsumed()
+        }
+    }
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.isNotEmpty() && focusIndex == null) {
             followBottom = true
             listState.scrollToItem(messages.lastIndex)
             listState.scrollBy(100_000f)
@@ -226,12 +257,13 @@ fun ChatHome(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val send = {
         if ((input.isNotBlank() || pending.isNotEmpty()) && !isSending) {
-            onSend(input, pending.toList())
-            input = ""
-            pending.clear()
-            // Hide the keyboard so the reply is visible as it streams in.
-            focusManager.clearFocus()
-            keyboard?.hide()
+            if (onSend(input, pending.toList())) {
+                input = ""
+                pending.clear()
+                // Hide the keyboard so the reply is visible as it streams in.
+                focusManager.clearFocus()
+                keyboard?.hide()
+            }
         }
     }
 
@@ -623,6 +655,8 @@ private fun mimeFromName(name: String): String = when (name.substringAfterLast('
     else -> ""
 }
 
+private const val MAX_THUMBNAIL_PIXELS = 1_000_000L
+
 /** A small preview of an image (about 200 px), so large photos are never decoded at full size for the UI. */
 internal fun decodeThumbnail(data: ByteArray): android.graphics.Bitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -630,5 +664,11 @@ internal fun decodeThumbnail(data: ByteArray): android.graphics.Bitmap? {
     if (bounds.outWidth <= 0) return null
     var sample = 1
     while (bounds.outWidth / (sample * 2) >= 200 && bounds.outHeight / (sample * 2) >= 200) sample *= 2
-    return BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
+    // Very tall or wide images keep one side short, so also bound the number of decoded pixels.
+    while (bounds.outWidth.toLong() / sample * (bounds.outHeight / sample) > MAX_THUMBNAIL_PIXELS) sample *= 2
+    return try {
+        BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
+    } catch (e: OutOfMemoryError) {
+        null
+    }
 }

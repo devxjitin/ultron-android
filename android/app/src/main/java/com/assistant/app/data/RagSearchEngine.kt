@@ -77,7 +77,7 @@ class RagSearchEngine(
     /** Embeds the query in the current model space; fails fast if stored chunks need migration first. */
     suspend fun search(query: String, trace: LatencyTool? = null): List<String> {
         val loadStartedAt = trace?.now()
-        val chunks = documentStore.allChunks(trace)
+        var (revision, chunks) = documentStore.chunksWithRevision(trace)
         if (requiresEmbeddingMigration(chunks)) {
             // Re-embedding can take minutes, far longer than a live tool call may wait; the caller
             // reports "not ready" and starts the migration in the background.
@@ -95,7 +95,17 @@ class RagSearchEngine(
         val limit = if (isListQuery(query)) {
             minOf(retrievalChunkLimit * 2, MAX_LIST_CHUNK_LIMIT)
         } else retrievalChunkLimit
-        val matches = documentStore.nearestChunks(queryEmbedding, limit, trace)
+        var matches = documentStore.nearestChunks(queryEmbedding, limit, trace)
+        // A document edit can land between loading the chunks and the vector lookup. Reload so keyword ranking
+        // and the final text come from the same revision as the vector matches (the query is not embedded again).
+        var attempts = 0
+        while (matches.revision >= 0 && matches.revision != revision && attempts++ < 3) {
+            val reloaded = documentStore.chunksWithRevision(trace)
+            revision = reloaded.first
+            chunks = reloaded.second
+            matches = documentStore.nearestChunks(queryEmbedding, limit, trace)
+        }
+        if (chunks.isEmpty()) return emptyList()
         val keywordKeys = withContext(Dispatchers.Default) { Bm25Cache.forChunks(chunks).search(query, limit) }
         val fusedKeys = fuseRankings(matches.chunks.map { it.key() }, keywordKeys, limit = limit)
         if (trace != null && rankingStartedAt != null) trace.event("ranking_complete", mapOf(

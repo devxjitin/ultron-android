@@ -43,6 +43,19 @@ class ChatAttachmentStore(context: Context) {
         runCatching { File(root, sessionId).deleteRecursively() }
     }
 
+    /**
+     * Deletes saved files that no turn refers to any more (a trimmed or edited turn drops its reference but not the file).
+     * Files from the last hour are left alone, since a turn being saved may not be recorded yet.
+     */
+    fun pruneUnreferenced(referencedPaths: Set<String>) {
+        val cutoff = System.currentTimeMillis() - 60 * 60_000L
+        root.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
+            dir.listFiles()?.forEach { file ->
+                if ("${dir.name}/${file.name}" !in referencedPaths && file.lastModified() < cutoff) runCatching { file.delete() }
+            }
+        }
+    }
+
     /** Removes the files of chats that no longer exist (deleted, or dropped when the history is full). */
     fun prune(keepSessionIds: Set<String>) {
         root.listFiles()?.filter { it.isDirectory && it.name !in keepSessionIds }?.forEach { runCatching { it.deleteRecursively() } }

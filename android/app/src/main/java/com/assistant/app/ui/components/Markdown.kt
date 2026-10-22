@@ -67,7 +67,8 @@ import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
 /** The block-level pieces of a Markdown text. */
-private sealed interface MdBlock {
+@androidx.compose.runtime.Immutable
+internal sealed interface MdBlock {
     data class Paragraph(val text: String) : MdBlock
     data class Heading(val level: Int, val text: String) : MdBlock
     data class Code(val language: String, val code: String) : MdBlock
@@ -85,37 +86,43 @@ private sealed interface MdBlock {
  */
 @Composable
 fun MarkdownText(text: String, modifier: Modifier = Modifier, color: Color = AssistantTextPrimary) {
-    val blocks = remember(text) { parseMarkdown(text) }
+    // While a reply streams, only the part after the last finished paragraph is parsed again.
+    val parser = remember { IncrementalMarkdown() }
+    val blocks = remember(text) { parser.update(text) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        blocks.forEach { block ->
-            when (block) {
-                is MdBlock.Paragraph -> Text(inline(block.text), color = color, style = BodyStyle)
-                is MdBlock.Heading -> Text(
-                    inline(block.text), color = color,
-                    style = BodyStyle.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = when (block.level) { 1 -> 22.sp; 2 -> 20.sp; 3 -> 18.sp; else -> 16.sp },
-                        lineHeight = when (block.level) { 1 -> 30.sp; 2 -> 28.sp; 3 -> 26.sp; else -> 24.sp }
-                    ),
-                    modifier = Modifier.padding(top = if (block.level <= 2) 6.dp else 2.dp)
-                )
-                is MdBlock.Item -> Row(Modifier.padding(start = (block.depth.coerceAtMost(4) * 18).dp)) {
-                    Text(block.marker, color = AssistantTextSecondary, style = BodyStyle, modifier = Modifier.width(28.dp))
-                    Text(inline(block.text), color = color, style = BodyStyle, modifier = Modifier.weight(1f))
-                }
-                is MdBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                    Box(Modifier.width(3.dp).fillMaxHeight().background(AssistantAccent.copy(alpha = 0.5f)))
-                    Text(
-                        inline(block.text), color = AssistantTextSecondary, style = BodyStyle.copy(fontStyle = FontStyle.Italic),
-                        modifier = Modifier.padding(start = 10.dp)
-                    )
-                }
-                MdBlock.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(AssistantOutline))
-                is MdBlock.Code -> CodeBlock(block.language, block.code)
-                is MdBlock.Table -> TableBlock(block, color)
-                is MdBlock.Picture -> PictureBlock(block)
-            }
+        blocks.forEach { block -> MarkdownBlockView(block, color) }
+    }
+}
+
+/** One block on its own, so a finished block is not drawn again when only the end of the reply changed. */
+@Composable
+private fun MarkdownBlockView(block: MdBlock, color: Color) {
+    when (block) {
+        is MdBlock.Paragraph -> Text(inline(block.text), color = color, style = BodyStyle)
+        is MdBlock.Heading -> Text(
+            inline(block.text), color = color,
+            style = BodyStyle.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = when (block.level) { 1 -> 22.sp; 2 -> 20.sp; 3 -> 18.sp; else -> 16.sp },
+                lineHeight = when (block.level) { 1 -> 30.sp; 2 -> 28.sp; 3 -> 26.sp; else -> 24.sp }
+            ),
+            modifier = Modifier.padding(top = if (block.level <= 2) 6.dp else 2.dp)
+        )
+        is MdBlock.Item -> Row(Modifier.padding(start = (block.depth.coerceAtMost(4) * 18).dp)) {
+            Text(block.marker, color = AssistantTextSecondary, style = BodyStyle, modifier = Modifier.width(28.dp))
+            Text(inline(block.text), color = color, style = BodyStyle, modifier = Modifier.weight(1f))
         }
+        is MdBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(AssistantAccent.copy(alpha = 0.5f)))
+            Text(
+                inline(block.text), color = AssistantTextSecondary, style = BodyStyle.copy(fontStyle = FontStyle.Italic),
+                modifier = Modifier.padding(start = 10.dp)
+            )
+        }
+        MdBlock.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(AssistantOutline))
+        is MdBlock.Code -> CodeBlock(block.language, block.code)
+        is MdBlock.Table -> TableBlock(block, color)
+        is MdBlock.Picture -> PictureBlock(block)
     }
 }
 
@@ -221,7 +228,45 @@ private val tableSeparatorRegex = Regex("""^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?
 private val pictureRegex = Regex("""^!\[([^\]]*)]\((https?://\S+?)\)$""")
 private val taskRegex = Regex("""^\[([ xX])]\s+(.*)$""")
 
-private fun parseMarkdown(source: String): List<MdBlock> {
+/**
+ * Parses a growing text. Everything up to the last blank line outside a code block is final (later text cannot change
+ * how it is read), so it is parsed once and kept; only the unfinished end is parsed again on each update.
+ */
+internal class IncrementalMarkdown {
+    private var finishedText = ""
+    private var finished: List<MdBlock> = emptyList()
+
+    fun update(text: String): List<MdBlock> {
+        if (!text.startsWith(finishedText)) {
+            finishedText = ""
+            finished = emptyList()
+        }
+        val rest = text.substring(finishedText.length)
+        val cut = finishedLength(rest)
+        if (cut > 0) {
+            finished = finished + parseMarkdown(rest.substring(0, cut))
+            finishedText += rest.substring(0, cut)
+        }
+        val tail = text.substring(finishedText.length)
+        return if (tail.isBlank()) finished else finished + parseMarkdown(tail)
+    }
+
+    /** Length of the part of [text] that ends with the last blank line which is not inside an open code fence. */
+    private fun finishedLength(text: String): Int {
+        var offset = 0
+        var inFence = false
+        var cut = 0
+        for (line in text.split('\n')) {
+            val end = offset + line.length + 1 // the line and its newline
+            if (line.trim().startsWith("```")) inFence = !inFence
+            else if (!inFence && line.trim().isEmpty() && end <= text.length) cut = end
+            offset = end
+        }
+        return cut
+    }
+}
+
+internal fun parseMarkdown(source: String): List<MdBlock> {
     val lines = source.replace("\r\n", "\n").split('\n')
     val blocks = mutableListOf<MdBlock>()
     val paragraph = StringBuilder()

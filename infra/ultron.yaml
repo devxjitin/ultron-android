@@ -68,6 +68,9 @@ Resources:
   GooglePermission:
     Type: AWS::Lambda::Permission
     Properties: { FunctionName: !Ref GoogleFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
+  GoogleInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties: { FunctionName: !Ref GoogleFunction, Action: "lambda:InvokeFunction", Principal: "*", InvokedViaFunctionUrl: true }
 
   UpdatesFunction:
     Type: AWS::Lambda::Function
@@ -91,6 +94,9 @@ Resources:
   UpdatesPermission:
     Type: AWS::Lambda::Permission
     Properties: { FunctionName: !Ref UpdatesFunction, Action: "lambda:InvokeFunctionUrl", Principal: "*", FunctionUrlAuthType: NONE }
+  UpdatesInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties: { FunctionName: !Ref UpdatesFunction, Action: "lambda:InvokeFunction", Principal: "*", InvokedViaFunctionUrl: true }
 
 Outputs:
   GoogleMcpUrl: { Value: !Sub "${GoogleUrl.FunctionUrl}${GoogleToken}" }

@@ -222,10 +222,14 @@ class RagDocumentStore(private val context: Context) {
         context.ragDataStore.data.map { prefs -> decodeDocs(prefs[docsKey]) }
             .flowOn(Dispatchers.Default)
 
-    suspend fun allChunks(trace: LatencyTool? = null): List<RagChunk> = withContext(Dispatchers.Default) {
+    suspend fun allChunks(trace: LatencyTool? = null): List<RagChunk> = chunksWithRevision(trace).second
+
+    /** The chunks together with the knowledge revision they belong to, read under one lock. */
+    suspend fun chunksWithRevision(trace: LatencyTool? = null): Pair<Long, List<RagChunk>> = withContext(Dispatchers.Default) {
         chunksMutex.withLock {
             trace?.event("chunk_cache", mapOf("cache" to if (cachedSnapshot == null) "miss" else "hit"))
-            indexCoordinator.snapshot().chunks
+            val snapshot = indexCoordinator.snapshot()
+            snapshot.revision to snapshot.chunks
         }
     }
 
@@ -238,7 +242,7 @@ class RagDocumentStore(private val context: Context) {
                     "Knowledge embeddings still require model migration. Retry the search."
                 }
                 val indexedSource = indexCoordinator.reconcile()
-                RagSearchMatches(objectBoxIndex.nearest(queryEmbedding, limit), indexedSource.documents)
+                RagSearchMatches(objectBoxIndex.nearest(queryEmbedding, limit), indexedSource.documents, indexedSource.revision)
             }
         }
 

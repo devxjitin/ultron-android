@@ -40,6 +40,7 @@ object LinkPreviews {
     private const val MAX_PAGE_BYTES = 300_000
     private const val MAX_IMAGE_BYTES = 2_000_000
     private const val MAX_IMAGE_WIDTH = 800
+    private const val MAX_IMAGE_PIXELS = 1_500_000L
     private const val BROWSER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
 
     // Balanced brackets stay in the address (Wikipedia style), the closing bracket of a Markdown link does not.
@@ -51,6 +52,7 @@ object LinkPreviews {
 
     private val client = HttpClients.shared.newBuilder()
         .followRedirects(false).followSslRedirects(false)
+        .dns(PublicOnlyDns)
         .connectTimeout(6, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS).callTimeout(12, TimeUnit.SECONDS)
         .build()
 
@@ -147,7 +149,13 @@ object LinkPreviews {
         if (bounds.outWidth <= 0) return null
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= MAX_IMAGE_WIDTH) sample *= 2
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        // A very tall image is narrow, so width alone would not bound it; limit the decoded pixels too.
+        while (bounds.outWidth.toLong() / sample * (bounds.outHeight / sample) > MAX_IMAGE_PIXELS) sample *= 2
+        return try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        } catch (e: OutOfMemoryError) {
+            null
+        }
     }
 
     /** What can be shown at once, before anything is fetched: the video thumbnail, or the site name. */
@@ -266,16 +274,37 @@ object LinkPreviews {
         if (url.port != 80 && url.port != 443) return false
         val host = url.host.lowercase()
         if (host == "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false
-        return runCatching { InetAddress.getAllByName(host).all(::isPublicAddress) }.getOrDefault(false)
+        // Names are checked when the connection resolves them (see PublicOnlyDns); only address literals are checked here.
+        val literal = host.contains(':') || host.all { it.isDigit() || it == '.' }
+        return !literal || runCatching { isPublicAddress(InetAddress.getByName(host)) }.getOrDefault(false)
     }
 
-    private fun isPublicAddress(address: InetAddress): Boolean {
-        if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
-            address.isSiteLocalAddress || address.isMulticastAddress
-        ) return false
-        val b = address.address
-        if (b.size == 16 && (b[0].toInt() and 0xFE) == 0xFC) return false // IPv6 unique local
-        if (b.size == 4 && (b[0].toInt() and 0xFF) == 100 && (b[1].toInt() and 0xC0) == 64) return false // carrier-grade NAT
-        return true
+    /** Resolves names for the connection itself and refuses any answer holding a non-public address, so a changing DNS answer cannot slip through. */
+    private object PublicOnlyDns : okhttp3.Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val addresses = okhttp3.Dns.SYSTEM.lookup(hostname)
+            if (!addresses.all(::isPublicAddress)) throw java.net.UnknownHostException("Not a public address: $hostname")
+            return addresses
+        }
     }
+}
+
+/** True for an address on the public internet: not loopback, private, link-local, reserved or documentation ranges. */
+internal fun isPublicAddress(address: InetAddress): Boolean {
+    if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+        address.isSiteLocalAddress || address.isMulticastAddress
+    ) return false
+    val b = address.address
+    if (b.size == 16 && (b[0].toInt() and 0xFE) == 0xFC) return false // IPv6 unique local
+    val b0 = b[0].toInt() and 0xFF
+    val b1 = if (b.size > 1) b[1].toInt() and 0xFF else 0
+    if (b.size == 4) {
+        if (b0 == 0 || b0 >= 240) return false // "this network", reserved and broadcast
+        if (b0 == 100 && (b1 and 0xC0) == 64) return false // carrier-grade NAT
+        if (b0 == 192 && b1 == 0 && (b[2].toInt() and 0xFF) in 0..2) return false // protocol assignments, documentation
+        if (b0 == 198 && (b1 == 18 || b1 == 19)) return false // benchmarking
+        if ((b0 == 198 && b1 == 51 && (b[2].toInt() and 0xFF) == 100) || (b0 == 203 && b1 == 0 && (b[2].toInt() and 0xFF) == 113)) return false // documentation
+    }
+    if (b.size == 16 && b0 == 0x20 && b1 == 0x01 && b[2].toInt() == 0x0d && (b[3].toInt() and 0xFF) == 0xb8) return false // 2001:db8::/32 documentation
+    return true
 }

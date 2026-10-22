@@ -27,8 +27,30 @@ const val MEMORY_PROMPT_BUDGET_CHARS = 4_000
 class MemoryStore(private val context: Context) {
 
     private val itemsKey = stringPreferencesKey("items")
+    /** Notes the assistant removed (forget or replace), newest last, so the user can bring one back. */
+    private val removedKey = stringPreferencesKey("removed_by_assistant")
 
     val items: Flow<List<MemoryItem>> = context.memoryDataStore.data.map { decode(it[itemsKey]) }
+
+    val removedByAssistant: Flow<List<MemoryItem>> = context.memoryDataStore.data.map { decode(it[removedKey]) }
+
+    private fun logRemoved(prefs: androidx.datastore.preferences.core.MutablePreferences, gone: List<MemoryItem>) {
+        if (gone.isEmpty()) return
+        prefs[removedKey] = encode((decode(prefs[removedKey]) + gone).takeLast(MAX_REMOVED_LOG))
+    }
+
+    /** Puts a note the assistant removed back among the saved ones. */
+    suspend fun restore(id: String) {
+        context.memoryDataStore.edit { prefs ->
+            val log = decode(prefs[removedKey])
+            val note = log.firstOrNull { it.id == id } ?: return@edit
+            val existing = decode(prefs[itemsKey])
+            if (existing.none { it.text.equals(note.text, ignoreCase = true) }) {
+                prefs[itemsKey] = encode((existing + note).takeLast(MAX_MEMORY_ITEMS))
+            }
+            prefs[removedKey] = encode(log.filterNot { it.id == id })
+        }
+    }
 
     suspend fun current(): List<MemoryItem> = items.first()
 
@@ -59,14 +81,16 @@ class MemoryStore(private val context: Context) {
         val replaced = ArrayList<String>()
         var added = false
         var related = emptyList<String>()
+        var ambiguous = emptyList<String>()
         context.memoryDataStore.edit { prefs ->
             var existing = decode(prefs[itemsKey])
-            val oldWords = contentWords(replaces.orEmpty())
-            if (oldWords.isNotEmpty()) {
-                val (gone, kept) = existing.partition { overlap(oldWords, contentWords(it.text)) >= REPLACE_OVERLAP }
-                replaced += gone.map { it.text }
-                existing = kept
+            val choice = chooseReplacement(existing, replaces.orEmpty())
+            choice.remove?.let { gone ->
+                replaced += gone.text
+                existing = existing.filterNot { it.id == gone.id }
+                logRemoved(prefs, listOf(gone))
             }
+            if (choice.ambiguous.isNotEmpty()) ambiguous = choice.ambiguous.map { it.text }.take(3)
             if (existing.none { it.text.equals(clean, ignoreCase = true) }) {
                 existing = (existing + MemoryItem(UUID.randomUUID().toString(), clean, System.currentTimeMillis()))
                     .takeLast(MAX_MEMORY_ITEMS)
@@ -77,16 +101,7 @@ class MemoryStore(private val context: Context) {
                 .filter { newWords.intersect(contentWords(it.text)).size >= 2 }.map { it.text }.take(3)
             prefs[itemsKey] = encode(existing)
         }
-        return SaveResult(added, replaced, related)
-    }
-
-    private fun contentWords(text: String): Set<String> =
-        splitWords(text).filter { it.length > 2 && it !in FILLER_WORDS }.toSet()
-
-    /** Share of the smaller word set that also appears in the other. */
-    private fun overlap(a: Set<String>, b: Set<String>): Double {
-        if (a.isEmpty() || b.isEmpty()) return 0.0
-        return a.intersect(b).size.toDouble() / minOf(a.size, b.size)
+        return SaveResult(added, replaced, related, ambiguous)
     }
 
     suspend fun update(id: String, text: String) {
@@ -103,22 +118,31 @@ class MemoryStore(private val context: Context) {
         }
     }
 
-    /** Removes every fact that contains all words of [query] as whole words; returns how many were removed. */
-    suspend fun removeMatching(query: String): Int {
-        val words = splitWords(query).filter { it.length > 1 }
-        if (words.isEmpty()) return 0
-        var removed = 0
+    /**
+     * Forgets the one fact that contains all words of [query]. When several facts match, nothing is removed and they
+     * are returned in [ForgetResult.ambiguous], so the assistant can ask which one the user meant.
+     */
+    suspend fun forget(query: String): ForgetResult {
+        var result = ForgetResult(emptyList(), emptyList())
         context.memoryDataStore.edit { prefs ->
             val existing = decode(prefs[itemsKey])
-            val kept = existing.filterNot { item -> splitWords(item.text).toSet().let { itemWords -> words.all { it in itemWords } } }
-            removed = existing.size - kept.size
-            if (removed > 0) prefs[itemsKey] = encode(kept)
+            val matches = factsMatching(existing, query)
+            if (matches.size == 1) {
+                prefs[itemsKey] = encode(existing.filterNot { it.id == matches[0].id })
+                logRemoved(prefs, matches)
+                result = ForgetResult(matches, emptyList())
+            } else if (matches.size > 1) {
+                result = ForgetResult(emptyList(), matches)
+            }
         }
-        return removed
+        return result
     }
 
     suspend fun clear() {
-        context.memoryDataStore.edit { it.remove(itemsKey) }
+        context.memoryDataStore.edit {
+            it.remove(itemsKey)
+            it.remove(removedKey)
+        }
     }
 
     private fun encode(items: List<MemoryItem>): String = JSONArray().also { array ->
@@ -141,9 +165,46 @@ class MemoryStore(private val context: Context) {
     }
 }
 
-data class SaveResult(val added: Boolean, val replaced: List<String>, val related: List<String>)
+/** [ambiguous] lists older notes that matched the replace hint equally well, so none of them was deleted. */
+private fun contentWords(text: String): Set<String> =
+    splitWords(text).filter { it.length > 2 && it !in FILLER_WORDS }.toSet()
+
+/** Share of the smaller word set that also appears in the other. */
+private fun overlap(a: Set<String>, b: Set<String>): Double {
+    if (a.isEmpty() || b.isEmpty()) return 0.0
+    return a.intersect(b).size.toDouble() / minOf(a.size, b.size)
+}
+
+/** What a replace hint does to the saved notes: [remove] is the one clear match; [ambiguous] lists equal candidates that are all kept. */
+internal class ReplaceChoice(val remove: MemoryItem?, val ambiguous: List<MemoryItem>)
+
+/** Deletes only a single clearly best match; several equally good matches are left for the model to choose between. */
+internal fun chooseReplacement(existing: List<MemoryItem>, hint: String): ReplaceChoice {
+    val hintWords = contentWords(hint)
+    if (hintWords.isEmpty()) return ReplaceChoice(null, emptyList())
+    val scored = existing.map { it to overlap(hintWords, contentWords(it.text)) }.filter { it.second >= REPLACE_OVERLAP }
+    val best = scored.maxOfOrNull { it.second } ?: 0.0
+    val top = scored.filter { it.second == best }
+    return if (top.size == 1 && best >= REPLACE_CLEAR_MATCH) ReplaceChoice(top[0].first, emptyList())
+    else ReplaceChoice(null, scored.map { it.first })
+}
+
+/** [removed] is the fact that was forgotten; [ambiguous] lists several matches that were all kept. */
+class ForgetResult(val removed: List<MemoryItem>, val ambiguous: List<MemoryItem>)
+
+/** Facts that contain every word of [query] as a whole word. */
+internal fun factsMatching(items: List<MemoryItem>, query: String): List<MemoryItem> {
+    val words = splitWords(query).filter { it.length > 1 }
+    if (words.isEmpty()) return emptyList()
+    return items.filter { item -> splitWords(item.text).toSet().let { itemWords -> words.all { it in itemWords } } }
+}
+
+private const val MAX_REMOVED_LOG = 20
+
+data class SaveResult(val added: Boolean, val replaced: List<String>, val related: List<String>, val ambiguous: List<String> = emptyList())
 
 private const val REPLACE_OVERLAP = 0.5
+private const val REPLACE_CLEAR_MATCH = 0.8
 
 /** Lower-cased words of [text]; letters, digits and combining marks count, so Hindi (Devanagari) works too. */
 private fun splitWords(text: String): List<String> =

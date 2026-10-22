@@ -35,14 +35,8 @@ enum class ToolGroup(val label: String) {
 val AUTOMATABLE_TOOL_NAMES = listOf(
     "set_volume", "set_ringer_mode", "vibrate_device", "set_flashlight", "media_control", "set_do_not_disturb",
     "set_clipboard_text", "show_notification", "set_wallpaper", "set_screen_timeout", "set_auto_rotate",
-    "schedule_reminder", "create_note", "lock_screen", "take_screenshot", "get_battery_status", "get_weather", "get_news_headlines",
-    "get_exchange_rate", "get_network_status", "get_current_time", "get_storage_and_memory", "check_website_status"
-)
-
-private fun automationToolParams() = listOf(
-    ToolParam("tool", ToolParamType.STRING, "Which tool to run.", choices = AUTOMATABLE_TOOL_NAMES),
-    ToolParam("arguments", ToolParamType.STRING,
-        "The tool's arguments as a JSON object text, for example {\"state\":\"on\"}. Leave out if it needs none.", required = false)
+    "schedule_reminder", "create_note", "lock_screen", "take_screenshot", "get_battery_status",
+    "get_network_status", "get_current_time", "get_storage_and_memory"
 )
 
 private fun volumeStreamParam() = ToolParam(
@@ -270,6 +264,17 @@ enum class DeviceTool(
             ToolParam("minutes", ToolParamType.INTEGER, "Minutes from now, 1-1440."),
             ToolParam("message", ToolParamType.STRING, "What to remind about.")
         )
+    ),
+
+    LIST_REMINDERS(
+        ToolGroup.ALARMS, "list_reminders", "List reminders", "See the reminders that are still waiting.",
+        "Lists the reminders that have not gone off yet, each with its number and time."
+    ),
+
+    CANCEL_REMINDER(
+        ToolGroup.ALARMS, "cancel_reminder", "Cancel a reminder", "Cancel a waiting reminder.",
+        "Cancels one waiting reminder by its number. Call list_reminders first to find the number.",
+        listOf(ToolParam("id", ToolParamType.INTEGER, "Reminder number from list_reminders."))
     ),
 
     DIAL(

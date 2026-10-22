@@ -105,7 +105,7 @@ The project has three parts:
 - **Streaming replies** with a Markdown renderer (headings, lists, tables, code, links), a typing indicator and a live tool status ("Searching the web…").
 - **Attachments**: images, **videos**, PDFs, **Word (.docx)** and plain-text files. Word text is extracted on the device; images, PDFs and videos are sent to the model directly.
 - **Edit and resend** any of your messages (the chat after it is replaced), **copy** and **share** any reply.
-- **Auto-titles**: the model names each chat after what it was about, and refreshes the title as the topic develops.
+- **Auto-titles**: Gemini names each chat after what it was about, and refreshes the title as the topic develops. Chats that run on Azure are not sent to Gemini, so they keep their first-message title.
 - **Two chat engines**: Gemini (default) or **Azure OpenAI**, switchable in Developer settings.
 - **Tools in chat**: the chat uses every connector that is not voice-only: Google, GitHub, DuckDuckGo, YouTube, and the phone connectors for device info, device controls (flashlight, volume, brightness), alarms and notes, calendar, contacts lookup, location, photos, notifications and app usage. Automation connectors stay in voice.
 
@@ -128,7 +128,7 @@ Every connector is defined in code with its fixed set of tools and a **surface**
 |---|---|---|
 | Device info | time, battery, device info, storage and memory, network, Wi-Fi, Bluetooth, step count, light level, internet speed test | Voice + Chat |
 | Device controls | flashlight, brightness, volume, ringer mode, vibrate, do not disturb, media keys, screen timeout, auto-rotate | Voice + Chat |
-| Alarms and notes | set an alarm, set a timer, schedule a reminder, create, search and delete notes | Voice + Chat |
+| Alarms and notes | set an alarm, set a timer, schedule, list and cancel reminders, create, search and delete notes | Voice + Chat |
 | Calendar | upcoming events, conflict check, create an event | Voice + Chat |
 | Contacts | search a contact, birthdays | Voice + Chat |
 | Location | current location, directions | Voice + Chat |
@@ -161,7 +161,7 @@ Add your own documents (typed text or PDF) and ask about them in chat or by voic
 
 ### Memory
 
-The assistant saves lasting facts you tell it (up to 150 short notes) and recalls them in later chats and calls. You can add, edit, delete or switch memory off, and a changed fact replaces the old one instead of sitting next to its opposite. Saved notes are treated as facts about you, never as instructions.
+The assistant saves lasting facts you tell it (up to 150 short notes) and recalls them in later chats and calls. You can add, edit, delete or switch memory off, and a changed fact replaces the old one instead of sitting next to its opposite. When a replacement matches several notes equally well, nothing is deleted and the assistant is asked to pick the exact one. Saved notes are treated as facts about you, never as instructions.
 
 ### Personalization
 
@@ -228,7 +228,7 @@ memory, knowledge search and connectors.
 | Backend | AWS Lambda (Python 3.12, arm64, Function URLs), S3 with Transfer Acceleration |
 | Build | Gradle (AGP 8.5.2), Android CLI for SDK, install and run, R8 shrinking for release and OTA builds |
 
-Minimum Android version is 8.0 (API 26); the app targets and compiles against API 35.
+Minimum Android version is 8.0 (API 26); the app targets API 35 and compiles against API 36.
 
 ---
 
@@ -249,7 +249,7 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 ├── mcp/                             AWS Lambda servers
 │   ├── google-workspace/            Google Workspace MCP server (REST APIs)
 │   ├── ultron-updates/              Update check and download-link service
-│   └── web-extract/                 Web page content and metadata extraction server
+│   └── web-extract/                 Web page content and metadata extraction server (optional: not deployed and not used by the app yet)
 ├── infra/ultron.yaml                CloudFormation template for the AWS backend
 ├── scripts/
 │   ├── publish-update.ps1           Build and publish an over-the-air update
@@ -267,11 +267,11 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 ### Prerequisites
 
 - A Google AI Studio **Gemini API key** (voice, chat and knowledge base all use it).
-- **JDK 17 or newer** and the **Android SDK** (platform 35, build-tools 35.0.0 and 34.0.0), set up with the Android CLI (`android`). Set `ANDROID_HOME` to the SDK folder.
+- **JDK 17 or newer** and the **Android SDK** (platform 36, build-tools 36.0.0), set up with the Android CLI (`android`). Set `ANDROID_HOME` to the SDK folder.
 - An Android phone with USB or wireless debugging, or an emulator, for installing the debug build.
 
 ```bash
-android sdk install platforms/android-35 build-tools/35.0.0 build-tools/34.0.0 platform-tools
+android sdk install platforms/android-36 build-tools/36.0.0 platform-tools
 android info          # prints the SDK location and connected devices
 ```
 
@@ -405,7 +405,7 @@ UI changes are checked by installing a build on a phone and walking through the 
 - Attachments are limited to **10 MB per file and 12 MB per message**, with up to five files at a time.
 - When the **Azure OpenAI** chat engine is active, videos are not analysed (the model is told a video was attached); Gemini handles them.
 - **Word** support covers `.docx`; the older binary `.doc` format is not read.
-- Token counts are recorded for typed chat only; voice usage is measured in time.
+- Token counts cover typed chat and the helper calls around it (chat titles, agent prompt drafts, PDF formatting); voice usage is measured in time, not tokens. Saved chats are capped at 50 conversations of 200 turns each, and the least recently used one is dropped first.
 - Screen reading and some phone-control tools depend on permissions Android may restrict for sideloaded apps.
 
 ---

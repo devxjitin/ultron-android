@@ -3,6 +3,7 @@ package com.assistant.app.network
 import com.assistant.app.data.AzureConfig
 import com.assistant.app.data.AzureMode
 import com.assistant.app.data.azureBaseUrl
+import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -89,6 +90,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
             .put("model", config.model)
             .put("messages", conversation)
             .put("stream", true)
+            .put("max_completion_tokens", CHAT_REPLY_TOKEN_CAP)
             .put("stream_options", JSONObject().put("include_usage", true))
         if (tools != null) {
             body.put("tools", tools)
@@ -102,7 +104,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
             .build()
 
         val call = client.newCall(request)
-        val onCancel = currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
+        val onCancel = watchCancellation(call)
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
@@ -117,13 +119,19 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                 val arguments = sortedMapOf<Int, StringBuilder>()
                 var promptTokens = 0
                 var answerTokens = 0
+                var finishReason: String? = null
+                var done = false
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val line = source.readUtf8Line() ?: break
                     if (!line.startsWith("data:")) continue
                     val chunk = line.removePrefix("data:").trim()
-                    if (chunk.isEmpty() || chunk == "[DONE]") continue
+                    if (chunk == "[DONE]") { done = true; continue }
+                    if (chunk.isEmpty()) continue
                     val json = runCatching { JSONObject(chunk) }.getOrNull() ?: continue
+                    json.optJSONObject("error")?.let { throw UserMessageException(it.optString("message").ifBlank { "The model reported an error." }.take(160)) }
+                    val choice = json.optJSONArray("choices")?.optJSONObject(0)
+                    if (choice != null && !choice.isNull("finish_reason")) choice.optString("finish_reason").takeIf { it.isNotEmpty() }?.let { finishReason = it }
                     json.optJSONObject("usage")?.let {
                         promptTokens = it.optInt("prompt_tokens", promptTokens)
                         answerTokens = it.optInt("completion_tokens", answerTokens)
@@ -148,10 +156,22 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                     ToolCall(ids[index] ?: "call_$index", names.getValue(index), arguments[index]?.toString().orEmpty())
                 }
                 if (promptTokens > 0 || answerTokens > 0) listener.onUsage(promptTokens, answerTokens)
+                // Only a clean stop is a finished reply; anything else must not be saved as one.
+                when (finishReason) {
+                    "stop", "tool_calls", "function_call" -> {}
+                    null -> if (!done) throw UserMessageException("The connection ended before the reply was finished. Please try again.")
+                    "length" -> throw UserMessageException("The reply was cut off because it reached the length limit.")
+                    "content_filter" -> throw UserMessageException("The reply was stopped by the content filter.")
+                    else -> throw UserMessageException("The reply stopped early ($finishReason).")
+                }
                 return StreamTurn(text.toString(), finished)
             }
+        } catch (e: java.io.IOException) {
+            // A cancelled call fails with an IOException; report it as the cancellation it is.
+            currentCoroutineContext().ensureActive()
+            throw e
         } finally {
-            onCancel?.dispose()
+            onCancel.cancel()
         }
     }
 
@@ -190,7 +210,9 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                 .put("description", declaration.optString("description"))
             function.put(
                 "parameters",
-                declaration.optJSONObject("parameters")?.let { lowerCaseTypes(it) as JSONObject }
+                // A connector tool's own JSON Schema is sent unchanged; only the app's own tools need the type conversion.
+                declaration.optJSONObject(ToolDeclarations.ORIGINAL_SCHEMA_KEY)
+                    ?: declaration.optJSONObject("parameters")?.let { lowerCaseTypes(it) as JSONObject }
                     ?: JSONObject().put("type", "object").put("properties", JSONObject())
             )
             result.put(JSONObject().put("type", "function").put("function", function))

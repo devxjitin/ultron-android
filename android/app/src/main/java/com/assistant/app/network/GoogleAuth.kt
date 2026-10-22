@@ -56,6 +56,11 @@ object GoogleAuth {
         Outcome.Failed(e.message ?: "Google sign-in was cancelled.")
     }
 
+    /** Tells Google Play services to forget a token Google rejected, so the next request returns a new one. */
+    suspend fun discardToken(context: Context, accessToken: String) = withContext(Dispatchers.IO) {
+        runCatching { com.google.android.gms.auth.GoogleAuthUtil.clearToken(context, accessToken) }
+    }
+
     /** The signed-in account's email address, read with the access token; null if Google does not say. */
     suspend fun fetchEmail(accessToken: String): String? = withContext(Dispatchers.IO) {
         runCatching {

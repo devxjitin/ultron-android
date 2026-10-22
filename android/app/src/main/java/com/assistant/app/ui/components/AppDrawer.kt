@@ -110,13 +110,13 @@ fun AppDrawerContent(
     selected: NavTab,
     assistantName: String,
     onSelect: (NavTab) -> Unit,
+    modifier: Modifier = Modifier,
     chats: List<ChatSession> = emptyList(),
     activeChatId: String? = null,
     onOpenChat: (String) -> Unit = {},
     onDeleteChat: (String) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeModeChange: (ThemeMode) -> Unit = {},
-    modifier: Modifier = Modifier
+    onThemeModeChange: (ThemeMode) -> Unit = {}
 ) {
     var chatToDelete by remember { mutableStateOf<ChatSession?>(null) }
     chatToDelete?.let { chat ->

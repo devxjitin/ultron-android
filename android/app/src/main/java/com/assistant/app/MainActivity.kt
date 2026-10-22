@@ -216,7 +216,8 @@ class MainActivity : ComponentActivity() {
             var askedOnStart by rememberSaveable { mutableStateOf(false) }
             LaunchedEffect(notificationPermissionHandled) {
                 if (!notificationPermissionHandled) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    // The literal avoids an API 33 field reference; before Android 13 the launcher answers at once.
+                    notificationPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
                     return@LaunchedEffect
                 }
                 if (!askedOnStart && !micGranted) {
@@ -311,6 +312,7 @@ class MainActivity : ComponentActivity() {
                         onMicTapped = { viewModel.onMicTapped() },
                         onMuteToggled = { viewModel.onMuteToggled() },
                         onChatSend = { text, files -> viewModel.onChatSend(text, files) },
+                        onChatDraftSaved = { text, files -> viewModel.onChatDraftSaved(text, files) },
                         onChatEdit = { id, text -> viewModel.onChatEdit(id, text) },
                         onChatNew = { viewModel.onChatNew() },
                         onChatNotice = { viewModel.onChatNotice(it) },
@@ -342,13 +344,23 @@ class MainActivity : ComponentActivity() {
                         onLibraryDelete = { viewModel.onLibraryDelete(it) },
                         onClearLibraryFiles = { viewModel.onClearLibraryFiles() },
                         onClearCache = { viewModel.onClearCache() },
+                        onExportChats = { viewModel.onExportChats() },
+                        onExportUnreadableChats = { viewModel.onExportUnreadableChats() },
+                        onDiscardUnreadableChats = { viewModel.onDiscardUnreadableChats() },
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
+                        onOpenChatAt = { id, turn -> viewModel.onOpenChat(id, turn) },
+                        onChatFocusConsumed = { viewModel.onChatFocusConsumed() },
+                        onAutoTitleToggled = { viewModel.onAutoTitleToggled(it) },
+                        onAutoPersonaToggled = { viewModel.onAutoPersonaToggled(it) },
+                        onDailyBudgetChanged = { viewModel.onDailyBudgetChanged(it) },
+                        onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
                         onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
                         onClearMemory = { viewModel.onClearMemory() },
+                        onRestoreMemory = { viewModel.onRestoreMemory(it) },
                         onClearAllChats = { viewModel.onClearAllChats() },
                         onClearChatsAndMemory = { viewModel.onClearChatsAndMemory() },
                         onStartGithubSignIn = { viewModel.onStartGithubSignIn() },
