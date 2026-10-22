@@ -8,9 +8,9 @@ param(
     [string]$Notes = "",
     [string]$VersionName = "1.0.0",
     [string]$Bucket = "ultron-app-updates-143920986615",
-    # Android SDK (the one Android CLI manages) and a JDK; both are read from the environment when set.
+    # Android SDK (the one Android CLI manages) and the system JDK 17+; JAVA_HOME must be set.
     [string]$Sdk = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:USERPROFILE\Android\Sdk" }),
-    [string]$Jdk = $(if ($env:JAVA_HOME) { $env:JAVA_HOME } else { (Join-Path $env:USERPROFILE "rea_tools\jdk-21.0.12.1+1") })
+    [string]$Jdk = $env:JAVA_HOME
 )
 $ErrorActionPreference = "Stop"
 $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
