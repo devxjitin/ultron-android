@@ -327,3 +327,4 @@
 [2026-10-22 15:26] [Claude] [Update: published OTA build code 29877805 (calendar auto add/cancel), not tested on device]
 [2026-10-22 15:34] [Claude] [Fix: build 29877805 was from stale branch (red theme); rebased on main, published 29877806 with indigo theme + calendar]
 [2026-10-22 15:35] [Claude] [Fix: publish script refuses stale checkouts/dirty tree (stops red-theme builds)]
+[2026-10-22 15:46] [Claude] [Remove: Marketplace; Connectors lists all connectors A-Z with Installed/Automation buttons]

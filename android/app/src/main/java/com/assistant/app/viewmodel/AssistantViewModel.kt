@@ -771,7 +771,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (youtubeLink != null) {
             onChatNew()
             if (DeviceTool.YOUTUBE_INFO !in current.settings.enabledDeviceTools) {
-                showToast("Add the YouTube connector from Marketplace so Ultron can read and download videos.", AppNotificationType.ERROR)
+                showToast("Connect the YouTube connector in Connectors so Ultron can read and download videos.", AppNotificationType.ERROR)
             }
         } else {
             if (current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) stopSession()
@@ -972,22 +972,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(showSettings = true, adminPage = page) }
     }
 
-    /** Opens the Connectors page (the connectors added so far); ends any live session first, like the other full pages. */
-    fun onConnectorsTapped() = openConnectors(marketplace = false)
-
-    /** Opens the Marketplace, where every available connector is found and added. */
-    fun onMarketplaceTapped() = openConnectors(marketplace = true)
-
-    private fun openConnectors(marketplace: Boolean) {
+    /** Opens the Connectors page (every connector, connected or not); ends any live session first, like the other full pages. */
+    fun onConnectorsTapped() {
         val current = _uiState.value
         if (current.settings.githubLogin.isNotEmpty()) viewModelScope.launch { refreshGithubTools() }
         GoogleService.entries.filter { it.id in current.settings.googleAccounts }.forEach { viewModelScope.launch { refreshGoogleTools(it) } }
         if (current.showSettings || current.showMemory) {
-            _uiState.update { it.copy(showSettings = false, showMemory = false, showConnectors = true, connectorsMarketplace = marketplace) }
+            _uiState.update { it.copy(showSettings = false, showMemory = false, showConnectors = true) }
             return
         }
         if (current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) stopSession()
-        _uiState.update { it.copy(showConnectors = true, connectorsMarketplace = marketplace) }
+        _uiState.update { it.copy(showConnectors = true) }
     }
 
     /** Opens the Memory page; ends any live session first, like the other full pages. */

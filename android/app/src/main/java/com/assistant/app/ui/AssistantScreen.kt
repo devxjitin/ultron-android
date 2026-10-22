@@ -117,7 +117,6 @@ fun AssistantScreen(
     onKnowledgeTapped: () -> Unit = {},
     onHomeTapped: () -> Unit = {},
     onConnectorsTapped: () -> Unit = {},
-    onMarketplaceTapped: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
     onDismissUpdate: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
@@ -196,7 +195,7 @@ fun AssistantScreen(
                     AdminPage.USAGE -> NavTab.USAGE
                     AdminPage.STORAGE -> NavTab.STORAGE
                 }
-            uiState.showConnectors -> if (uiState.connectorsMarketplace) NavTab.MARKETPLACE else NavTab.CONNECTORS
+            uiState.showConnectors -> NavTab.CONNECTORS
             uiState.showMemory -> NavTab.MEMORY
             else -> NavTab.HOME
         }
@@ -254,7 +253,6 @@ fun AssistantScreen(
                         NavTab.STORAGE -> guardedNav(onStorageTapped)
                         NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
-                        NavTab.MARKETPLACE -> guardedNav(onMarketplaceTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
                         NavTab.SETTINGS -> guardedNav(onSettingsTapped)
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
@@ -404,7 +402,6 @@ fun AssistantScreen(
 
         if (uiState.showConnectors) {
             ConnectorsPage(
-                marketplace = uiState.connectorsMarketplace,
                 issues = uiState.connectorIssues,
                 githubLogin = uiState.settings.githubLogin,
                 deviceCode = uiState.githubDeviceCode,

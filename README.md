@@ -117,12 +117,12 @@ When a chat reply is finished, every link in it (up to ten) gets a card: one or 
 
 The menu ends with an **Appearance** picker: System (follows the phone), Light or Dark. The choice is saved and applied before the first frame. Both palettes are contrast-checked so text stays readable on every surface.
 
-### Connectors and Marketplace
+### Connectors
 
-Every connector is defined in code with its fixed set of tools and a **surface**: *Voice + Chat*, or *Voice only* (automation). Nothing is installed on a fresh install. The sidebar has two places:
+Every connector is defined in code with its fixed set of tools and a **surface**: *Voice + Chat*, or *Voice only* (automation). Nothing is switched on in a fresh install. The sidebar has one place, **Connectors**, which lists every connector, connected or not, in A-Z order, with two buttons at the top:
 
-- **Marketplace** lists every connector that is not installed yet. Adding one turns its tools on (and asks for the Android permission or access it needs, or the sign-in).
-- **Connectors** has two sections. **Installed** shows the added Voice + Chat connectors. **Automation connectors (voice only)** lists the phone-control connectors, which are switched on from there and never reach the chat.
+- **Installed** shows the Voice + Chat connectors. Connect turns a connector's tools on (and asks for the Android permission or access it needs, or the sign-in); a connected one shows Connected.
+- **Automation** shows the phone-control connectors, which are voice only and never reach the chat.
 
 | Connector | Tools | Surface |
 |---|---|---|

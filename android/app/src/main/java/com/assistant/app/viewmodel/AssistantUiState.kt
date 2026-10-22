@@ -95,8 +95,6 @@ data class AssistantUiState(
     val unreadableChats: Int = 0,
     /** Set while a Google service waits for the user to pick an account and allow access; the activity shows it. */
     val googleConsent: android.app.PendingIntent? = null,
-    /** With [showConnectors]: show the Marketplace (everything available to add) instead of the added connectors. */
-    val connectorsMarketplace: Boolean = false,
     val showMemory: Boolean = false,
     /** Facts the assistant remembers about the user, newest last. */
     val memories: List<MemoryItem> = emptyList(),
