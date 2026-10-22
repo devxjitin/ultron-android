@@ -54,10 +54,6 @@ private fun UsageDay.value(metric: UsageMetric): Double = when (metric) {
 fun UsagePage(
     days: List<UsageDay>,
     modifier: Modifier = Modifier,
-    autoTitleChats: Boolean = false,
-    onAutoTitleChange: (Boolean) -> Unit = {},
-    autoPersonaUpdate: Boolean = false,
-    onAutoPersonaChange: (Boolean) -> Unit = {},
     dailyTokenBudget: Long = 0L,
     onDailyBudgetChange: (Long) -> Unit = {}
 ) {
@@ -83,14 +79,40 @@ fun UsagePage(
             onSelect = { id -> rangeIndex = UsageRange.entries.first { it.name == id }.ordinal }
         )
         Spacer(Modifier.height(16.dp))
+        PageLabel("Chat")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatTile("Messages", total.chatMessages.toString(), "typed chat", Modifier.weight(1f))
             StatTile("Tokens", compactNumber(total.tokens), "typed chat", Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
+        StatTile("Tool calls", total.toolCalls.toString(), "all tools", Modifier.fillMaxWidth())
+        if (total.models.isNotEmpty()) {
+            PageLabel("Tokens by model")
+            PageCard {
+                total.models.entries.sortedByDescending { it.value }.forEach { (model, tokens) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Text(model, color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(compactNumber(tokens), color = AssistantTextSecondary, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+        if (total.purposes.isNotEmpty()) {
+            PageLabel("Where chat tokens went")
+            PageCard {
+                total.purposes.entries.sortedByDescending { it.value }.forEach { (name, tokens) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Text(purposeLabel(name), color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(compactNumber(tokens), color = AssistantTextSecondary, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+
+        PageLabel("Voice")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile("Voice", durationText(total.voiceSeconds), "${total.voiceSessions} sessions", Modifier.weight(1f))
-            StatTile("Tool calls", total.toolCalls.toString(), "all tools", Modifier.weight(1f))
+            StatTile("Talk time", durationText(total.voiceSeconds), "measured in time", Modifier.weight(1f))
+            StatTile("Sessions", total.voiceSessions.toString(), "voice calls", Modifier.weight(1f))
         }
 
         if (range != UsageRange.TODAY) {
@@ -119,38 +141,16 @@ fun UsagePage(
             }
         }
 
-        if (total.purposes.isNotEmpty()) {
-            PageLabel("Where tokens went")
-            PageCard {
-                total.purposes.entries.sortedByDescending { it.value }.forEach { (name, tokens) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                        Text(purposeLabel(name), color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                        Text(compactNumber(tokens), color = AssistantTextSecondary, fontSize = 14.sp)
-                    }
-                }
-            }
-        }
-
-        PageLabel("Limits and automatic extras")
+        PageLabel("Limits")
         Text("Daily token limit", color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
         ChoiceDropdown(
             options = BUDGET_CHOICES.map { (label, tokens) -> tokens.toString() to label },
             selectedId = dailyTokenBudget.toString(),
             onSelect = { id -> onDailyBudgetChange(id.toLong()) }
         )
-        Spacer(Modifier.height(10.dp))
-        ToggleCard(
-            "Name chats with AI", autoTitleChats, onAutoTitleChange,
-            "Uses a few tokens after each chat. Off: a chat is named after its first question."
-        )
-        Spacer(Modifier.height(10.dp))
-        ToggleCard(
-            "Update assistant from documents", autoPersonaUpdate, onAutoPersonaChange,
-            "Rewrites the assistant's instructions whenever you add, change or delete a knowledge document. Off by default; it costs tokens each time."
-        )
 
         Text(
-            "Counted on this phone only and never sent anywhere. Tokens are known for typed chat; voice is measured in time.",
+            "Counted on this phone only and never sent anywhere. Chat is counted in tokens, per model; voice is measured in time. Chats are named by AI automatically.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 16.dp, start = 4.dp)
         )
     }

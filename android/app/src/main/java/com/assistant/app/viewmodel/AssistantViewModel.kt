@@ -93,7 +93,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /** [AssistantUiState.savingKnowledgeDocumentTarget] value while a brand-new document (no id
  *  yet) is being added -- as opposed to an update, which is targeted by the existing doc's id. */
@@ -113,7 +112,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val MAX_CHAT_ATTACHMENT_BYTES = 12 * 1024 * 1024
         private const val TITLE_REFRESH_EVERY_TURNS = 3
         private const val MAX_CHAT_TITLE_CHARS = 40
-        private const val PERSONA_REFRESH_TIMEOUT_MS = 60_000L
         /** One quick retry for transient knowledge-search failures; keeps worst case well under the 15 s model watchdog. */
         private const val SEARCH_RETRY_LIMIT = 1
         private const val SEARCH_RETRY_DELAY_MS = 500L
@@ -876,12 +874,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private fun auxiliaryUsage(purpose: String): (Int, Int) -> Unit = { inputTokens, outputTokens ->
         recordUsage(UsageDay("", inputTokens = inputTokens.toLong(), outputTokens = outputTokens.toLong(),
-            purposes = mapOf(purpose to inputTokens.toLong() + outputTokens)))
+            purposes = mapOf(purpose to inputTokens.toLong() + outputTokens),
+            models = mapOf(GeminiTextClient.PRIMARY_MODEL to inputTokens.toLong() + outputTokens)))
     }
 
     private fun chatTokens(input: Long, output: Long, messages: Int = 0) =
         UsageDay("", chatMessages = messages, inputTokens = input, outputTokens = output,
-            purposes = mapOf(UsageStore.PURPOSE_CHAT to input + output))
+            purposes = mapOf(UsageStore.PURPOSE_CHAT to input + output),
+            models = mapOf(
+                (_uiState.value.azure.takeIf { it.isActive }?.model ?: GeminiChatClient.CHAT_MODEL) to input + output
+            ))
 
     /** Text generation for titles, personas and formatting; the tokens it uses count in Usage, under [purpose]. */
     private fun auxTextClient(apiKey: String, purpose: String) = GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose))
@@ -898,7 +900,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         try {
             // Titles are written by Gemini; a chat that runs on Azure must not send its text to another provider.
             if (_uiState.value.azure.isActive) return
-            if (!_uiState.value.settings.autoTitleChats || overDailyBudget()) return
+            if (overDailyBudget()) return
             val session = chatHistoryStore.sessions.first().firstOrNull { it.id == sessionId } ?: return
             val turns = session.turns.size
             if (session.customTitle != null && turns % TITLE_REFRESH_EVERY_TURNS != 0) return
@@ -1877,10 +1879,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Keeps the persona in step with the knowledge documents without any admin action: redrafts it
-     *  after every add/update/delete and clears it once no documents remain. Failures are only
-     *  logged -- the previous prompt keeps serving. The result replaces the stored agent prompt
-     *  (see [AppSettingsStore.setAutoPersona]), so a manual edit lasts until the next change. */
+    /** Clears a generated persona once no knowledge documents remain. The persona is never redrafted
+     *  automatically; the admin does that from Developer. Failures are only logged. */
     private fun refreshAutoPersona() {
         personaRefreshJob?.cancel()
         _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
@@ -1892,26 +1892,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (docs.isEmpty()) {
                     settingsStore.setAutoPersona(null)
                     invalidateWarmSessionAndReprewarm()
-                } else if (_uiState.value.settings.autoPersonaUpdate && !overDailyBudget()) {
-                    // Only when the user switched it on (Usage page): redrafting spends tokens on every document change.
-                    val apiKey = resolveApiKey()
-                    if (apiKey.isNotBlank()) {
-                        _uiState.update { it.copy(isUpdatingAgentPrompt = true) }
-                        // Bounded so the "Updating" notice can never hang the app.
-                        val draft = withTimeoutOrNull(PERSONA_REFRESH_TIMEOUT_MS) {
-                            KnowledgeBaseProvider.validatePersonaDraft(
-                                auxTextClient(apiKey, UsageStore.PURPOSE_PERSONA).generateText(
-                                    KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
-                                )
-                            )
-                        }
-                        if (draft != null) {
-                            settingsStore.setAutoPersona(draft)
-                            invalidateWarmSessionAndReprewarm()
-                        } else {
-                            Log.e("AssistantError", "Auto persona refresh timed out")
-                        }
-                    }
                 }
             } catch (e: CancellationException) {
                 // A newer refresh owns the flag now.
@@ -1926,17 +1906,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Hides the "Updating" notice; the redraft keeps running in the background. */
     fun onDismissAgentPromptUpdate() {
         _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
-    }
-
-    fun onAutoTitleToggled(enabled: Boolean) {
-        viewModelScope.launch { runCatching { settingsStore.setAutoTitleChats(enabled) } }
-    }
-
-    fun onAutoPersonaToggled(enabled: Boolean) {
-        viewModelScope.launch {
-            runCatching { settingsStore.setAutoPersonaUpdate(enabled) }
-            if (enabled) refreshAutoPersona()
-        }
     }
 
     fun onDailyBudgetChanged(tokens: Long) {
