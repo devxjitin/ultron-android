@@ -24,7 +24,10 @@ import org.junit.Test
 class ChatStreamingTest {
     private lateinit var server: MockWebServer
 
-    @Before fun start() { server = MockWebServer().also { it.start() } }
+    @Before fun start() {
+        GeminiChatClient.resetThinkingSupportForTest()
+        server = MockWebServer().also { it.start() }
+    }
     @After fun stop() { runCatching { server.shutdown() } }
 
     private class Recorder : ChatStreamListener {
@@ -141,5 +144,23 @@ class ChatStreamingTest {
             withTimeout(5_000) { job.cancelAndJoin() }
             assertTrue(job.isCancelled)
         }
+    }
+
+    @Test fun geminiAsksForLowThinking() {
+        server.enqueue(sse(geminiChunk("ok", "STOP")))
+        geminiReply()
+        val sent = JSONObject(server.takeRequest().body.readUtf8())
+        assertEquals("low", sent.getJSONObject("generationConfig").getJSONObject("thinkingConfig").getString("thinkingLevel"))
+    }
+
+    @Test fun geminiRetriesWithoutThinkingWhenTheModelRejectsIt() {
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"message":"Thinking level low is not supported"}}"""))
+        server.enqueue(sse(geminiChunk("hello", "STOP")))
+        val recorder = Recorder()
+        geminiReply(recorder)
+        assertEquals("hello", recorder.text.toString())
+        server.takeRequest()
+        val retry = JSONObject(server.takeRequest().body.readUtf8())
+        assertTrue(!retry.getJSONObject("generationConfig").has("thinkingConfig"))
     }
 }

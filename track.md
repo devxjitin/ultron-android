@@ -313,3 +313,5 @@
 [2026-10-22 13:38] [Claude] [Add: Messages connector (voice): auto-send SMS, number/rate checks, SEND_SMS permission]
 [2026-10-22 13:38] [Claude] [Add: Weather connector (voice+chat) via Open-Meteo, place name or GPS; unit tests added]
 [2026-10-22 13:46] [Claude] [Update: published OTA build 29877702 (Messages + Weather connectors) to AWS]
+[2026-10-22 14:19] [Claude] [Fix: chat slow - Gemini chat now thinkingLevel low, retries without if rejected; tests added]
+[2026-10-22 14:19] [Claude] [Update: published OTA build 29877801 (faster chat) to AWS]

@@ -55,6 +55,16 @@ class GeminiChatClient(
         private const val MAX_TOOL_ROUNDS = 5
         private val FAILED_STATUSES = listOf("failed", "search_failed", "invalid", "unavailable", "timeout", "refused", "disabled", "permission_needed")
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
+
+        /**
+         * Gemini 3 models think before answering unless told otherwise, which made every chat reply wait several seconds
+         * for its first word. A low thinking level keeps replies quick. A model that rejects the setting is asked again
+         * without it, and that is remembered for the rest of the run.
+         */
+        private const val CHAT_THINKING_LEVEL = "low"
+        @Volatile private var thinkingUnsupported = false
+
+        internal fun resetThinkingSupportForTest() { thinkingUnsupported = false }
     }
 
     private val client = HttpClients.shared.newBuilder()
@@ -121,10 +131,13 @@ class GeminiChatClient(
         tools: JSONArray?,
         listener: ChatStreamListener
     ): StreamTurn {
+        val withThinking = !thinkingUnsupported
+        val generationConfig = JSONObject().put("maxOutputTokens", CHAT_REPLY_TOKEN_CAP)
+        if (withThinking) generationConfig.put("thinkingConfig", JSONObject().put("thinkingLevel", CHAT_THINKING_LEVEL))
         val bodyJson = JSONObject()
             .put("contents", contents)
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
-            .put("generationConfig", JSONObject().put("maxOutputTokens", CHAT_REPLY_TOKEN_CAP))
+            .put("generationConfig", generationConfig)
         if (tools != null) bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", ToolDeclarations.withoutPrivateFields(tools))))
         // Key goes in a header, not the URL, so it can't leak through logged URLs.
         val request = Request.Builder()
@@ -139,8 +152,13 @@ class GeminiChatClient(
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
+                    val detail = response.body?.string().orEmpty()
+                    if (withThinking && response.code == 400 && detail.contains("thinking", ignoreCase = true)) {
+                        thinkingUnsupported = true
+                        return streamOnce(systemInstruction, contents, tools, listener)
+                    }
                     throw GeminiEmbeddingClient.HttpFailure(
-                        response.code, "Chat request failed (${response.code}): ${response.body?.string().orEmpty().take(200)}"
+                        response.code, "Chat request failed (${response.code}): ${detail.take(200)}"
                     )
                 }
                 val source = response.body?.source() ?: throw java.io.IOException("Empty chat response")
