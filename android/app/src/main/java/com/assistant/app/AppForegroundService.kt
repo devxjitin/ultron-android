@@ -77,6 +77,14 @@ class AppForegroundService : Service() {
     private fun applyMode(listening: Boolean) {
         if (listening && !this.listening) sessionStartMs = System.currentTimeMillis()
         this.listening = listening
+        if (!listening && !AutomationEngine.hasRules(this)) {
+            // Nothing needs the service now, so the notification goes away instead of sitting there idle.
+            if (instance === this) instance = null
+            startForeground(NOTIFICATION_ID, buildNotification(false)) // a started foreground service must show once before it stops
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         val notification = buildNotification(listening)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE

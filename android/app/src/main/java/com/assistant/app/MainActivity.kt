@@ -157,6 +157,15 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleShareIntent(intent)
+        handleAssistIntent(intent)
+    }
+
+    /** Starts talking when Ultron is opened as the phone's default assistant (hold home or power). */
+    private fun handleAssistIntent(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action != Intent.ACTION_ASSIST && action != Intent.ACTION_VOICE_COMMAND) return
+        intent.action = null // so a recreated activity does not start a second session
+        if (hasMicPermission()) viewModel.onAssistInvoked()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -171,7 +180,9 @@ class MainActivity : ComponentActivity() {
         }
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableImmersiveMode()
-        AppForegroundService.start(this)
+        // Only saved automation rules keep the service (and its notification) up; a voice session starts it itself.
+        if (com.assistant.app.data.AutomationEngine.hasRules(this)) AppForegroundService.start(this)
+        handleAssistIntent(intent)
 
         setContent {
             var micGranted by remember { mutableStateOf(hasMicPermission()) }

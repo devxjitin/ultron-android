@@ -477,6 +477,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** The phone's assistant gesture opened Ultron: start a voice session unless one is already running. */
+    fun onAssistInvoked() {
+        if (!isSessionActive(_uiState.value.voiceState)) startSession()
+    }
+
     /** Mutes/unmutes the user's mic without ending the session. Resets on every session boundary
      *  (see [releaseResources]). */
     fun onMuteToggled() {
