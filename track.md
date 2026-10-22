@@ -319,3 +319,7 @@
 [2026-10-22 14:28] [Claude] [Update: published OTA build 29877802 to AWS]
 [2026-10-22 14:36] [Claude] [Update: Calls + Messages connectors now voice+chat; call tools get injection guard text]
 [2026-10-22 14:36] [Claude] [Update: published OTA build to AWS (calls/messages in chat)]
+[2026-10-22 15:02] [Claude] [Fix: voice keeps tool results on interrupt, filler no longer stalls UI]
+[2026-10-22 15:02] [Claude] [Fix: calls via Telecom, end voice session on call, duplicate contact numbers]
+[2026-10-22 15:02] [Claude] [Fix: chat text after tools, last tool round, malformed call retry]
+[2026-10-22 15:02] [Claude] [Update: OTA build 29877804 published to AWS]

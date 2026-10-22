@@ -41,6 +41,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.telecom.TelecomManager
 import android.telephony.SmsManager
 import android.os.Environment
 import android.os.PowerManager
@@ -184,16 +186,16 @@ class DeviceToolRunner(
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val found = findContacts(name, 5)
-                if (found.isEmpty()) return "status=not_found\nNo contact matches \"$name\"."
+                val matches = ContactMatch.numbers(name, found)
+                if (matches.isEmpty()) return "status=not_found\nNo contact matches \"$name\"."
                 // Only call when exactly one number matches; otherwise the user must pick one.
-                val numbers = found.map { it.second.filter { c -> c.isDigit() || c == '+' } }.distinct()
-                if (numbers.size > 1) {
+                if (matches.size > 1) {
                     return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to call, " +
                         "then use dial_number with that number. No call was placed.\n" +
-                        found.joinToString("\n") { "${it.first}: ${it.second}" }
+                        matches.joinToString("\n") { "${it.first}: ${it.second}" }
                 }
-                val match = found.first()
-                start(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + numbers.first())))
+                val match = matches.first()
+                placeCall(match.second)
                 "status=ok\nCalling ${match.first} now."
             }
             DeviceTool.SEND_SMS -> sendSms(text("number") ?: return MISSING, text("message") ?: return MISSING, null)
@@ -201,16 +203,15 @@ class DeviceToolRunner(
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val message = text("message") ?: return MISSING
-                val found = findContacts(name, 5)
-                if (found.isEmpty()) return "status=not_found\nNo contact matches \"$name\". No message was sent."
+                val matches = ContactMatch.numbers(name, findContacts(name, 5))
+                if (matches.isEmpty()) return "status=not_found\nNo contact matches \"$name\". No message was sent."
                 // Only send when exactly one number matches; otherwise the user must pick one.
-                val numbers = found.map { it.second.filter { c -> c.isDigit() || c == '+' } }.distinct()
-                if (numbers.size > 1) {
+                if (matches.size > 1) {
                     return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to text, " +
                         "then use send_sms with that number. No message was sent.\n" +
-                        found.joinToString("\n") { "${it.first}: ${it.second}" }
+                        matches.joinToString("\n") { "${it.first}: ${it.second}" }
                 }
-                sendSms(numbers.first(), message, found.first().first)
+                sendSms(matches.first().second, message, matches.first().first)
             }
             DeviceTool.GET_WEATHER -> weather(text("place"), (number("days") ?: 3).coerceIn(1, 7))
             DeviceTool.CREATE_CONTACT -> {
@@ -453,7 +454,7 @@ class DeviceToolRunner(
             DeviceTool.DIAL -> {
                 missingPermission(Manifest.permission.CALL_PHONE)?.let { return it }
                 val phone = text("number")?.filter { it.isDigit() || it == '+' }?.takeIf { it.isNotEmpty() } ?: return MISSING
-                start(Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")))
+                placeCall(phone)
                 "status=ok\nCalling $phone now."
             }
             DeviceTool.OPEN_SETTINGS -> {
@@ -532,14 +533,15 @@ class DeviceToolRunner(
     private suspend fun locate(): Located {
         val fine = Manifest.permission.ACCESS_FINE_LOCATION
         val coarse = Manifest.permission.ACCESS_COARSE_LOCATION
-        val granted = listOf(fine, coarse).any {
-            ContextCompat.checkSelfPermission(app, it) == PackageManager.PERMISSION_GRANTED
-        }
+        val hasFine = ContextCompat.checkSelfPermission(app, fine) == PackageManager.PERMISSION_GRANTED
+        val granted = hasFine || ContextCompat.checkSelfPermission(app, coarse) == PackageManager.PERMISSION_GRANTED
         if (!granted) return Located.Failed(missingPermission(fine, coarse)!!)
         val manager = app.getSystemService(LocationManager::class.java)
         val enabled = manager.getProviders(true)
-        val provider = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-            .firstOrNull { it in enabled } ?: enabled.firstOrNull()
+        // With only approximate location allowed, older Android versions refuse the GPS provider outright.
+        val preferred = if (hasFine) listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+        else listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
+        val provider = preferred.firstOrNull { it in enabled } ?: enabled.firstOrNull()
             ?: return Located.Failed("status=unavailable\nLocation is turned off on the phone.")
         val fresh = withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { continuation ->
@@ -550,7 +552,8 @@ class DeviceToolRunner(
                 }
             }
         }
-        val location = fresh ?: manager.getLastKnownLocation(provider)
+        // Indoors GPS often finds nothing in time; the newest fix any provider still holds is better than no answer.
+        val location = fresh ?: enabled.mapNotNull { runCatching { manager.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
             ?: return Located.Failed("status=unavailable\nCould not get a location fix. Try again near a window.")
         return Located.Ok(location)
     }
@@ -955,6 +958,16 @@ class DeviceToolRunner(
         app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    /**
+     * Places a call through Telecom, which shows its own call screen. Starting the call activity directly is blocked
+     * while Ultron is in the background (a voice session running behind another app), and the call then never started.
+     */
+    private fun placeCall(number: String) {
+        val telecom = app.getSystemService(TelecomManager::class.java)
+        if (telecom == null) start(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)))
+        else telecom.placeCall(Uri.fromParts("tel", number, null), Bundle())
+    }
+
     private fun streamFor(name: String) = when (name) {
         "media" -> AudioManager.STREAM_MUSIC
         "ring" -> AudioManager.STREAM_RING
@@ -1090,7 +1103,8 @@ class DeviceToolRunner(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
-            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT
+            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
+            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L

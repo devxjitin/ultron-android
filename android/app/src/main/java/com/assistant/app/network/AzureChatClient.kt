@@ -56,8 +56,10 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
         val reply = StringBuilder()
         var toolIndex = 0
         for (round in 0..MAX_TOOL_ROUNDS) {
-            val offerTools = openAiTools.length() > 0 && round < MAX_TOOL_ROUNDS
-            val turn = streamOnce(conversation, if (offerTools) openAiTools else null, listener)
+            // After the last round the model must answer: the tools stay declared (the history holds calls to them),
+            // but it may not call them again.
+            val allowCalls = round < MAX_TOOL_ROUNDS
+            val turn = streamOnce(conversation, openAiTools.takeIf { it.length() > 0 }, allowCalls, roundSeparator(reply), listener)
             reply.append(turn.text)
             if (turn.calls.isEmpty()) break
 
@@ -85,7 +87,14 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
     private class ToolCall(val id: String, val name: String, val arguments: String)
     private class StreamTurn(val text: String, val calls: List<ToolCall>)
 
-    private suspend fun streamOnce(conversation: JSONArray, tools: JSONArray?, listener: ChatStreamListener): StreamTurn {
+    /** [separator] goes before the first text of this request, so text after a tool call does not run on from the text before it. */
+    private suspend fun streamOnce(
+        conversation: JSONArray,
+        tools: JSONArray?,
+        allowCalls: Boolean,
+        separator: String,
+        listener: ChatStreamListener
+    ): StreamTurn {
         val body = JSONObject()
             .put("model", config.model)
             .put("messages", conversation)
@@ -94,6 +103,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
             .put("stream_options", JSONObject().put("include_usage", true))
         if (tools != null) {
             body.put("tools", tools)
+            if (!allowCalls) body.put("tool_choice", "none")
             // GPT-6 models reject function tools on this API unless reasoning is switched off.
             if (config.model.startsWith("gpt-6")) body.put("reasoning_effort", "none")
         }
@@ -137,8 +147,9 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
                         answerTokens = it.optInt("completion_tokens", answerTokens)
                     }
                     val delta = json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
-                    val piece = delta.stringOrEmpty("content")
+                    var piece = delta.stringOrEmpty("content")
                     if (piece.isNotEmpty()) {
+                        if (text.isEmpty()) piece = separator + piece
                         text.append(piece)
                         listener.onText(piece)
                     }

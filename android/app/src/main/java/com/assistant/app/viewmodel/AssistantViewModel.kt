@@ -152,6 +152,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How long the mic has to stay quiet (after having heard real speech) before assuming
          *  the user is done talking and the assistant is now "thinking". */
         const val SILENCE_TO_PROCESSING_MS = 900L
+        /** Tools that place a phone call; see the voice tool handler. */
+        val CALL_TOOLS = setOf(DeviceTool.DIAL, DeviceTool.CALL_CONTACT)
     }
 
     private val conversationStore = ConversationStore(application)
@@ -2369,8 +2371,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 cancelTurnTimeout()
                 if (pendingToolCallIds.isNotEmpty()) {
                     // The model has yielded for local retrieval. Its eventual audio belongs to
-                    // the same user/assistant transcript pair, so do not persist or unmute yet.
+                    // the same user/assistant transcript pair, so do not persist it yet. The filler
+                    // it spoke ("one moment") still drains and hands the mic back, so a slow tool
+                    // does not leave the screen on Speaking with the mic muted.
                     resetIdleTimeout()
+                    audioPlayer?.notifyTurnComplete()
                     return
                 }
                 // awaitingToolContinuation can still be set here: every tool response was already
@@ -2394,7 +2399,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (liveClient !== client) return
                 client.latency.cancel("interrupted")
                 cancelTurnTimeout()
-                cancelPendingToolCalls()
+                // Running tools are not cancelled here: the server names the calls it abandons in
+                // toolCallCancellation. A non-blocking call (a text being sent) is still wanted after
+                // the user talks over the filler, and dropping it lost the result the model waits for.
                 resetIdleTimeout()
                 // Close out the interrupted reply as its own turn so it isn't merged with
                 // whatever the user says next.
@@ -2475,6 +2482,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                         if (BuildConfig.DEBUG) {
                             Log.d("AssistantLatency", "knowledge-search=${SystemClock.elapsedRealtime() - searchStartedAt}ms")
+                        }
+                        // A placed phone call takes over the speaker and mic. The voice session ends so
+                        // its reply does not play into the call and its audio mode does not fight the call's.
+                        if (deviceTool in CALL_TOOLS && resultText.startsWith("status=ok") && liveClient === client) {
+                            stopSession()
+                            showToast("Call started. Tap the mic to talk to Ultron again.", AppNotificationType.INFO)
+                            return@launch
                         }
                         // A cancellation, new session, or interruption may happen while an HTTP
                         // embedding request is in flight. Never revive an abandoned turn by
@@ -3042,7 +3056,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             // A short interruption (navigation prompt, notification sound): pause the mic and carry on afterwards.
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                if (isSessionActive(_uiState.value.voiceState)) {
+                // A ringing or answered phone call also arrives as a short loss, but it needs the
+                // speaker, mic and audio mode this session holds, so the session ends instead.
+                val phoneCall = audioManager.mode == AudioManager.MODE_RINGTONE || audioManager.mode == AudioManager.MODE_IN_CALL
+                if (phoneCall && isSessionActive(_uiState.value.voiceState)) {
+                    stopSession()
+                } else if (isSessionActive(_uiState.value.voiceState)) {
                     pausedByFocusLoss = true
                     micStreamer?.setMuted(true)
                 }

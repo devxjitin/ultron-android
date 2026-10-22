@@ -94,10 +94,21 @@ class GeminiChatClient(
 
         val reply = StringBuilder()
         var toolIndex = 0
-        for (round in 0..MAX_TOOL_ROUNDS) {
-            // After the last round the model must answer with what it has, so tools are withheld.
-            val offerTools = tools.length() > 0 && round < MAX_TOOL_ROUNDS
-            val turn = streamOnce(systemInstruction, contents, if (offerTools) tools else null, listener)
+        var retriedMalformedCall = false
+        var round = 0
+        while (round <= MAX_TOOL_ROUNDS) {
+            // After the last round the model must answer with what it has. The tools stay declared (the history holds
+            // calls to them) but calling is switched off.
+            val allowCalls = round < MAX_TOOL_ROUNDS
+            val turn = try {
+                streamOnce(systemInstruction, contents, tools.takeIf { it.length() > 0 }, allowCalls, roundSeparator(reply), listener)
+            } catch (e: MalformedFunctionCall) {
+                // The model sometimes writes a broken tool call; one fresh try nearly always comes back well formed.
+                if (retriedMalformedCall) throw UserMessageException("The model could not use its tools for this message. Please try again.")
+                retriedMalformedCall = true
+                continue
+            }
+            round++
             reply.append(turn.text)
             if (turn.calls.isEmpty()) break
 
@@ -123,12 +134,19 @@ class GeminiChatClient(
     }
 
     private class FunctionCall(val id: String?, val name: String, val args: JSONObject)
+    private class MalformedFunctionCall : Exception()
     private class StreamTurn(val text: String, val calls: List<FunctionCall>, val rawParts: JSONArray)
 
+    /**
+     * [separator] goes before the first text of this request: a reply that continues after a tool call must not run on
+     * from the words before it ("Let me checkIt is 30 degrees").
+     */
     private suspend fun streamOnce(
         systemInstruction: String,
         contents: JSONArray,
         tools: JSONArray?,
+        allowCalls: Boolean,
+        separator: String,
         listener: ChatStreamListener
     ): StreamTurn {
         val withThinking = !thinkingUnsupported
@@ -138,7 +156,10 @@ class GeminiChatClient(
             .put("contents", contents)
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
             .put("generationConfig", generationConfig)
-        if (tools != null) bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", ToolDeclarations.withoutPrivateFields(tools))))
+        if (tools != null) {
+            bodyJson.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", ToolDeclarations.withoutPrivateFields(tools))))
+            if (!allowCalls) bodyJson.put("toolConfig", JSONObject().put("functionCallingConfig", JSONObject().put("mode", "NONE")))
+        }
         // Key goes in a header, not the URL, so it can't leak through logged URLs.
         val request = Request.Builder()
             .url("$baseUrl/v1beta/models/$model:streamGenerateContent?alt=sse")
@@ -155,7 +176,7 @@ class GeminiChatClient(
                     val detail = response.body?.string().orEmpty()
                     if (withThinking && response.code == 400 && detail.contains("thinking", ignoreCase = true)) {
                         thinkingUnsupported = true
-                        return streamOnce(systemInstruction, contents, tools, listener)
+                        return streamOnce(systemInstruction, contents, tools, allowCalls, separator, listener)
                     }
                     throw GeminiEmbeddingClient.HttpFailure(
                         response.code, "Chat request failed (${response.code}): ${detail.take(200)}"
@@ -197,8 +218,9 @@ class GeminiChatClient(
                             )
                             raw.put(part)
                         } else if (!part.optBoolean("thought")) {
-                            val piece = part.optString("text")
+                            var piece = part.optString("text")
                             if (piece.isNotEmpty()) {
+                                if (text.isEmpty()) piece = separator + piece
                                 text.append(piece)
                                 raw.put(part)
                                 listener.onText(piece)
@@ -212,6 +234,8 @@ class GeminiChatClient(
                     "STOP" -> {}
                     null -> throw UserMessageException("The connection ended before the reply was finished. Please try again.")
                     "MAX_TOKENS" -> throw UserMessageException("The reply was cut off because it reached the length limit.")
+                    "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL" -> if (text.isEmpty() && calls.isEmpty()) throw MalformedFunctionCall()
+                        else throw UserMessageException("The reply stopped early ($finishReason).")
                     "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY" ->
                         throw UserMessageException("The reply was stopped by the model's safety filter.")
                     else -> throw UserMessageException("The reply stopped early ($finishReason).")

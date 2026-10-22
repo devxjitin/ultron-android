@@ -153,6 +153,47 @@ class ChatStreamingTest {
         assertEquals("low", sent.getJSONObject("generationConfig").getJSONObject("thinkingConfig").getString("thinkingLevel"))
     }
 
+    private fun geminiCallChunk(text: String, tool: String) = JSONObject().put(
+        "candidates", JSONArray().put(
+            JSONObject().put("finishReason", "STOP").put(
+                "content", JSONObject().put(
+                    "parts", JSONArray()
+                        .put(JSONObject().put("text", text))
+                        .put(JSONObject().put("functionCall", JSONObject().put("name", tool).put("args", JSONObject())))
+                )
+            )
+        )
+    ).toString()
+
+    private val oneTool = JSONArray().put(JSONObject().put("name", "get_weather").put("description", "Weather"))
+
+    @Test fun geminiTextAfterAToolCallStartsANewParagraph() {
+        server.enqueue(sse(geminiCallChunk("Let me check.", "get_weather")))
+        server.enqueue(sse(geminiChunk("It is sunny.", "STOP")))
+        val recorder = Recorder()
+        val reply = runBlocking { gemini().stream("sys", question, oneTool, { _, _ -> "status=ok\nSunny" }, recorder) }
+        assertEquals("Let me check.\n\nIt is sunny.", reply)
+        assertEquals(reply, recorder.text.toString())
+    }
+
+    @Test fun geminiRetriesOnceAfterAMalformedToolCall() {
+        server.enqueue(sse(geminiChunk("", "MALFORMED_FUNCTION_CALL")))
+        server.enqueue(sse(geminiChunk("Done.", "STOP")))
+        val reply = runBlocking { gemini().stream("sys", question, oneTool, noTool, Recorder()) }
+        assertEquals("Done.", reply)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test fun geminiLastRoundKeepsToolsButSwitchesCallingOff() {
+        repeat(5) { server.enqueue(sse(geminiCallChunk("", "get_weather"))) }
+        server.enqueue(sse(geminiChunk("Here is what I found.", "STOP")))
+        runBlocking { gemini().stream("sys", question, oneTool, { _, _ -> "status=ok\nSunny" }, Recorder()) }
+        repeat(5) { server.takeRequest() }
+        val last = JSONObject(server.takeRequest().body.readUtf8())
+        assertTrue(last.has("tools"))
+        assertEquals("NONE", last.getJSONObject("toolConfig").getJSONObject("functionCallingConfig").getString("mode"))
+    }
+
     @Test fun geminiRetriesWithoutThinkingWhenTheModelRejectsIt() {
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"message":"Thinking level low is not supported"}}"""))
         server.enqueue(sse(geminiChunk("hello", "STOP")))
