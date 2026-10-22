@@ -24,7 +24,8 @@ private val InterVariable = FontFamily(
     Font(R.font.inter_variable, weight = FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(700)))
 )
 
-val AssistantTypography = Typography(
+/** Built per palette: the text colours are read when this runs, so a switch between light and dark must build it again. */
+fun assistantTypography() = Typography(
     displayLarge = TextStyle(
         fontFamily = InterVariable,
         fontWeight = FontWeight.Bold,

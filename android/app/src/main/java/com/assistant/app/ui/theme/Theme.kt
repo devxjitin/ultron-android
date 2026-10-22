@@ -11,6 +11,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -121,7 +122,7 @@ fun AssistantTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -
     SideEffect { (view.context as? Activity)?.let { applyWindowColors(it, palette) } }
     MaterialTheme(
         colorScheme = colorSchemeFor(palette),
-        typography = AssistantTypography,
+        typography = remember(palette) { assistantTypography() },
         shapes = AssistantShapes,
         content = content
     )
