@@ -161,7 +161,7 @@ fun SettingsPage(
         mutableStateOf(settings.documentFormatPrompt)
     }
     var retrievalChunkLimitInput by remember(settings.retrievalChunkLimit) {
-        mutableStateOf(settings.retrievalChunkLimit)
+        androidx.compose.runtime.mutableIntStateOf(settings.retrievalChunkLimit)
     }
     val developerChangesPending =
         nameInput != settings.assistantName ||

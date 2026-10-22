@@ -46,7 +46,9 @@ fun PersonalizationPage(
     personalization: Personalization,
     assistantName: String,
     onChange: (Personalization) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Tells the screen whether there is typed text that is not saved yet. */
+    onDirtyChanged: (Boolean) -> Unit = {}
 ) {
     var custom by remember(personalization.customInstructions) { mutableStateOf(personalization.customInstructions) }
     var nickname by remember(personalization.nickname) { mutableStateOf(personalization.nickname) }
@@ -55,6 +57,9 @@ fun PersonalizationPage(
     var confirmingReset by remember { mutableStateOf(false) }
     val textChanged = custom != personalization.customInstructions || nickname != personalization.nickname ||
         occupation != personalization.occupation || aboutMore != personalization.aboutMore
+
+    androidx.compose.runtime.LaunchedEffect(textChanged) { onDirtyChanged(textChanged) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { onDirtyChanged(false) } }
 
     PageColumn(modifier) {
         PageLabel("Base style and tone")

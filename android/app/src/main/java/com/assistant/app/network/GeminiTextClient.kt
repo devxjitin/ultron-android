@@ -1,5 +1,7 @@
 package com.assistant.app.network
 
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -23,7 +25,9 @@ import com.assistant.app.data.DEFAULT_DOCUMENT_FORMAT_PROMPT
 class GeminiTextClient(
     private val apiKey: String,
     private val documentFormatPrompt: String = DEFAULT_DOCUMENT_FORMAT_PROMPT,
-    private val documentFormatModel: String = DOCUMENT_FORMAT_MODEL
+    private val documentFormatModel: String = DOCUMENT_FORMAT_MODEL,
+    /** Called with the input and output tokens Gemini reports for each successful request. */
+    private val onUsage: ((inputTokens: Int, outputTokens: Int) -> Unit)? = null
 ) {
 
     companion object {
@@ -128,14 +132,21 @@ class GeminiTextClient(
         // Key goes in a header, not the URL, so it can't leak through logged URLs.
         val request = Request.Builder().url(url).header("x-goog-api-key", apiKey).post(body).build()
 
-        client.newCall(request).execute().use { response ->
+        val call = client.newCall(request)
+        // A timeout or cancel must also drop the open request, not wait for the blocking read to end.
+        val watcher = watchCancellation(call)
+        try { call.execute().use { response ->
             val raw = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw GeminiEmbeddingClient.HttpFailure(
                     response.code, "Text generation request failed (${response.code}): ${raw.take(200)}"
                 )
             }
-            val candidate = JSONObject(raw).getJSONArray("candidates").getJSONObject(0)
+            val parsed = JSONObject(raw)
+            parsed.optJSONObject("usageMetadata")?.let {
+                onUsage?.invoke(it.optInt("promptTokenCount"), it.optInt("candidatesTokenCount") + it.optInt("thoughtsTokenCount"))
+            }
+            val candidate = parsed.getJSONArray("candidates").getJSONObject(0)
             if (rejectTruncatedOutput && candidate.optString("finishReason") == "MAX_TOKENS") {
                 throw java.io.IOException("Document formatting exceeded the 65,536-output-token limit.")
             }
@@ -144,6 +155,12 @@ class GeminiTextClient(
                 .getJSONArray("parts")
                 .getJSONObject(0)
                 .getString("text")
+        } } catch (e: java.io.IOException) {
+            // A cancelled call fails with an IOException; report it as the cancellation it is.
+            currentCoroutineContext().ensureActive()
+            throw e
+        } finally {
+            watcher.cancel()
         }
     }
 }

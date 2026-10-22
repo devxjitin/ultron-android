@@ -13,6 +13,7 @@ addresses on ports 80 and 443 are fetched, redirects are followed by hand, and t
 Env vars:
   ACCESS_TOKEN  - secret first path segment; requests with any other path are rejected
 """
+import base64
 import hmac
 import http.client
 import ipaddress
@@ -213,6 +214,8 @@ def _public(tool):
 
 
 def _rpc(msg):
+    if not isinstance(msg, dict):
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}}
     method, mid = msg.get("method"), msg.get("id")
     if mid is None:
         return None
@@ -225,11 +228,14 @@ def _rpc(msg):
         result = {"tools": [_public(t) for t in TOOLS]}
     elif method == "tools/call":
         params = msg.get("params", {})
+        arguments = params.get("arguments", {}) if isinstance(params, dict) else None
+        if not isinstance(params, dict) or not isinstance(arguments, dict):
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "Invalid params"}}
         tool = next((t for t in TOOLS if t["name"] == params.get("name")), None)
         if tool is None:
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "Unknown tool"}}
         try:
-            text, is_error = tool["fn"](params.get("arguments", {})), False
+            text, is_error = tool["fn"](arguments), False
         except KeyError as e:
             text, is_error = f"Missing argument: {e}", True
         except FetchError as e:
@@ -240,6 +246,9 @@ def _rpc(msg):
     else:
         return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "Method not found"}}
     return {"jsonrpc": "2.0", "id": mid, "result": result}
+
+
+MAX_BODY_CHARS = 1_000_000
 
 
 def _resp(status, body=None):
@@ -254,9 +263,14 @@ def lambda_handler(event, context):
         return _resp(404, {"error": "not found"})
     if event["requestContext"]["http"]["method"] != "POST":
         return _resp(405, {"error": "use POST"})
+    raw = event.get("body") or ""
+    if len(raw) > MAX_BODY_CHARS:
+        return _resp(413, {"error": "request too large"})
     try:
-        body = json.loads(event.get("body") or "")
-    except ValueError:
+        if event.get("isBase64Encoded"):
+            raw = base64.b64decode(raw).decode("utf-8")
+        body = json.loads(raw)
+    except ValueError:  # includes bad base64 and bad UTF-8
         return _resp(400, {"error": "invalid json"})
     if isinstance(body, list):
         out = [r for r in (_rpc(m) for m in body) if r is not None]

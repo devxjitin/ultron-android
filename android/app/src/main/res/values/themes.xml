@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Assistant" parent="Theme.Material3.Light.NoActionBar">
-        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowBackground">@color/assistant_background</item>
         <item name="android:statusBarColor">@color/assistant_background</item>
         <item name="android:navigationBarColor">@color/assistant_background</item>

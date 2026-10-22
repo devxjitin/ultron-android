@@ -13,4 +13,3 @@ keystore/
 *.jks
 *.keystore
 
-.docker-build/

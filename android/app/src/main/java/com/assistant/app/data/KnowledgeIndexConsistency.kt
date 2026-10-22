@@ -99,7 +99,8 @@ internal fun applyReindexedChunks(
         replacements.flatMap { it.second })
 }
 
-data class RagSearchMatches(val chunks: List<RagChunk>, val documents: List<RagDocument>)
+/** [revision] is the knowledge revision the matches were read at (-1 when unknown). */
+data class RagSearchMatches(val chunks: List<RagChunk>, val documents: List<RagDocument>, val revision: Long = -1L)
 
 /** All replacement writes and full-content verification share one ObjectBox transaction. */
 internal class ObjectBoxKnowledgeIndex(private val store: BoxStore) {

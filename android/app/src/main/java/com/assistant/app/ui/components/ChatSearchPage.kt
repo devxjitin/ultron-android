@@ -4,7 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -44,7 +49,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.assistant.app.data.ChatSearchHit
+import com.assistant.app.data.ChatSearchIndex
 import com.assistant.app.data.ChatSession
+import com.assistant.app.data.SearchScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
@@ -53,32 +64,6 @@ import com.assistant.app.ui.theme.AssistantSurface
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
-
-private class SearchHit(val session: ChatSession, val snippet: String?, val matches: Int)
-
-private const val MAX_RESULTS = 50
-
-/** Markdown the model writes (bold, code, headings) that would only look like stray symbols in a snippet. */
-private val markdownMarks = Regex("\\*\\*|__|`|(?m)^#{1,6}\\s")
-
-/** Finds the saved chats that contain every word of [query] (in the title, the messages or file names). */
-private fun searchChats(sessions: List<ChatSession>, tokens: List<String>): List<SearchHit> =
-    sessions.mapNotNull { session ->
-        val body = session.turns.joinToString("\n") { turn ->
-            turn.userText + "\n" + turn.assistantText + "\n" + turn.attachments.joinToString(" ") { it.name }
-        }
-        val haystack = (session.title + "\n" + body).lowercase()
-        if (!tokens.all { haystack.contains(it) }) return@mapNotNull null
-        val matches = tokens.sumOf { token -> haystack.windowed(token.length).count { it == token } }
-        val at = body.lowercase().indexOf(tokens.first())
-        val snippet = if (at >= 0) {
-            val start = (at - 40).coerceIn(0, body.length)
-            val end = (at + 110).coerceAtMost(body.length)
-            (if (start > 0) "…" else "") + body.substring(start, end).replace(markdownMarks, "").replace(Regex("\\s+"), " ").trim() +
-                (if (end < body.length) "…" else "")
-        } else null
-        SearchHit(session, snippet, matches)
-    }.sortedByDescending { it.matches }.take(MAX_RESULTS)
 
 private fun highlight(text: String, tokens: List<String>): AnnotatedString = buildAnnotatedString {
     append(text)
@@ -94,13 +79,28 @@ private fun highlight(text: String, tokens: List<String>): AnnotatedString = bui
 
 /** Search chats: type a few words and open the conversation that has them. */
 @Composable
-fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String) -> Unit, modifier: Modifier = Modifier) {
+fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String, Int?) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
+    var scopeIndex by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(SearchScope.ALL.ordinal) }
+    val scope = SearchScope.entries[scopeIndex]
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
     val tokens = remember(query) { query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() } }
-    val hits = remember(sessions, tokens) { if (tokens.isEmpty()) emptyList() else searchChats(sessions, tokens) }
+    // The index is built once per list of chats, off the main thread; each search then only compares words.
+    val index by produceState<ChatSearchIndex?>(null, sessions) { value = withContext(Dispatchers.Default) { ChatSearchIndex(sessions) } }
+    // Searched off the main thread after a short pause, so typing stays smooth with a long history; null while searching.
+    val hits by produceState<List<ChatSearchHit>?>(null, index, tokens, scope) {
+        if (tokens.isEmpty()) {
+            value = emptyList()
+            return@produceState
+        }
+        val ready = index ?: return@produceState
+        value = null
+        delay(150)
+        value = withContext(Dispatchers.Default) { ready.search(tokens, scope) }
+    }
+    val found = hits
 
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         TextField(
@@ -125,16 +125,20 @@ fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String) -> Unit, mo
                 cursorColor = AssistantAccent, focusedTextColor = AssistantTextPrimary, unfocusedTextColor = AssistantTextPrimary
             )
         )
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SearchScope.entries.forEach { ChoiceChip(it.label, it == scope, onClick = { scopeIndex = it.ordinal }) }
+        }
         Spacer(Modifier.height(12.dp))
-        val shown = if (tokens.isEmpty()) sessions.take(15).map { SearchHit(it, null, 0) } else hits
+        val shown = if (tokens.isEmpty()) sessions.take(15).map { ChatSearchHit(it, null, null, 0) } else found.orEmpty()
         val caption = when {
             tokens.isEmpty() -> if (shown.isEmpty()) null else "Recent chats"
-            hits.isEmpty() -> null
-            else -> "${hits.size} ${if (hits.size == 1) "chat" else "chats"} found"
+            found.isNullOrEmpty() -> null
+            else -> "${found.size} ${if (found.size == 1) "chat" else "chats"} found"
         }
         LazyColumn(Modifier.fillMaxSize()) {
             if (caption != null) item { PageLabel(caption, Modifier.padding(top = 4.dp)) }
-            if (shown.isEmpty()) {
+            if (shown.isEmpty() && (tokens.isEmpty() || found != null)) {
                 item {
                     Text(
                         if (tokens.isEmpty()) "You have no saved chats yet." else "No chat has all of those words.",
@@ -147,7 +151,7 @@ fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String) -> Unit, mo
                 Column(
                     Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(shape).background(AssistantSurface)
                         .border(BorderStroke(1.dp, AssistantOutline), shape)
-                        .clickable { onOpenChat(hit.session.id) }.padding(horizontal = 16.dp, vertical = 12.dp)
+                        .clickable { onOpenChat(hit.session.id, hit.turnIndex) }.padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Text(
                         highlight(hit.session.title, tokens), color = AssistantTextPrimary, fontSize = 15.sp,
