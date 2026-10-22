@@ -226,7 +226,7 @@ memory, knowledge search and connectors.
 | Auth | Google Sign-In (Play services), GitHub OAuth device flow |
 | Connectors | Model Context Protocol over HTTPS (streamable HTTP, JSON responses) |
 | Backend | AWS Lambda (Python 3.12, arm64, Function URLs), S3 with Transfer Acceleration |
-| Build | Gradle (AGP 8.5.2), Docker build image, R8 shrinking for release and OTA builds |
+| Build | Gradle (AGP 8.5.2), Android CLI for SDK, install and run, R8 shrinking for release and OTA builds |
 
 Minimum Android version is 8.0 (API 26); the app targets and compiles against API 35.
 
@@ -245,7 +245,6 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 │   │   ├── util/                    Latency tracing, user-facing errors
 │   │   └── viewmodel/               AssistantViewModel and UI state
 │   ├── app/src/test/                Unit tests (19 test files)
-│   ├── Dockerfile                   Reproducible build environment
 │   └── local.properties.example     Template for local configuration
 ├── mcp/                             AWS Lambda servers
 │   ├── google-workspace/            Google Workspace MCP server (REST APIs)
@@ -268,8 +267,13 @@ Minimum Android version is 8.0 (API 26); the app targets and compiles against AP
 ### Prerequisites
 
 - A Google AI Studio **Gemini API key** (voice, chat and knowledge base all use it).
-- Either **Docker** (recommended, no local Android SDK needed) or **JDK 17 + Android SDK 35** with a local Gradle toolchain.
-- An Android phone with USB or wireless debugging for installing the debug build.
+- **JDK 17 or newer** and the **Android SDK** (platform 35, build-tools 35.0.0 and 34.0.0), set up with the Android CLI (`android`). Set `ANDROID_HOME` to the SDK folder.
+- An Android phone with USB or wireless debugging, or an emulator, for installing the debug build.
+
+```bash
+android sdk install platforms/android-35 build-tools/35.0.0 build-tools/34.0.0 platform-tools
+android info          # prints the SDK location and connected devices
+```
 
 ### 1. Clone and configure
 
@@ -279,36 +283,27 @@ cd ultron-android/android
 cp local.properties.example local.properties
 ```
 
-Open `android/local.properties` and set at least `sdk.dir` (skip it when building with Docker) and `GEMINI_API_KEY`. Every other
+Open `android/local.properties` and set at least `GEMINI_API_KEY`, plus `sdk.dir` if `ANDROID_HOME` is not set. Every other
 key is optional; see the [configuration reference](#configuration-reference). The file is git-ignored and must never be committed.
 
 ### 2. Build
-
-**With Docker**
-
-```bash
-docker build -t assistant-android-build .
-docker run --rm \
-  -v "$PWD:/workspace" \
-  -v assistant-gradle-cache:/root/.gradle \
-  -v assistant-android-home:/root/.android \
-  -w /workspace assistant-android-build ./gradlew assembleDebug
-```
-
-The APK is written to `android/.docker-build/app/outputs/apk/debug/app-debug.apk`. The two named volumes keep the Gradle cache and
-a stable debug key, so repeat builds are fast and `adb install -r` keeps working.
-
-**With a local toolchain**
 
 ```bash
 ./gradlew assembleDebug
 ```
 
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. `android describe` prints the output paths of every build target.
+
 ### 3. Install and run
 
+With a phone or emulator connected (`android emulator list` / `android emulator start <name>` for a virtual one):
+
 ```bash
-adb install -r app-debug.apk
+android run --apks=app/build/outputs/apk/debug/app-debug.apk
 ```
+
+`android run` installs the APK and launches the app. Use `android install --apks=...` to install without launching, or
+`adb install -r app-debug.apk` if you prefer plain adb. `android screen capture -o screen.png` takes a screenshot of the device.
 
 Open the app, allow the microphone, and start talking or typing. You can also enter or change the Gemini key at any time under
 **Developer** in the menu, and that value wins over the build-time one.
@@ -329,7 +324,7 @@ All build-time values live in `android/local.properties` and are exposed to the 
 
 | Key | Required | Purpose |
 |---|---|---|
-| `sdk.dir` | for local builds | Path to the Android SDK. |
+| `sdk.dir` | if `ANDROID_HOME` is unset | Path to the Android SDK. |
 | `GEMINI_API_KEY` | recommended | Default Gemini key. Can also be entered in the app under Developer. |
 | `GITHUB_CLIENT_ID` | optional | Public client id of a GitHub OAuth App (device flow) for *Sign in with GitHub*. |
 | `GOOGLE_MCP_URL` | optional | Base URL of your Google Workspace MCP server, used by the six Google connectors. |
@@ -364,13 +359,13 @@ All three speak MCP over streamable HTTP with JSON responses, so any MCP client 
 
 The app can update itself from your own AWS account, with no app store involved.
 
-1. [`scripts/publish-update.ps1`](scripts/publish-update.ps1) builds the `ota` variant in Docker, uploads the APK to a **private S3 bucket**, and writes `latest.json` last, so a build only becomes visible once it is fully uploaded. Only the newest three builds are kept.
+1. [`scripts/publish-update.ps1`](scripts/publish-update.ps1) builds the `ota` variant with Gradle, uploads the APK to a **private S3 bucket**, and writes `latest.json` last, so a build only becomes visible once it is fully uploaded. Only the newest three builds are kept.
 2. The update Lambda reads `latest.json` and returns it with a **presigned download link that expires after 30 minutes**. Links use **S3 Transfer Acceleration**, so phones far from the bucket's region download through the nearest AWS edge.
 3. The app checks on launch and again **every 5 minutes while it stays open**, so a running app (a kiosk, for example) is updated too. If a build is found on an unmetered network, it is **downloaded quietly in the background**, so tapping *Update* installs immediately.
 4. The download is verified against its **SHA-256** before the installer opens, and Android itself refuses any package that is not signed with the same key as the installed app.
 5. **About → Check for updates** shows the result inline: checking, up to date, update available with size and notes, or an error.
 
-To publish a build: `aws login`, make sure Docker is running, then
+To publish a build: `aws login`, make sure `ANDROID_HOME` and `JAVA_HOME` are set, then
 
 ```powershell
 .\scripts\publish-update.ps1 -Notes "What changed"

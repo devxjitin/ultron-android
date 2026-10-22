@@ -276,3 +276,4 @@
 [2026-10-21 15:26] [Claude] [Refactor: moved summarize_latency.py to scripts/, Idea.md to docs/, removed android/track.md; README structure updated]
 [2026-10-21 15:35] [Claude] [Update: Marketplace shows all connectors, Available (not added) first then Added; compile check pass]
 [2026-10-22 06:56] [Claude] [Fix: connectors connected() ek baar compute, Added tap par detail khule, Section helper]
+[2026-10-22 07:18] [Claude] [Refactor: Docker build hataya (Dockerfile, gradle hook); README/publish script ab local Gradle + Android CLI]
