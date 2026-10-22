@@ -329,3 +329,5 @@
 [2026-10-22 15:35] [Claude] [Fix: publish script refuses stale checkouts/dirty tree (stops red-theme builds)]
 [2026-10-22 15:46] [Claude] [Remove: Marketplace; Connectors lists all connectors A-Z with Installed/Automation buttons]
 [2026-10-22 15:48] [Claude] [Update: published OTA build 29877807 (connectors A-Z, no Marketplace), not tested on device]
+[2026-10-22 16:00] [Claude] [Fix: tool-call chip stayed on screen after the tool finished]
+[2026-10-22 16:02] [Claude] [Update: published OTA build 29877808 (tool chip fix), not tested on device]

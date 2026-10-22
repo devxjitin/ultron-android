@@ -2377,6 +2377,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // sent and the model has now finished its follow-up turn, possibly with no audio
                 // at all. Deferring again would leave the mic muted and the UI on SPEAKING forever.
                 awaitingToolContinuation = false
+                // The reply to every tool is done, so no tool name may stay on screen into the next request.
+                _uiState.update { it.copy(activeTool = null) }
                 finalizeTurnIfAny()
                 // A full turn actually completed -- this session is genuinely working, so the
                 // reconnect-loop guard can relax again.
@@ -2897,6 +2899,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             pendingToolCallIds.remove(result.id)
         }
         if (accepted && pendingToolCallIds.isEmpty()) startTurnTimeout()
+        // The ids only leave pendingToolCallIds here, after clearToolLater already looked, so the label is removed now.
+        if (pendingToolCallIds.isEmpty()) _uiState.update { it.copy(activeTool = null) }
     }
 
     private fun cancelPendingToolCalls() {
@@ -2905,6 +2909,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         pendingToolCallIds.clear()
         toolBatches.clear()
         awaitingToolContinuation = false
+        _uiState.update { it.copy(activeTool = null) }
     }
 
     /** Restarts the idle-timeout countdown -- called whenever there's a sign of real
