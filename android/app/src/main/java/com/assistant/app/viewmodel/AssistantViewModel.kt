@@ -875,15 +875,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun auxiliaryUsage(purpose: String): (Int, Int) -> Unit = { inputTokens, outputTokens ->
         recordUsage(UsageDay("", inputTokens = inputTokens.toLong(), outputTokens = outputTokens.toLong(),
             purposes = mapOf(purpose to inputTokens.toLong() + outputTokens),
-            models = mapOf(GeminiTextClient.PRIMARY_MODEL to inputTokens.toLong() + outputTokens)))
+            modelInput = mapOf(GeminiTextClient.PRIMARY_MODEL to inputTokens.toLong()),
+            modelOutput = mapOf(GeminiTextClient.PRIMARY_MODEL to outputTokens.toLong())))
     }
 
-    private fun chatTokens(input: Long, output: Long, messages: Int = 0) =
-        UsageDay("", chatMessages = messages, inputTokens = input, outputTokens = output,
+    private fun chatTokens(input: Long, output: Long, messages: Int = 0): UsageDay {
+        val model = _uiState.value.azure.takeIf { it.isActive }?.model ?: GeminiChatClient.CHAT_MODEL
+        return UsageDay("", chatMessages = messages, inputTokens = input, outputTokens = output,
             purposes = mapOf(UsageStore.PURPOSE_CHAT to input + output),
-            models = mapOf(
-                (_uiState.value.azure.takeIf { it.isActive }?.model ?: GeminiChatClient.CHAT_MODEL) to input + output
-            ))
+            modelInput = mapOf(model to input), modelOutput = mapOf(model to output))
+    }
 
     /** Text generation for titles, personas and formatting; the tokens it uses count in Usage, under [purpose]. */
     private fun auxTextClient(apiKey: String, purpose: String) = GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose))

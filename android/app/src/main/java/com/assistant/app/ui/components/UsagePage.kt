@@ -26,7 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.UsageDay
-import com.assistant.app.data.UsageStore
+import com.assistant.app.data.USD_TO_INR
+import com.assistant.app.data.modelCostInr
+import com.assistant.app.data.modelRate
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantTextMuted
@@ -82,30 +84,45 @@ fun UsagePage(
         PageLabel("Chat")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatTile("Messages", total.chatMessages.toString(), "typed chat", Modifier.weight(1f))
-            StatTile("Tokens", compactNumber(total.tokens), "typed chat", Modifier.weight(1f))
+            StatTile("Tool calls", total.toolCalls.toString(), "all tools", Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
-        StatTile("Tool calls", total.toolCalls.toString(), "all tools", Modifier.fillMaxWidth())
-        if (total.models.isNotEmpty()) {
-            PageLabel("Tokens by model")
-            PageCard {
-                total.models.entries.sortedByDescending { it.value }.forEach { (model, tokens) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                        Text(model, color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                        Text(compactNumber(tokens), color = AssistantTextSecondary, fontSize = 14.sp)
-                    }
-                }
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatTile("Input tokens", compactNumber(total.inputTokens), "sent to the model", Modifier.weight(1f))
+            StatTile("Output tokens", compactNumber(total.outputTokens), "written back", Modifier.weight(1f))
         }
-        if (total.purposes.isNotEmpty()) {
-            PageLabel("Where chat tokens went")
+        val modelNames = (total.modelInput.keys + total.modelOutput.keys)
+        if (modelNames.isNotEmpty()) {
+            PageLabel("By model")
+            val costs = modelNames.associateWith { modelCostInr(it, total.modelInput[it] ?: 0L, total.modelOutput[it] ?: 0L) }
             PageCard {
-                total.purposes.entries.sortedByDescending { it.value }.forEach { (name, tokens) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                        Text(purposeLabel(name), color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                        Text(compactNumber(tokens), color = AssistantTextSecondary, fontSize = 14.sp)
+                modelNames.sortedByDescending { (total.modelInput[it] ?: 0L) + (total.modelOutput[it] ?: 0L) }.forEach { model ->
+                    val estimated = modelRate(model)?.estimated == true
+                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(model, color = AssistantTextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            Text(
+                                costs[model]?.let { (if (estimated) "~" else "") + rupees(it) } ?: "price not set",
+                                color = AssistantTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Text(
+                            "in ${compactNumber(total.modelInput[model] ?: 0L)}  ·  out ${compactNumber(total.modelOutput[model] ?: 0L)}",
+                            color = AssistantTextSecondary, fontSize = 13.sp
+                        )
                     }
                 }
+                val sum = costs.values.filterNotNull().sum()
+                if (costs.values.any { it != null }) {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text("Total", color = AssistantTextSecondary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(rupees(sum), color = AssistantTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Text(
+                    "Estimate from list prices at about ₹${USD_TO_INR.toInt()} per US dollar. ~ means the model's own price is not published yet, so a similar model's rate is used.",
+                    color = AssistantTextMuted, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
 
@@ -184,13 +201,8 @@ private fun StatTile(title: String, value: String, caption: String, modifier: Mo
 
 private val BUDGET_CHOICES = listOf("Off" to 0L, "50K" to 50_000L, "200K" to 200_000L, "1M" to 1_000_000L)
 
-private fun purposeLabel(purpose: String) = when (purpose) {
-    UsageStore.PURPOSE_CHAT -> "Chat replies"
-    UsageStore.PURPOSE_TITLE -> "Chat names"
-    UsageStore.PURPOSE_PERSONA -> "Assistant instructions"
-    UsageStore.PURPOSE_PDF -> "PDF import"
-    else -> purpose
-}
+private fun rupees(amount: Double): String =
+    if (amount < 10) String.format(Locale.US, "₹%.2f", amount) else String.format(Locale.US, "₹%.0f", amount)
 
 private fun compactNumber(n: Long): String = when {
     n >= 1_000_000 -> String.format(Locale.US, "%.1fM", n / 1_000_000.0)
