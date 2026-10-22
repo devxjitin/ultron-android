@@ -332,3 +332,4 @@
 [2026-10-22 16:00] [Claude] [Fix: tool-call chip stayed on screen after the tool finished]
 [2026-10-22 16:02] [Claude] [Update: published OTA build 29877808 (tool chip fix), not tested on device]
 [2026-10-22 16:58] [Claude] [Update: Usage split chat/voice, per-model tokens; AI chat titles always on; removed update-assistant toggle]
+[2026-10-22 17:07] [Claude] [Update: published OTA build 29877813 (usage split, auto titles), not tested on device]
