@@ -340,3 +340,4 @@
 [2026-10-22 19:20] [Claude] [Add: default assistant option, idle notification removed; wake word dropped]
 [2026-10-22 19:23] [Claude] [Update: published OTA build 29877950 (default assistant, no idle notification), not tested on device]
 [2026-10-22 20:26] [Claude] [Add: day/night toggle on home, Ultron announces notifications in voice, premium app icon, home logo removed]
+[2026-10-22 20:30] [Claude] [Update: published OTA build 29878017 (theme toggle, notif announce, new icon), not tested on device]
