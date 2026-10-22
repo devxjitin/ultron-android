@@ -16,6 +16,8 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentUris
+import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.MediaStore.Images
@@ -39,6 +41,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.telephony.SmsManager
 import android.os.Environment
 import android.os.PowerManager
 import android.os.StatFs
@@ -57,6 +60,7 @@ import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.AssistantNotificationListener
 import com.assistant.app.ReminderReceiver
 import androidx.core.location.LocationManagerCompat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -64,6 +68,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import com.assistant.app.network.DuckDuckGoClient
 import com.assistant.app.network.HttpClients
+import com.assistant.app.network.WeatherClient
+import com.assistant.app.network.WeatherPlace
 import okhttp3.Request
 import org.json.JSONObject
 import java.time.LocalDateTime
@@ -190,6 +196,23 @@ class DeviceToolRunner(
                 start(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + numbers.first())))
                 "status=ok\nCalling ${match.first} now."
             }
+            DeviceTool.SEND_SMS -> sendSms(text("number") ?: return MISSING, text("message") ?: return MISSING, null)
+            DeviceTool.SEND_SMS_CONTACT -> {
+                missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)?.let { return it }
+                val name = text("name") ?: return MISSING
+                val message = text("message") ?: return MISSING
+                val found = findContacts(name, 5)
+                if (found.isEmpty()) return "status=not_found\nNo contact matches \"$name\". No message was sent."
+                // Only send when exactly one number matches; otherwise the user must pick one.
+                val numbers = found.map { it.second.filter { c -> c.isDigit() || c == '+' } }.distinct()
+                if (numbers.size > 1) {
+                    return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to text, " +
+                        "then use send_sms with that number. No message was sent.\n" +
+                        found.joinToString("\n") { "${it.first}: ${it.second}" }
+                }
+                sendSms(numbers.first(), message, found.first().first)
+            }
+            DeviceTool.GET_WEATHER -> weather(text("place"), (number("days") ?: 3).coerceIn(1, 7))
             DeviceTool.CREATE_CONTACT -> {
                 val name = text("name") ?: return MISSING
                 start(Intent(ContactsContract.Intents.Insert.ACTION).setType(ContactsContract.RawContacts.CONTENT_TYPE)
@@ -548,6 +571,85 @@ class DeviceToolRunner(
             Locale.ENGLISH, location.latitude, location.longitude, location.accuracy.toInt(),
             address?.let { " Address: $it." }.orEmpty()
         )
+    }
+
+    /** Weather for a named place, or for where the phone is when [place] is null. */
+    private suspend fun weather(place: String?, days: Int): String {
+        val target = if (place == null) {
+            val location = when (val result = locate()) {
+                is Located.Failed -> return result.message
+                is Located.Ok -> result.location
+            }
+            WeatherPlace(localityName(location) ?: "your location", location.latitude, location.longitude)
+        } else {
+            WeatherClient.findPlace(place).getOrElse { return "status=not_found\n${it.message}" }
+        }
+        return WeatherClient.forecast(target, days).getOrElse {
+            "status=failed\nThe weather service could not be reached. The connection may be offline."
+        }
+    }
+
+    /** Town or city name for a location, or null when the phone cannot look it up. */
+    private suspend fun localityName(location: android.location.Location): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!Geocoder.isPresent()) null
+            else @Suppress("DEPRECATION") Geocoder(app, Locale.getDefault())
+                .getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()
+                ?.let { it.locality ?: it.subAdminArea ?: it.adminArea }
+        }.getOrNull()
+    }
+
+    /**
+     * Sends an SMS with no confirmation screen, after the checks in [SmsRules], and reports what the phone's radio said:
+     * sent, failed with a reason, or handed over but not confirmed in time. [recipient] is the contact name when known.
+     */
+    private suspend fun sendSms(number: String, message: String, recipient: String?): String {
+        missingPermission(Manifest.permission.SEND_SMS)?.let { return it }
+        val clean = SmsRules.cleanNumber(number)
+            ?: return "status=invalid\nThat is not a normal phone number (7 to 15 digits). No message was sent."
+        val text = message.trim()
+        if (text.length > SmsRules.MAX_CHARS) {
+            return "status=invalid\nThe message is ${text.length} characters; the limit is ${SmsRules.MAX_CHARS}. Shorten it. No message was sent."
+        }
+        if (!SmsRules.allowSend()) {
+            return "status=limit\nAlready sent ${SmsRules.MAX_PER_HOUR} messages in the last hour, so no more are sent for now."
+        }
+        val label = recipient?.let { "$it ($clean)" } ?: clean
+        val manager = if (Build.VERSION.SDK_INT >= 31) app.getSystemService(SmsManager::class.java)
+        else @Suppress("DEPRECATION") SmsManager.getDefault()
+        val parts = manager.divideMessage(text)
+        val action = "${app.packageName}.SMS_SENT.${System.nanoTime()}"
+        val outcome = CompletableDeferred<Int>()
+        var remaining = parts.size
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (resultCode != Activity.RESULT_OK) outcome.complete(resultCode)
+                else if (--remaining == 0) outcome.complete(Activity.RESULT_OK)
+            }
+        }
+        ContextCompat.registerReceiver(app, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
+        try {
+            val sent = ArrayList(parts.map {
+                PendingIntent.getBroadcast(app, 0, Intent(action).setPackage(app.packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            })
+            try {
+                manager.sendMultipartTextMessage(clean, null, parts, sent, null)
+            } catch (e: RuntimeException) {
+                SmsRules.refund()
+                return "status=failed\nAndroid refused to send the message. No message was sent."
+            }
+            val code = withTimeoutOrNull(20_000L) { outcome.await() }
+            return when (code) {
+                Activity.RESULT_OK -> "status=ok\nMessage sent to $label."
+                null -> "status=unconfirmed\nThe message was handed to the network, but the phone has not confirmed it was sent. " +
+                    "Do not say it was delivered."
+                SmsManager.RESULT_ERROR_NO_SERVICE -> "status=failed\nThere is no mobile network, so the message was not sent."
+                SmsManager.RESULT_ERROR_RADIO_OFF -> "status=failed\nAirplane mode or the radio is off, so the message was not sent."
+                else -> "status=failed\nThe message could not be sent (error $code)."
+            }
+        } finally {
+            app.unregisterReceiver(receiver)
+        }
     }
 
     /** Returns a tool result asking for the Modify system settings permission, or null when granted. */
@@ -988,7 +1090,7 @@ class DeviceToolRunner(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
-            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP
+            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT
         )
         const val MISSING ="status=invalid\nA required value was missing."
     }

@@ -65,6 +65,7 @@ import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.Tune
 import com.assistant.app.ui.theme.AppButtonShape
 import com.assistant.app.ui.theme.AlertDialog
@@ -190,11 +191,15 @@ private val PhoneCatalog = listOf(
         Category.PHONE, Icons.Outlined.QueryStats, Kind.Local(access = Access.USAGE_ACCESS)),
     phone("duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
         Category.PRODUCTIVITY, Icons.Outlined.Language, Kind.Online, "Free, no sign-in"),
+    phone("weather", "Weather", "Current weather and the forecast for where you are or any city.",
+        Category.PRODUCTIVITY, Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
     phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
         Category.MEDIA, Icons.Outlined.PlayCircle),
     // Automation connectors (voice only).
     phone("calls", "Calls", "Dial a number, call a contact by name and save new contacts.",
         Category.AUTOMATION, Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
+    phone("messages", "Messages", "Send a text message to a number or to a contact by name right away, without opening any screen.",
+        Category.AUTOMATION, Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS))),
     phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, change the wallpaper, use the clipboard and show notifications.",
         Category.AUTOMATION, Icons.Outlined.Apps),
     phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
@@ -637,6 +642,12 @@ private val InfoById: Map<String, Info> = mapOf(
         "Your search words go to DuckDuckGo. Results are treated as untrusted text and never as instructions.",
         "Your phone, which asks DuckDuckGo directly"
     ),
+    "weather" to Info(
+        "Tells you the weather right now and the forecast for the next few days (temperature, conditions, chance of rain and wind) for where you are or for any city you name. There is no account and no API key.",
+        "No sign-in. Using it without a city needs Location permission; Android asks the first time.",
+        "A city name, or your coordinates when you ask about where you are, goes to Open-Meteo, a free weather service. The result is only numbers and conditions.",
+        "Your phone, which asks Open-Meteo directly"
+    ),
     "youtube" to Info(
         "Searches YouTube, shows video details, reads transcripts (captions), lists a channel's or playlist's videos, and downloads a video or only its audio to Downloads/Ultron. Before downloading it asks which format and quality you want, from what that video really offers (up to 4K or 8K). It all runs on your phone because YouTube blocks cloud servers.",
         "No sign-in. Downloads need free storage (a 4K video can be several GB), and a notification shows the progress.",
@@ -659,6 +670,11 @@ private val InfoById: Map<String, Info> = mapOf(
         "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save. It works by voice only.",
         "Contacts permission. Android asks for the Phone permission the first time a call is placed.",
         "A call is placed only when you ask. The number or name is part of the conversation."
+    ),
+    "messages" to Info(
+        "Sends a text message (SMS) to a number or to a contact by name as soon as you ask, with no screen to confirm on. It sends only what you said, one message per request, up to 480 characters, and at most 10 messages an hour. It refuses very short numbers, which can be paid services, and if several contacts match it asks you which one. It works by voice only.",
+        "SMS permission and Contacts permission. Android asks the first time a message is sent.",
+        "Your carrier may charge for SMS as usual. The recipient and the text are part of the conversation with the model."
     ),
     "apps_settings" to Info(
         "Opens apps by name, the camera, Android settings and an app's info page, changes the wallpaper from an image link, reads or writes the clipboard and posts a notification. It works by voice only.",

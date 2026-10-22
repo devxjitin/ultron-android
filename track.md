@@ -310,3 +310,5 @@
 [2026-10-22 11:04] [Claude] [Update: merged indigo theme 7f3668b into dark-persona branch; build + unit tests pass]
 [2026-10-22 11:04] [Claude] [Update: published OTA build 29877601 to AWS (publish script: added -MinVersionCode)]
 [2026-10-22 13:14] [Claude] [Fix: gradle debug/OTA signing pinned to ~/.ultron-android key; verified cert FB:11:8C]
+[2026-10-22 13:38] [Claude] [Add: Messages connector (voice): auto-send SMS, number/rate checks, SEND_SMS permission]
+[2026-10-22 13:38] [Claude] [Add: Weather connector (voice+chat) via Open-Meteo, place name or GPS; unit tests added]
