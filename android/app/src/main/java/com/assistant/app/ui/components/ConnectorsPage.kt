@@ -178,7 +178,7 @@ private val PhoneCatalog = listOf(
     phone("alarms_notes", "Alarms & notes", "Set alarms, timers and reminders, and keep quick notes on this device.",
         Category.PRODUCTIVITY, Icons.Outlined.Alarm),
     phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
-        Category.PRODUCTIVITY, Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR))),
+        Category.PRODUCTIVITY, Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
     phone("contacts", "Contacts", "Find people and see their birthdays from your phone's address book.",
         Category.COMMUNICATION, Icons.Outlined.Contacts, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
     phone("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
@@ -607,9 +607,9 @@ private val InfoById: Map<String, Info> = mapOf(
         "Notes never leave the phone unless you ask the assistant to read them out."
     ),
     "calendar" to Info(
-        "Reads your upcoming events from every calendar on the phone (Google Calendar included), checks whether a time slot is free, and opens a new-event form for you to confirm. Nothing is saved until you press save.",
-        "Calendar permission.",
-        "Event titles and times are sent to the model when you ask about your schedule."
+        "Reads your upcoming events from every calendar on the phone (Google Calendar included), checks whether a time slot is free, adds events and cancels them, all by itself with no screen opening. Repeating events are never deleted.",
+        "Calendar permission (read and write).",
+        "Event titles and times are sent to the model when you ask about your schedule. Events it adds or cancels change your real calendar right away."
     ),
     "contacts" to Info(
         "Finds a contact's number by name and tells you their birthday. It only reads.",

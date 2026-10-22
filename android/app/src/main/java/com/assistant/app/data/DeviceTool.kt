@@ -348,13 +348,24 @@ enum class DeviceTool(
         )
     ),
     CREATE_EVENT(
-        ToolGroup.CONTACTS_CALENDAR, "create_calendar_event", "Add calendar event", "Open a new event form (you press save).",
-        "Opens a new calendar event with the details filled in. The user saves it.",
+        ToolGroup.CONTACTS_CALENDAR, "create_calendar_event", "Add calendar event", "Add an event to the calendar by itself.",
+        "Saves a new event straight into the user's calendar, with a reminder. No screen opens and nothing needs confirming, " +
+            "so call it as soon as the user asks to schedule something.",
         listOf(
             ToolParam("title", ToolParamType.STRING, "Event title."),
             ToolParam("date", ToolParamType.STRING, "Date as YYYY-MM-DD."),
             ToolParam("time", ToolParamType.STRING, "Start time as HH:MM in 24-hour format."),
-            ToolParam("duration_minutes", ToolParamType.INTEGER, "Length in minutes. Default 60.", required = false)
+            ToolParam("duration_minutes", ToolParamType.INTEGER, "Length in minutes. Default 60.", required = false),
+            ToolParam("location", ToolParamType.STRING, "Where it happens.", required = false)
+        )
+    ),
+    CANCEL_EVENT(
+        ToolGroup.CONTACTS_CALENDAR, "cancel_calendar_event", "Cancel calendar event", "Delete an event from the calendar by itself.",
+        "Deletes an upcoming calendar event that matches the title, straight away and without opening any screen. " +
+            "If several events match it says so; then call again with the date. Repeating events are not deleted.",
+        listOf(
+            ToolParam("title", ToolParamType.STRING, "Full or partial event title."),
+            ToolParam("date", ToolParamType.STRING, "Date as YYYY-MM-DD, to pick one of several matches.", required = false)
         )
     ),
 

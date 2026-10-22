@@ -9,6 +9,7 @@ param(
     [string]$VersionName = "1.0.0",
     # Raise the build number when a phone already runs a higher one (a side-loaded build); Android refuses downgrades.
     [int]$MinVersionCode = 0,
+    [switch]$AllowStale,
     [string]$Bucket = "ultron-app-updates-143920986615",
     # Android SDK (the one Android CLI manages) and the system JDK 17+; JAVA_HOME must be set.
     [string]$Sdk = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:USERPROFILE\Android\Sdk" }),
@@ -19,6 +20,17 @@ $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
 
 # Same number goes into the app (as its version code) and into latest.json, so the phone can compare builds.
 $versionCode = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
+
+# Never publish from a checkout that is missing what is already on GitHub's main: that silently ships an older app
+# (an old theme, missing connectors). -AllowStale skips the check on purpose.
+if (-not $AllowStale) {
+    $repo = Split-Path $PSScriptRoot -Parent
+    git -C $repo fetch origin main --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Could not fetch origin/main to check this checkout is up to date." }
+    git -C $repo merge-base --is-ancestor origin/main HEAD
+    if ($LASTEXITCODE -ne 0) { throw "This checkout does not contain the latest origin/main, so the build would be older than what is live. Rebase or merge origin/main first (or pass -AllowStale)." }
+    if (git -C $repo status --porcelain --untracked-files=no) { throw "There are uncommitted changes; commit them so the published build matches a commit." }
+}
 
 # Fail before the slow build if publishing could not work anyway.
 if (-not (Get-Command aws -ErrorAction SilentlyContinue)) { throw "The AWS CLI ('aws') was not found; install it and run 'aws login' first." }
