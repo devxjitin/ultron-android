@@ -70,7 +70,7 @@ private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855)
 
 private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
 
-const val DEFAULT_GREETING = "Ultron online. State your command."
+const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
 const val MAX_GREETING_LENGTH = 60
 /** OAuth scopes requested at GitHub sign-in: profile and private repositories. The app only reads. */

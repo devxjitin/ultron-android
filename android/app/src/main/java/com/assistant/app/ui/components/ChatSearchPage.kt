@@ -126,9 +126,11 @@ fun ChatSearchPage(sessions: List<ChatSession>, onOpenChat: (String, Int?) -> Un
             )
         )
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SearchScope.entries.forEach { ChoiceChip(it.label, it == scope, onClick = { scopeIndex = it.ordinal }) }
-        }
+        ChoiceDropdown(
+            options = SearchScope.entries.map { it.name to it.label },
+            selectedId = scope.name,
+            onSelect = { id -> scopeIndex = SearchScope.entries.first { it.name == id }.ordinal }
+        )
         Spacer(Modifier.height(12.dp))
         val shown = if (tokens.isEmpty()) sessions.take(15).map { ChatSearchHit(it, null, null, 0) } else found.orEmpty()
         val caption = when {

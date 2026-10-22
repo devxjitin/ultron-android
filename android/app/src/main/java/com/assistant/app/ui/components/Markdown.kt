@@ -133,11 +133,11 @@ private val BodyStyle: TextStyle
 private fun CodeBlock(language: String, code: String) {
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF2B1A1E))) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1B1F2E))) {
         Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(language.ifBlank { "code" }, color = Color(0xFFD9B8BE), fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(language.ifBlank { "code" }, color = Color(0xFFB9BED3), fontSize = 12.sp, modifier = Modifier.weight(1f))
             Text(
-                if (copied) "Copied" else "Copy", color = Color(0xFFFFB4BE), fontSize = 12.sp,
+                if (copied) "Copied" else "Copy", color = Color(0xFFC7D0FF), fontSize = 12.sp,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
@@ -146,7 +146,7 @@ private fun CodeBlock(language: String, code: String) {
             )
         }
         Text(
-            code, color = Color(0xFFF5E6E8), fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp,
+            code, color = Color(0xFFEDEFF7), fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp,
             modifier = Modifier.horizontalScroll(rememberScrollState()).padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 14.dp)
         )
     }

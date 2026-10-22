@@ -282,13 +282,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val lastUser = last?.userText?.takeIf { it.isNotBlank() }?.let { "You: " + clip(it) }
         val lastReply = last?.assistantText?.takeIf { it.isNotBlank() }?.let { "Ultron: " + clip(it) }
         return when {
-            tool != null -> "Ultron · Working" to "Using tool: " + tool.replace('_', ' ')
-            state == VoiceState.CONNECTING || state == VoiceState.RESETTING -> "Ultron · Connecting" to "Opening a voice session…"
-            state == VoiceState.LISTENING -> "Ultron · Listening" to (lastReply ?: "Waiting for your command.")
-            state == VoiceState.PROCESSING -> "Ultron · Thinking" to (lastUser ?: "Working on your request…")
-            state == VoiceState.SPEAKING -> "Ultron · Speaking" to (lastReply ?: lastUser ?: "Replying…")
-            state == VoiceState.ERROR -> "Ultron · Error" to (_uiState.value.errorMessage ?: "Something went wrong.")
-            else -> "Ultron · Idle" to (lastReply ?: lastUser ?: "Standing by.")
+            tool != null -> "Ultron: Working" to "Using tool: " + tool.replace('_', ' ')
+            state == VoiceState.CONNECTING || state == VoiceState.RESETTING -> "Ultron: Connecting" to "Opening a voice session…"
+            state == VoiceState.LISTENING -> "Ultron: Listening" to (lastReply ?: "Waiting for your command.")
+            state == VoiceState.PROCESSING -> "Ultron: Thinking" to (lastUser ?: "Working on your request…")
+            state == VoiceState.SPEAKING -> "Ultron: Speaking" to (lastReply ?: lastUser ?: "Replying…")
+            state == VoiceState.ERROR -> "Ultron: Error" to (_uiState.value.errorMessage ?: "Something went wrong.")
+            else -> "Ultron: Idle" to (lastReply ?: lastUser ?: "Standing by.")
         }
     }
 

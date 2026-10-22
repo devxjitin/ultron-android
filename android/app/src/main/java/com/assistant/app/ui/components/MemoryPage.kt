@@ -45,7 +45,7 @@ import com.assistant.app.data.MAX_MEMORY_TEXT_CHARS
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
-import com.assistant.app.ui.theme.AssistantAccentPink
+import com.assistant.app.ui.theme.AssistantAccentAlt
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
@@ -107,7 +107,7 @@ fun MemoryPage(
             Spacer(Modifier.size(10.dp))
             Box(
                 Modifier.size(52.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentPink)))
+                    .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentAlt)))
                     .clickable(enabled = draft.isNotBlank()) { onAdd(draft); draft = "" },
                 contentAlignment = Alignment.Center
             ) {
@@ -118,7 +118,7 @@ fun MemoryPage(
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "SAVED · ${memories.size}", color = AssistantTextMuted, fontSize = 11.sp,
+                "SAVED (${memories.size})", color = AssistantTextMuted, fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f).padding(start = 4.dp)
             )
             if (memories.isNotEmpty()) {

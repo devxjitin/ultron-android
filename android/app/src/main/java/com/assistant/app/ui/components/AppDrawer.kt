@@ -28,7 +28,10 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.SettingsBrightness
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Search
@@ -71,7 +74,7 @@ import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
-import com.assistant.app.ui.theme.AssistantAccentPink
+import com.assistant.app.ui.theme.AssistantAccentAlt
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.ThemeMode
@@ -156,7 +159,7 @@ fun AppDrawerContent(
     }
 }
 
-/** System, Light and Dark side by side; the chosen one is outlined and filled. */
+/** System, Light and Dark side by side as icons; the chosen one is outlined and filled. */
 @Composable
 private fun ThemePicker(selected: ThemeMode, onChange: (ThemeMode) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -170,11 +173,15 @@ private fun ThemePicker(selected: ThemeMode, onChange: (ThemeMode) -> Unit) {
                     .selectable(selected = on, role = Role.RadioButton, onClick = { onChange(mode) }),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    mode.label,
-                    color = if (on) AssistantAccent else AssistantTextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                Icon(
+                    when (mode) {
+                        ThemeMode.SYSTEM -> Icons.Outlined.SettingsBrightness
+                        ThemeMode.LIGHT -> Icons.Outlined.LightMode
+                        ThemeMode.DARK -> Icons.Outlined.DarkMode
+                    },
+                    contentDescription = mode.label,
+                    tint = if (on) AssistantAccent else AssistantTextSecondary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -242,17 +249,7 @@ private fun NavRow(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun DrawerHeader(assistantName: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
-                .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentPink))),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                assistantName.trim().take(1).uppercase().ifEmpty { "A" },
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-        }
+        AppIconTile(44.dp)
         Spacer(Modifier.size(14.dp))
         Text(
             assistantName,

@@ -116,6 +116,7 @@ import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
+import com.assistant.app.ui.theme.AssistantGradientEnd
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantSelectedBg
 import com.assistant.app.ui.theme.AssistantSurfaceElevated
@@ -277,14 +278,26 @@ fun ChatHome(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(assistantName, color = AssistantTextMuted, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(20.dp))
+                    AppIconTile(72.dp)
+                    Spacer(Modifier.height(22.dp))
+                    Text(timeOfDayGreeting(), color = AssistantTextMuted, fontSize = 15.sp, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "I'm $assistantName",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            brush = Brush.horizontalGradient(listOf(AssistantAccent, AssistantGradientEnd)),
+                            fontWeight = FontWeight.Bold
+                        ),
+                        fontSize = 42.sp,
+                        lineHeight = 50.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         text = greeting,
-                        color = AssistantTextPrimary,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light),
-                        fontSize = 30.sp,
-                        lineHeight = 40.sp,
+                        color = AssistantTextSecondary,
+                        fontSize = 18.sp,
+                        lineHeight = 26.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.widthIn(max = 620.dp)
                     )
@@ -384,6 +397,13 @@ fun ChatHome(
             }
         }
     }
+}
+
+/** "Good morning", "Good afternoon" or "Good evening" for the phone's current hour. */
+private fun timeOfDayGreeting(): String = when (java.time.LocalTime.now().hour) {
+    in 5..11 -> "Good morning"
+    in 12..16 -> "Good afternoon"
+    else -> "Good evening"
 }
 
 /** A file waiting to be sent: a thumbnail for images, an icon with the name for anything else. */

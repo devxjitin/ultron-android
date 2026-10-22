@@ -77,9 +77,11 @@ fun UsagePage(
     val total = remember(inRange) { inRange.fold(UsageDay("")) { sum, d -> sum + d } }
 
     PageColumn(modifier) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            UsageRange.entries.forEach { ChoiceChip(it.label, it == range, onClick = { rangeIndex = it.ordinal }) }
-        }
+        ChoiceDropdown(
+            options = UsageRange.entries.map { it.name to it.label },
+            selectedId = range.name,
+            onSelect = { id -> rangeIndex = UsageRange.entries.first { it.name == id }.ordinal }
+        )
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatTile("Messages", total.chatMessages.toString(), "typed chat", Modifier.weight(1f))
@@ -93,9 +95,11 @@ fun UsagePage(
 
         if (range != UsageRange.TODAY) {
             PageLabel("Activity")
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                UsageMetric.entries.forEach { ChoiceChip(it.label, it == metric, onClick = { metricIndex = it.ordinal }) }
-            }
+            ChoiceDropdown(
+                options = UsageMetric.entries.map { it.name to it.label },
+                selectedId = metric.name,
+                onSelect = { id -> metricIndex = UsageMetric.entries.first { it.name == id }.ordinal }
+            )
             Spacer(Modifier.height(12.dp))
             PageCard {
                 val shownDays = if (range == UsageRange.ALL) 30 else range.days
@@ -128,10 +132,12 @@ fun UsagePage(
         }
 
         PageLabel("Limits and automatic extras")
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Daily token limit", color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp, end = 4.dp))
-            BUDGET_CHOICES.forEach { (label, tokens) -> ChoiceChip(label, dailyTokenBudget == tokens, onClick = { onDailyBudgetChange(tokens) }) }
-        }
+        Text("Daily token limit", color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+        ChoiceDropdown(
+            options = BUDGET_CHOICES.map { (label, tokens) -> tokens.toString() to label },
+            selectedId = dailyTokenBudget.toString(),
+            onSelect = { id -> onDailyBudgetChange(id.toLong()) }
+        )
         Spacer(Modifier.height(10.dp))
         ToggleCard(
             "Name chats with AI", autoTitleChats, onAutoTitleChange,
