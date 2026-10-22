@@ -238,8 +238,6 @@ fun AssistantScreen(
                     guardedNav { onOpenChat(id) }
                 },
                 onDeleteChat = onDeleteChatSession,
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
@@ -360,6 +358,9 @@ fun AssistantScreen(
             onMenuClick = { scope.launch { drawerState.open() } },
             // Only once there is a conversation to leave; an empty chat is already a fresh one.
             onNewChat = if (currentTab == NavTab.HOME && !sessionActive && uiState.chatMessages.isNotEmpty()) onChatNew else null,
+            onToggleTheme = if (currentTab == NavTab.HOME) {
+                { onThemeModeChange(if (com.assistant.app.ui.theme.ActivePalette.current.dark) ThemeMode.LIGHT else ThemeMode.DARK) }
+            } else null,
             modifier = Modifier.align(Alignment.TopCenter)
         )
 

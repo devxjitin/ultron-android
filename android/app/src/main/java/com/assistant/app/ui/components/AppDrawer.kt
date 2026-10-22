@@ -115,9 +115,7 @@ fun AppDrawerContent(
     chats: List<ChatSession> = emptyList(),
     activeChatId: String? = null,
     onOpenChat: (String) -> Unit = {},
-    onDeleteChat: (String) -> Unit = {},
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeModeChange: (ThemeMode) -> Unit = {}
+    onDeleteChat: (String) -> Unit = {}
 ) {
     var chatToDelete by remember { mutableStateOf<ChatSession?>(null) }
     chatToDelete?.let { chat ->
@@ -150,37 +148,6 @@ fun AppDrawerContent(
             chats.take(MAX_DRAWER_CHATS).forEach { chat ->
                 ChatRow(chat.title, chat.id == activeChatId && selected == NavTab.HOME,
                     onClick = { onOpenChat(chat.id) }, onLongClick = { chatToDelete = chat })
-            }
-        }
-        NavSection("Appearance")
-        ThemePicker(themeMode, onThemeModeChange)
-    }
-}
-
-/** System, Light and Dark side by side as icons; the chosen one is outlined and filled. */
-@Composable
-private fun ThemePicker(selected: ThemeMode, onChange: (ThemeMode) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ThemeMode.entries.forEach { mode ->
-            val shape = RoundedCornerShape(12.dp)
-            val on = mode == selected
-            Box(
-                Modifier.weight(1f).height(40.dp).clip(shape)
-                    .background(if (on) AssistantSelectedBg else AssistantFieldBackground, shape)
-                    .border(BorderStroke(if (on) 1.5.dp else 1.dp, if (on) AssistantAccent else AssistantOutline), shape)
-                    .selectable(selected = on, role = Role.RadioButton, onClick = { onChange(mode) }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    when (mode) {
-                        ThemeMode.SYSTEM -> Icons.Outlined.SettingsBrightness
-                        ThemeMode.LIGHT -> Icons.Outlined.LightMode
-                        ThemeMode.DARK -> Icons.Outlined.DarkMode
-                    },
-                    contentDescription = mode.label,
-                    tint = if (on) AssistantAccent else AssistantTextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
             }
         }
     }
@@ -269,7 +236,9 @@ fun AppTopBar(
     modifier: Modifier = Modifier,
     height: Dp = AppTopBarHeight,
     /** When set, a "new chat" button is shown at the right end of the bar. */
-    onNewChat: (() -> Unit)? = null
+    onNewChat: (() -> Unit)? = null,
+    /** When set, a sun/moon button at the right end switches between light and dark. */
+    onToggleTheme: (() -> Unit)? = null
 ) {
     Row(
         modifier.fillMaxWidth().height(height).padding(horizontal = 8.dp),
@@ -299,6 +268,16 @@ fun AppTopBar(
         if (onNewChat != null) {
             IconButton(onClick = onNewChat) {
                 Icon(Icons.Filled.AddComment, contentDescription = "New chat", tint = AssistantTextPrimary)
+            }
+        }
+        if (onToggleTheme != null) {
+            val dark = com.assistant.app.ui.theme.ActivePalette.current.dark
+            IconButton(onClick = onToggleTheme) {
+                Icon(
+                    if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                    contentDescription = if (dark) "Switch to light mode" else "Switch to dark mode",
+                    tint = AssistantTextPrimary
+                )
             }
         }
         Spacer(Modifier.size(8.dp))

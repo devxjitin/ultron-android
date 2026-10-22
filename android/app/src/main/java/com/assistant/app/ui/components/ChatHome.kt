@@ -278,8 +278,6 @@ fun ChatHome(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    AppIconTile(72.dp)
-                    Spacer(Modifier.height(22.dp))
                     Text(timeOfDayGreeting(), color = AssistantTextMuted, fontSize = 15.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(4.dp))
                     Text(

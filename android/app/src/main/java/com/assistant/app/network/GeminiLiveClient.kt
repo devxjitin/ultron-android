@@ -353,6 +353,12 @@ class GeminiLiveClient(
         }
     }
 
+    /** Says something to the model as text during a live session; it answers by voice like it does to speech. */
+    fun sendText(text: String): Boolean {
+        val message = JSONObject().put("realtimeInput", JSONObject().put("text", text))
+        return webSocket?.send(message.toString()) == true
+    }
+
     /** One answer to a [FunctionCall]: its id and name, and the tool's result text. */
     data class ToolResult(val id: String, val name: String, val resultText: String)
 
