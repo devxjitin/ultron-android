@@ -343,3 +343,4 @@
 [2026-10-24 10:54] [Claude] [Update: published OTA build 29880319 (voice drain fix), not tested on device]
 [2026-10-24 11:13] [Claude] [Docs: audited connectors and tools, no code changes]
 [2026-10-24 11:23] [Claude] [Fix: web_search falls back to Bing when DuckDuckGo blocks the phone]
+[2026-10-24 11:26] [Claude] [Update: published OTA build 29880400 (Bing search fallback), not tested on device]
