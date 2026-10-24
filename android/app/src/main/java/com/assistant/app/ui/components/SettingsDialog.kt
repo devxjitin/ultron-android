@@ -871,7 +871,7 @@ private fun GeneralSettingsContent(
             title = "Barge-in",
             checked = settings.bargeInEnabled, onChange = onBargeInToggled
         )
-        Spacer(Modifier.height(24.dp))
+        DefaultAssistantSection()
     }
 }
 

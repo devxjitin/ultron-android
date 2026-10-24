@@ -139,8 +139,6 @@ fun AssistantScreen(
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
     onOpenChatAt: (String, Int?) -> Unit = { _, _ -> },
     onChatFocusConsumed: () -> Unit = {},
-    onAutoTitleToggled: (Boolean) -> Unit = {},
-    onAutoPersonaToggled: (Boolean) -> Unit = {},
     onDailyBudgetChanged: (Long) -> Unit = {},
     onDismissAgentPromptUpdate: () -> Unit = {},
     onAddMemory: (String) -> Unit = {},
@@ -434,8 +432,6 @@ fun AssistantScreen(
                 )
                 AdminPage.USAGE -> UsagePage(
                     uiState.usageDays, pageModifier,
-                    autoTitleChats = uiState.settings.autoTitleChats, onAutoTitleChange = onAutoTitleToggled,
-                    autoPersonaUpdate = uiState.settings.autoPersonaUpdate, onAutoPersonaChange = onAutoPersonaToggled,
                     dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged
                 )
                 AdminPage.STORAGE -> {
