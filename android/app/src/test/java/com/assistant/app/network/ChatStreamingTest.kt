@@ -2,6 +2,7 @@ package com.assistant.app.network
 
 import com.assistant.app.data.AzureConfig
 import com.assistant.app.data.AzureMode
+import com.assistant.app.data.NimConfig
 import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -41,8 +42,12 @@ class ChatStreamingTest {
         .setHeader("Content-Type", "text/event-stream")
         .setBody(events.joinToString("") { "data: $it\n\n" })
 
-    private fun azure() = AzureChatClient(
+    private fun azure() = OpenAiChatClient.azure(
         AzureConfig(mode = AzureMode.ENDPOINT, endpoint = server.url("/").toString(), apiKey = "key", model = "test-model"), ""
+    )
+
+    private fun nim() = OpenAiChatClient.nvidia(
+        NimConfig(enabled = true, apiKey = "nvapi-key", model = "meta/test"), server.url("/v1").toString().trimEnd('/')
     )
 
     private fun gemini() = GeminiChatClient("key", baseUrl = server.url("/").toString().trimEnd('/'))
@@ -80,6 +85,28 @@ class ChatStreamingTest {
         }
         fail("expected the reply to be rejected")
         return ""
+    }
+
+    // ---- NVIDIA NIM
+
+    @Test fun `nim sends a bearer key and max_tokens`() {
+        server.enqueue(sse(chunk("Hi", "stop"), "[DONE]"))
+        assertEquals("Hi", runBlocking { nim().stream("sys", question, JSONArray(), noTool, Recorder()) })
+        val request = server.takeRequest()
+        assertEquals("/v1/chat/completions", request.path)
+        assertEquals("Bearer nvapi-key", request.getHeader("Authorization"))
+        val body = JSONObject(request.body.readUtf8())
+        assertEquals("meta/test", body.getString("model"))
+        assertTrue(body.has("max_tokens"))
+        assertTrue(!body.has("max_completion_tokens"))
+    }
+
+    @Test fun `nim answers without tools when the model rejects them`() {
+        server.enqueue(MockResponse().setResponseCode(400).setBody("{\"error\":\"tools are not supported\"}"))
+        server.enqueue(sse(chunk("Plain answer", "stop"), "[DONE]"))
+        assertEquals("Plain answer", runBlocking { nim().stream("sys", question, JSONArray().put(JSONObject().put("name", "get_time").put("description", "time")), noTool, Recorder()) })
+        assertTrue(JSONObject(server.takeRequest().body.readUtf8()).has("tools"))
+        assertTrue(!JSONObject(server.takeRequest().body.readUtf8()).has("tools"))
     }
 
     // ---- Azure

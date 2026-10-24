@@ -15,6 +15,9 @@ import com.assistant.app.audio.AudioPlayer
 import com.assistant.app.audio.MicStreamer
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AzureConfig
+import com.assistant.app.data.AzureMode
+import com.assistant.app.data.NimConfig
+import com.assistant.app.data.nimChatModels
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ChatAttachmentStore
 import com.assistant.app.data.ChatHistoryStore
@@ -62,7 +65,7 @@ import com.assistant.app.data.RagDocumentStore
 import com.assistant.app.data.RagSearchEngine
 import com.assistant.app.network.ChatAttachment
 import com.assistant.app.network.ChatStreamListener
-import com.assistant.app.network.AzureChatClient
+import com.assistant.app.network.OpenAiChatClient
 import com.assistant.app.network.GeminiChatClient
 import com.assistant.app.network.ToolDeclarations
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -382,13 +385,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 resolveApiKey() to apiKeyStore.getEmbeddingApiKey().orEmpty()
             }
             val azureConfig = withContext(Dispatchers.IO) { apiKeyStore.getAzureConfig() }
+            val nimConfig = withContext(Dispatchers.IO) { apiKeyStore.getNimConfig() }
             keysLoaded = true
             _uiState.update {
                 it.copy(
                     hasApiKey = resolvedKey.isNotBlank(),
                     currentApiKey = resolvedKey,
                     currentEmbeddingApiKey = embeddingKey,
-                    azure = azureConfig
+                    azure = azureConfig,
+                    nim = nimConfig
                 )
             }
             prewarmIfPossible()
@@ -514,9 +519,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val message = text.trim()
         if ((message.isEmpty() && attachments.isEmpty()) || _uiState.value.isChatSending) return false
         val apiKey = resolveApiKey()
-        val azure = _uiState.value.azure.takeIf { it.isActive }
-        if (azure == null && apiKey.isBlank()) {
-            showToast("Add a Gemini or Azure API key in Developer settings first.", AppNotificationType.ERROR)
+        val nim = _uiState.value.nim.takeIf { it.isActive }
+        val azure = _uiState.value.azure.takeIf { it.isActive && nim == null }
+        if (azure == null && nim == null && apiKey.isBlank()) {
+            showToast("Add a Gemini, Azure or NVIDIA API key in Developer settings first.", AppNotificationType.ERROR)
             return false
         }
         if (overDailyBudget()) {
@@ -605,8 +611,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         updateReply { it.copy(toolCalls = it.toolCalls.map { call -> if (call.index == index) call.copy(state = state) else call }) }
                     }
                 }
-                val reply = if (azure != null) {
-                    AzureChatClient(azure, BuildConfig.AZURE_ENDPOINT).stream(instruction, history, tools, ::runChatTool, chatListener)
+                val reply = if (nim != null) {
+                    OpenAiChatClient.nvidia(nim).stream(instruction, history, tools, ::runChatTool, chatListener)
+                } else if (azure != null) {
+                    OpenAiChatClient.azure(azure, BuildConfig.AZURE_ENDPOINT).stream(instruction, history, tools, ::runChatTool, chatListener)
                 } else {
                     GeminiChatClient(apiKey).stream(instruction, history, tools, ::runChatTool, chatListener)
                 }
@@ -890,7 +898,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun chatTokens(input: Long, output: Long, messages: Int = 0): UsageDay {
-        val model = _uiState.value.azure.takeIf { it.isActive }?.model ?: GeminiChatClient.CHAT_MODEL
+        val nim = _uiState.value.nim.takeIf { it.isActive }
+        val model = nim?.model ?: _uiState.value.azure.takeIf { it.isActive }?.model ?: GeminiChatClient.CHAT_MODEL
         return UsageDay("", chatMessages = messages, inputTokens = input, outputTokens = output,
             purposes = mapOf(UsageStore.PURPOSE_CHAT to input + output),
             modelInput = mapOf(model to input), modelOutput = mapOf(model to output))
@@ -910,7 +919,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun updateChatTitle(sessionId: String) {
         try {
             // Titles are written by Gemini; a chat that runs on Azure must not send its text to another provider.
-            if (_uiState.value.azure.isActive) return
+            if (_uiState.value.azure.isActive || _uiState.value.nim.isActive) return
             if (overDailyBudget()) return
             val session = chatHistoryStore.sessions.first().firstOrNull { it.id == sessionId } ?: return
             val turns = session.turns.size
@@ -1786,15 +1795,50 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return deviceToolRunner.run(tool, args)
     }
 
+    /** Saves the NVIDIA NIM chat settings; switching NIM on switches Azure off, so one chat provider is in use. */
+    fun onSaveNimConfig(config: NimConfig) {
+        val clean = config.copy(apiKey = config.apiKey.trim(), model = config.model.trim())
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                apiKeyStore.setNimConfig(clean) && (!clean.enabled || apiKeyStore.setAzureConfig(_uiState.value.azure.copy(mode = AzureMode.OFF)))
+            }
+            if (saved) {
+                _uiState.update { it.copy(nim = clean, azure = if (clean.enabled) it.azure.copy(mode = AzureMode.OFF) else it.azure) }
+            } else {
+                showToast("Couldn't save the NVIDIA settings. Please try again.", AppNotificationType.ERROR)
+            }
+        }
+    }
+
+    /** Fetches the chat models NVIDIA's catalog offers, for the model picker. */
+    fun onLoadNimModels() {
+        if (_uiState.value.isLoadingNimModels) return
+        _uiState.update { it.copy(isLoadingNimModels = true) }
+        viewModelScope.launch {
+            try {
+                val ids = OpenAiChatClient.nimModelIds(_uiState.value.nim.apiKey)
+                _uiState.update { it.copy(nimModels = nimChatModels(ids)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showToast("Couldn't load the NVIDIA model list. Check the connection and try again.", AppNotificationType.ERROR)
+            } finally {
+                _uiState.update { it.copy(isLoadingNimModels = false) }
+            }
+        }
+    }
+
     /** Saves the Azure OpenAI chat settings on their own, apart from the other Developer fields. */
     fun onSaveAzureConfig(config: AzureConfig) {
         val clean = config.copy(
             endpoint = config.endpoint.trim(), apiKey = config.apiKey.trim(), model = config.model.trim()
         )
         viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) { apiKeyStore.setAzureConfig(clean) }
+            val saved = withContext(Dispatchers.IO) {
+                apiKeyStore.setAzureConfig(clean) && (clean.mode == AzureMode.OFF || apiKeyStore.setNimConfig(_uiState.value.nim.copy(enabled = false)))
+            }
             if (saved) {
-                _uiState.update { it.copy(azure = clean) }
+                _uiState.update { it.copy(azure = clean, nim = if (clean.mode != AzureMode.OFF) it.nim.copy(enabled = false) else it.nim) }
             } else {
                 showToast("Couldn't save the Azure settings. Please try again.", AppNotificationType.ERROR)
             }

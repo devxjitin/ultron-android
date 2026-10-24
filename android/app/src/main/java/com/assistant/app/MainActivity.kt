@@ -415,6 +415,8 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         onSaveAzure = { config -> viewModel.onSaveAzureConfig(config) },
+                        onSaveNim = { config -> viewModel.onSaveNimConfig(config) },
+                        onLoadNimModels = { viewModel.onLoadNimModels() },
                         onGeneratePromptFromKnowledgeBase = { viewModel.onGeneratePromptFromKnowledgeBase() },
                         onDismissPromptGenerationError = { viewModel.onDismissPromptGenerationError() },
                         onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },

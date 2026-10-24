@@ -109,6 +109,11 @@ data class AssistantUiState(
     val currentApiKey: String = "",
     /** Azure OpenAI settings for the typed chat; when active, the chat uses it instead of Gemini. */
     val azure: com.assistant.app.data.AzureConfig = com.assistant.app.data.AzureConfig(),
+    /** NVIDIA NIM settings for the typed chat; at most one of Azure and NIM is switched on. */
+    val nim: com.assistant.app.data.NimConfig = com.assistant.app.data.NimConfig(),
+    /** Chat models the NIM catalog offered the last time "Load models" was tapped. */
+    val nimModels: List<String> = emptyList(),
+    val isLoadingNimModels: Boolean = false,
     val showSettings: Boolean = false,
     /** True when the stored knowledge data cannot be decoded; the admin can reset it. */
     val knowledgeStoreCorrupt: Boolean = false,

@@ -357,3 +357,4 @@
 [2026-10-24 17:51] [Claude] [Update: published OTA build 29880739 (friendly persona), not tested on device]
 [2026-10-24 18:25] [Claude] [Fix: scroll_screen too far; add amount/times params, slow drag with end hold to stop coasting]
 [2026-10-24 18:28] [Claude] [Update: published OTA build 29880776 (scroll amount fix), not tested on device]
+[2026-10-24 18:38] [Claude] [Add: NVIDIA NIM chat provider with user-chosen model and model list; AzureChatClient renamed OpenAiChatClient]

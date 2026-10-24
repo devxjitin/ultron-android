@@ -2,6 +2,8 @@ package com.assistant.app.network
 
 import com.assistant.app.data.AzureConfig
 import com.assistant.app.data.AzureMode
+import com.assistant.app.data.NIM_BASE_URL
+import com.assistant.app.data.NimConfig
 import com.assistant.app.data.azureBaseUrl
 import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Dispatchers
@@ -17,30 +19,55 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Streaming text chat with an Azure OpenAI deployment through its OpenAI-compatible `/openai/v1` API.
- * Same contract as [GeminiChatClient]: it offers the given tools, runs them via `runTool` and feeds
- * each result back until the model answers. Images and PDFs are sent to the model as they are.
+ * Streaming text chat with an OpenAI-compatible chat completions API: Azure OpenAI through its `/openai/v1` API,
+ * or NVIDIA NIM. Same contract as [GeminiChatClient]: it offers the given tools, runs them via `runTool` and feeds
+ * each result back until the model answers. Build one with [azure] or [nvidia].
  */
-class AzureChatClient(private val config: AzureConfig, private val defaultEndpoint: String) {
+class OpenAiChatClient private constructor(
+    private val model: String,
+    private val chatUrl: () -> String,
+    private val authHeader: Pair<String, String>,
+    private val isAzure: Boolean
+) {
 
     companion object {
         private const val MAX_TEXT_FILE_CHARS = 100_000
         private const val MAX_TOOL_ROUNDS = 5
         private val FAILED_STATUSES = listOf("failed", "search_failed", "invalid", "unavailable", "timeout", "refused", "disabled", "permission_needed")
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
+
+        fun azure(config: AzureConfig, defaultEndpoint: String) = OpenAiChatClient(
+            config.model,
+            {
+                val endpoint = if (config.mode == AzureMode.ENDPOINT) config.endpoint else defaultEndpoint
+                if (endpoint.isBlank()) throw java.io.IOException("Add the Azure OpenAI endpoint in Developer settings.")
+                azureBaseUrl(endpoint) + "/chat/completions"
+            },
+            "api-key" to config.apiKey,
+            isAzure = true
+        )
+
+        /** The model ids the NIM catalog lists (it needs no key to browse; a key is sent when there is one). */
+        suspend fun nimModelIds(apiKey: String): List<String> = withContext(Dispatchers.IO) {
+            val builder = Request.Builder().url("$NIM_BASE_URL/models")
+            if (apiKey.isNotBlank()) builder.header("Authorization", "Bearer $apiKey")
+            HttpClients.shared.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) throw java.io.IOException("Could not load the model list (${response.code}).")
+                val data = JSONObject(response.body?.string().orEmpty()).optJSONArray("data") ?: JSONArray()
+                (0 until data.length()).mapNotNull { data.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() } }
+            }
+        }
+
+        /** NVIDIA NIM hosted endpoints (build.nvidia.com); the user picks any model id the key can use. */
+        fun nvidia(config: NimConfig, baseUrl: String = NIM_BASE_URL) = OpenAiChatClient(
+            config.model, { baseUrl + "/chat/completions" }, "Authorization" to "Bearer ${config.apiKey}", isAzure = false
+        )
     }
 
     private val client = HttpClients.shared.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         .build()
-
-    private val url: String
-        get() {
-            val endpoint = if (config.mode == AzureMode.ENDPOINT) config.endpoint else defaultEndpoint
-            if (endpoint.isBlank()) throw java.io.IOException("Add the Azure OpenAI endpoint in Developer settings.")
-            return azureBaseUrl(endpoint) + "/chat/completions"
-        }
 
     suspend fun stream(
         systemInstruction: String,
@@ -51,7 +78,7 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
     ): String = withContext(Dispatchers.IO) {
         val conversation = JSONArray().put(JSONObject().put("role", "system").put("content", systemInstruction))
         messages.forEach { conversation.put(messageJson(it)) }
-        val openAiTools = toOpenAiTools(tools)
+        var openAiTools = toOpenAiTools(tools)
 
         val reply = StringBuilder()
         var toolIndex = 0
@@ -59,7 +86,14 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
             // After the last round the model must answer: the tools stay declared (the history holds calls to them),
             // but it may not call them again.
             val allowCalls = round < MAX_TOOL_ROUNDS
-            val turn = streamOnce(conversation, openAiTools.takeIf { it.length() > 0 }, allowCalls, roundSeparator(reply), listener)
+            val turn = try {
+                streamOnce(conversation, openAiTools.takeIf { it.length() > 0 }, allowCalls, roundSeparator(reply), listener)
+            } catch (e: GeminiEmbeddingClient.HttpFailure) {
+                // Many hosted NIM models do not support tool calling; answer without the tools instead of failing.
+                if (isAzure || openAiTools.length() == 0 || e.statusCode !in listOf(400, 404, 422)) throw e
+                openAiTools = JSONArray()
+                streamOnce(conversation, null, allowCalls, roundSeparator(reply), listener)
+            }
             reply.append(turn.text)
             if (turn.calls.isEmpty()) break
 
@@ -96,20 +130,20 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
         listener: ChatStreamListener
     ): StreamTurn {
         val body = JSONObject()
-            .put("model", config.model)
+            .put("model", model)
             .put("messages", conversation)
             .put("stream", true)
-            .put("max_completion_tokens", CHAT_REPLY_TOKEN_CAP)
+            .put(if (isAzure) "max_completion_tokens" else "max_tokens", CHAT_REPLY_TOKEN_CAP)
             .put("stream_options", JSONObject().put("include_usage", true))
         if (tools != null) {
             body.put("tools", tools)
             if (!allowCalls) body.put("tool_choice", "none")
             // GPT-6 models reject function tools on this API unless reasoning is switched off.
-            if (config.model.startsWith("gpt-6")) body.put("reasoning_effort", "none")
+            if (isAzure && model.startsWith("gpt-6")) body.put("reasoning_effort", "none")
         }
         val request = Request.Builder()
-            .url(url)
-            .header("api-key", config.apiKey)
+            .url(chatUrl())
+            .header(authHeader.first, authHeader.second)
             .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
@@ -201,6 +235,8 @@ class AzureChatClient(private val config: AzureConfig, private val defaultEndpoi
         fun dataUri() = "data:${file.mimeType};base64," + android.util.Base64.encodeToString(file.data, android.util.Base64.NO_WRAP)
         return when {
             file.isImage -> JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", dataUri()))
+            file.isPdf && !isAzure -> JSONObject().put("type", "text")
+                .put("text", "[Attached PDF: ${file.name}. The connected chat model cannot read PDFs; say so if asked about it.]")
             file.isPdf -> JSONObject().put("type", "file")
                 .put("file", JSONObject().put("filename", file.name).put("file_data", dataUri()))
             file.isVideo -> JSONObject().put("type", "text")

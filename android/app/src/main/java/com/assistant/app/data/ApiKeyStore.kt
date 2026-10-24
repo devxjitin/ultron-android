@@ -78,6 +78,19 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
             .putString(KEY_AZURE_MODEL, config.model.trim())
     }
 
+    /** NVIDIA NIM chat settings; the key is encrypted like the others. */
+    fun getNimConfig() = NimConfig(
+        enabled = read(KEY_NIM_ENABLED) == "true",
+        apiKey = read(KEY_NIM_KEY).orEmpty(),
+        model = read(KEY_NIM_MODEL) ?: DEFAULT_NIM_MODEL
+    )
+
+    fun setNimConfig(config: NimConfig): Boolean = write {
+        it.putString(KEY_NIM_ENABLED, config.enabled.toString())
+            .putString(KEY_NIM_KEY, config.apiKey.trim())
+            .putString(KEY_NIM_MODEL, config.model.trim())
+    }
+
     private fun read(name: String): String? = try {
         prefs?.getString(name, null)?.takeIf { it.isNotBlank() }
     } catch (e: Exception) {
@@ -103,5 +116,8 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
         const val KEY_AZURE_ENDPOINT = "azure_endpoint"
         const val KEY_AZURE_KEY = "azure_api_key"
         const val KEY_AZURE_MODEL = "azure_model"
+        const val KEY_NIM_ENABLED = "nim_enabled"
+        const val KEY_NIM_KEY = "nim_api_key"
+        const val KEY_NIM_MODEL = "nim_model"
     }
 }
