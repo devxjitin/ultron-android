@@ -376,7 +376,7 @@ class DeviceToolRunner(
                 delay(350)
                 globalAction(AccessibilityService.GLOBAL_ACTION_RECENTS, "Switch to the previous app")
             }
-            DeviceTool.SCROLL -> scrollScreen(text("direction"))
+            DeviceTool.SCROLL -> scrollScreen(text("direction"), text("amount"), number("times"))
             DeviceTool.HOME_SCREEN -> {
                 start(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
                 "status=ok\nShowing the home screen."
@@ -868,31 +868,69 @@ class DeviceToolRunner(
         else "status=failed\nAndroid did not allow that action right now."
     }
 
-    private suspend fun scrollScreen(direction: String?): String {
+    private suspend fun scrollScreen(direction: String?, amount: String?, times: Int?): String {
         val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+        // Share of the screen the finger travels; a full "page" leaves a margin so the last lines stay in view.
+        val share = when (amount) {
+            "small" -> 0.15f
+            null, "", "medium" -> 0.30f
+            "large" -> 0.50f
+            "page" -> 0.70f
+            else -> return "status=invalid\nAmount must be small, medium, large or page."
+        }
+        val repeats = (times ?: 1).coerceIn(1, 10)
         val metrics = app.resources.displayMetrics
         val w = metrics.widthPixels.toFloat()
         val h = metrics.heightPixels.toFloat()
+        val vertical = direction == "up" || direction == "down"
+        if (!vertical && direction != "left" && direction != "right") return "status=invalid\nDirection must be up, down, left or right."
+        val length = share * if (vertical) h else w
+        val centre = if (vertical) h / 2 else w / 2
         // A finger swipe moves content the opposite way: scrolling down swipes up.
-        val (fromX, fromY, toX, toY) = when (direction) {
-            "down" -> listOf(w / 2, h * 0.7f, w / 2, h * 0.3f)
-            "up" -> listOf(w / 2, h * 0.3f, w / 2, h * 0.7f)
-            "left" -> listOf(w * 0.3f, h / 2, w * 0.7f, h / 2)
-            "right" -> listOf(w * 0.7f, h / 2, w * 0.3f, h / 2)
-            else -> return "status=invalid\nDirection must be up, down, left or right."
+        val start = if (direction == "down" || direction == "right") centre + length / 2 else centre - length / 2
+        val end = if (direction == "down" || direction == "right") centre - length / 2 else centre + length / 2
+        var failed = false
+        for (i in 0 until repeats) {
+            if (!swipeOnce(service, vertical, w, h, start, end)) { failed = true; break }
+            if (i < repeats - 1) delay(250)
         }
-        val path = Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }
-        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, 300)).build()
-        val done = withTimeoutOrNull(3_000L) {
+        return if (!failed) "status=ok\nScrolled $direction ${amount ?: "medium"}${if (repeats > 1) " $repeats times" else ""}."
+        else "status=failed\nThe scroll gesture did not go through."
+    }
+
+    /**
+     * One slow drag that ends with a short hold, so the finger lifts at zero speed and the list stops where it was
+     * dragged instead of coasting on. Longer drags take longer, which keeps the speed steady.
+     */
+    private suspend fun swipeOnce(
+        service: AssistantAccessibilityService, vertical: Boolean, w: Float, h: Float, start: Float, end: Float
+    ): Boolean {
+        val across = if (vertical) w / 2 else h / 2
+        fun point(along: Float) = if (vertical) across to along else along to across
+        val (x0, y0) = point(start)
+        val (x1, y1) = point(end)
+        val dragMs = (kotlin.math.abs(end - start) / 1.2f).toLong().coerceIn(250L, 900L)
+        val drag = GestureDescription.StrokeDescription(Path().apply { moveTo(x0, y0); lineTo(x1, y1) }, 0, dragMs, true)
+        val hold = drag.continueStroke(Path().apply { moveTo(x1, y1); lineTo(x1, y1 + 1f) }, dragMs, 120, false)
+        val dragGesture = GestureDescription.Builder().addStroke(drag).build()
+        val holdGesture = GestureDescription.Builder().addStroke(hold).build()
+        val done = withTimeoutOrNull(5_000L) {
             suspendCancellableCoroutine { continuation ->
-                val accepted = service.dispatchGesture(gesture, object : android.accessibilityservice.AccessibilityService.GestureResultCallback() {
+                // The hold must be sent from inside the drag's completion callback, or Android drops the continued stroke.
+                val finish = object : android.accessibilityservice.AccessibilityService.GestureResultCallback() {
                     override fun onCompleted(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resume(true) }
                     override fun onCancelled(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resume(false) }
-                }, null)
-                if (!accepted && continuation.isActive) continuation.resume(false)
+                }
+                val first = object : android.accessibilityservice.AccessibilityService.GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        if (!service.dispatchGesture(holdGesture, finish, null) && continuation.isActive) continuation.resume(false)
+                    }
+                    override fun onCancelled(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resume(false) }
+                }
+                if (!service.dispatchGesture(dragGesture, first, null) && continuation.isActive) continuation.resume(false)
             }
         }
-        return if (done == true) "status=ok\nScrolled $direction." else "status=failed\nThe scroll gesture did not go through."
+        return done == true
     }
 
     private fun wifiInfo(): String {

@@ -118,8 +118,15 @@ enum class DeviceTool(
     ),
     SCROLL(
         ToolGroup.NAVIGATION, "scroll_screen", "Scroll", "Scroll or swipe the screen up, down, left or right.",
-        "Scrolls the current screen in a direction, like a finger swipe. Down means see content further down the page. Needs the accessibility service.",
-        listOf(ToolParam("direction", ToolParamType.STRING, "Scroll direction.", choices = listOf("up", "down", "left", "right")))
+        "Scrolls the current screen in a direction, like a finger swipe that stops where it lifts (no coasting). Down means see content further down the page. " +
+            "Choose the amount to fit the request: small for a line or two or fine adjusting, medium for a bit more (default), large for most of a screen, " +
+            "page for a full screen. When the user asks to scroll a lot or to the end, use page repeatedly; when they say a little or slightly, use small. " +
+            "Needs the accessibility service.",
+        listOf(
+            ToolParam("direction", ToolParamType.STRING, "Scroll direction.", choices = listOf("up", "down", "left", "right")),
+            ToolParam("amount", ToolParamType.STRING, "How far to scroll. Default medium.", required = false, choices = listOf("small", "medium", "large", "page")),
+            ToolParam("times", ToolParamType.INTEGER, "Repeat the scroll 1-10 times in one go. Default 1.", required = false)
+        )
     ),
     LOCK_SCREEN(
         ToolGroup.NAVIGATION, "lock_screen", "Lock screen", "Lock the phone.",

@@ -355,3 +355,4 @@
 [2026-10-24 17:41] [Claude] [Update: published OTA build 29880729 (Skills page), not tested on device]
 [2026-10-24 17:48] [Claude] [Update: persona now very friendly with Jitin, reserved with others, polite per person via saved tone rules]
 [2026-10-24 17:51] [Claude] [Update: published OTA build 29880739 (friendly persona), not tested on device]
+[2026-10-24 18:25] [Claude] [Fix: scroll_screen too far; add amount/times params, slow drag with end hold to stop coasting]
