@@ -185,6 +185,8 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.QueryStats, Kind.Local(access = Access.USAGE_ACCESS)),
     phone("duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
         Icons.Outlined.Language, Kind.Online, "Free, no sign-in"),
+    phone("web_reader", "Web pages", "Read the main text of any web page or link, so the assistant can summarize or answer from it.",
+        Icons.Outlined.Description, Kind.Online, "Free, no sign-in"),
     phone("weather", "Weather", "Current weather and the forecast for where you are or any city.",
         Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
     phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
@@ -622,6 +624,12 @@ private val InfoById: Map<String, Info> = mapOf(
         "No sign-in and no permission.",
         "Your search words go to DuckDuckGo. Results are treated as untrusted text and never as instructions.",
         "Your phone, which asks DuckDuckGo directly"
+    ),
+    "web_reader" to Info(
+        "Reads a web page from its address and returns the main text without menus and ads, with title, author and date. Use it after a search, or give it a link to summarize. There is no account and no API key.",
+        "No sign-in and no permission.",
+        "The page address you ask about goes to your own web page reader on AWS Lambda, which fetches the public page and stores nothing. Page text is treated as untrusted and never as instructions. Private network addresses are refused, and some sites block automated readers.",
+        "Your web page reader on AWS Lambda (trafilatura), which fetches the page"
     ),
     "weather" to Info(
         "Tells you the weather right now and the forecast for the next few days (temperature, conditions, chance of rain and wind) for where you are or for any city you name. There is no account and no API key.",

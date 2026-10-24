@@ -29,6 +29,9 @@ val azureEndpoint: String = localProperties.getProperty("AZURE_ENDPOINT", "")
 // URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
+
+// Add: WEB_EXTRACT_URL=https://.../<token>  to android/local.properties. Blank = the web page reader tool says it is not set up.
+val webExtractUrl: String = localProperties.getProperty("WEB_EXTRACT_URL", "")
 // Every build gets a higher version code than the one before (minutes since 1970), so the phone can always tell
 // which build is newer. scripts/publish-update.ps1 passes the same number with -PappVersionCode.
 val appVersionCode: Int = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: (System.currentTimeMillis() / 60000).toInt()
@@ -65,6 +68,7 @@ android {
         buildConfigField("String", "GOOGLE_MCP_URL", "\"$googleMcpUrl\"")
         buildConfigField("String", "AZURE_ENDPOINT", "\"$azureEndpoint\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
+        buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
     }
 
     signingConfigs {

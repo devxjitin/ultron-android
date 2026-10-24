@@ -411,6 +411,16 @@ enum class DeviceTool(
                 choices = listOf("day", "week", "month", "year"))
         )
     ),
+    FETCH_WEBPAGE(
+        ToolGroup.SEARCH, "fetch_webpage", "Read a web page", "Read the main text of a web page from its address.",
+        "Reads one web page and returns its main text without menus and ads, plus title, author and date. " +
+            "Use it on a web_search result address when the snippet is not enough, or when the user gives a link to read or summarize. " +
+            "Some sites refuse automated readers; then say so and answer from the search snippet.",
+        listOf(
+            ToolParam("url", ToolParamType.STRING, "Full http or https address of the page."),
+            ToolParam("max_chars", ToolParamType.INTEGER, "Longest text to return, 1000-50000. Default 12000.", required = false)
+        )
+    ),
     GET_WEATHER(
         ToolGroup.WEATHER, "get_weather", "Weather", "Tell the weather now and the forecast (free, no sign-in).",
         "Returns the current weather and a daily forecast: temperature, conditions, chance of rain and wind. " +

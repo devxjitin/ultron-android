@@ -21,10 +21,10 @@ subprocess.run([
 ], check=True)
 shutil.copy(os.path.join(HERE, "lambda_function.py"), BUILD)
 
-# Trim what Lambda never loads.
+# Trim what Lambda never loads. The .dist-info folders stay: trafilatura reads its own version from them at import.
 for root, dirs, files in os.walk(BUILD, topdown=False):
     for d in dirs:
-        if d in ("__pycache__", "tests", "test") or d.endswith(".dist-info"):
+        if d in ("__pycache__", "tests", "test"):
             shutil.rmtree(os.path.join(root, d), ignore_errors=True)
 
 with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
