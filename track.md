@@ -331,3 +331,4 @@
 [2026-10-22 15:48] [Claude] [Update: published OTA build 29877807 (connectors A-Z, no Marketplace), not tested on device]
 [2026-10-22 16:00] [Claude] [Fix: tool-call chip stayed on screen after the tool finished]
 [2026-10-22 16:02] [Claude] [Update: published OTA build 29877808 (tool chip fix), not tested on device]
+[2026-10-24 10:47] [Claude] [Fix: voice drain timeout no longer kills live session ('Audio playback did not finish')]
