@@ -249,6 +249,17 @@ enum class DeviceTool(
             ToolParam("label", ToolParamType.STRING, "Optional alarm name.", required = false)
         )
     ),
+    CANCEL_ALARM(
+        ToolGroup.ALARMS, "cancel_alarm", "Cancel alarm", "Switch off an alarm in the clock app.",
+        "Switches off (dismisses) a clock alarm without opening any app: give hour and minute for a time, a label for a named alarm, " +
+            "or neither for the next alarm. Use this whenever the user asks to cancel, delete or turn off an alarm; " +
+            "never open the Clock app for it. Android cannot confirm the result, so say it was asked to cancel it.",
+        listOf(
+            ToolParam("hour", ToolParamType.INTEGER, "Hour 0-23 of the alarm to cancel.", required = false),
+            ToolParam("minute", ToolParamType.INTEGER, "Minute 0-59 of the alarm to cancel. Default 0.", required = false),
+            ToolParam("label", ToolParamType.STRING, "Name of the alarm to cancel, when no time is given.", required = false)
+        )
+    ),
     SET_TIMER(
         ToolGroup.ALARMS, "set_timer", "Set timer", "Start a countdown timer.",
         "Starts a countdown timer for the given number of seconds.",
@@ -362,7 +373,8 @@ enum class DeviceTool(
     CANCEL_EVENT(
         ToolGroup.CONTACTS_CALENDAR, "cancel_calendar_event", "Cancel calendar event", "Delete an event from the calendar by itself.",
         "Deletes an upcoming calendar event that matches the title, straight away and without opening any screen. " +
-            "If several events match it says so; then call again with the date. Repeating events are not deleted.",
+            "If several events match it says so; then call again with the date. Repeating events are not deleted. " +
+            "Never open the Calendar app to cancel an event; if this tool cannot, tell the user why.",
         listOf(
             ToolParam("title", ToolParamType.STRING, "Full or partial event title."),
             ToolParam("date", ToolParamType.STRING, "Date as YYYY-MM-DD, to pick one of several matches.", required = false)

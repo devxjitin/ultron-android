@@ -347,3 +347,5 @@
 [2026-10-24 11:44] [Claude] [Update: deployed web-extract MCP (trafilatura) to AWS Lambda; fixed build dropping dist-info]
 [2026-10-24 11:48] [Claude] [Add: fetch_webpage tool and Web pages connector using web-extract MCP on AWS]
 [2026-10-24 11:51] [Claude] [Update: published OTA build 29880500 (Web pages connector), not tested on device]
+[2026-10-24 12:03] [Claude] [Fix: cancelling alarm/meeting opened apps; add cancel_alarm tool, tell model never to open Clock/Calendar]
+[2026-10-24 12:05] [Claude] [Update: published OTA build 29880600 (cancel_alarm tool), not tested on device]

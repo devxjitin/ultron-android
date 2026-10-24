@@ -451,6 +451,7 @@ class DeviceToolRunner(
                     .putExtra(AlarmClock.EXTRA_SKIP_UI, true))
                 "status=ok\nAlarm set for %02d:%02d.".format(hour, minute)
             }
+            DeviceTool.CANCEL_ALARM -> cancelAlarm(number("hour"), number("minute"), text("label"))
             DeviceTool.SET_TIMER -> {
                 val seconds = number("seconds")?.takeIf { it in 1..86_400 } ?: return "status=invalid\nSeconds must be 1-86400."
                 start(Intent(AlarmClock.ACTION_SET_TIMER)
@@ -746,6 +747,39 @@ class DeviceToolRunner(
         val whenText = java.time.Instant.ofEpochMilli(begin).atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("EEE d MMM, hh:mm a", Locale.ENGLISH))
         return "status=ok\nAdded \"$title\" to the calendar for $whenText, with a reminder 10 minutes before."
+    }
+
+    /** Asks the clock app to dismiss (switch off) an alarm; Android has no public delete. Android gives no answer back, so the result only says it was asked. */
+    private fun cancelAlarm(hour: Int?, minute: Int?, label: String?): String {
+        if (hour != null && hour !in 0..23) return "status=invalid\nHour must be 0-23."
+        if (minute != null && minute !in 0..59) return "status=invalid\nMinute must be 0-59."
+        val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM)
+        val what = when {
+            hour != null -> {
+                intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
+                    .putExtra(AlarmClock.EXTRA_HOUR, hour)
+                    .putExtra(AlarmClock.EXTRA_MINUTES, minute ?: 0)
+                    .putExtra(AlarmClock.EXTRA_IS_PM, hour >= 12)
+                "the %02d:%02d alarm".format(hour, minute ?: 0)
+            }
+            !label.isNullOrBlank() -> {
+                intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
+                    .putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                "the alarm named $label"
+            }
+            else -> {
+                intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_NEXT)
+                "the next alarm"
+            }
+        }
+        return try {
+            start(intent)
+            "status=ok\nThe clock app was asked to cancel $what. Android does not confirm it; tell the user it was requested."
+        } catch (e: ActivityNotFoundException) {
+            "status=failed\nNo clock app on this phone can cancel alarms by request. Tell the user to remove it in the clock app."
+        } catch (e: SecurityException) {
+            "status=failed\nThe clock app refused the request. Tell the user to remove the alarm in the clock app."
+        }
     }
 
     /** Deletes the one upcoming, non-repeating event whose title matches; says so when none or several match. */
