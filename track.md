@@ -339,3 +339,5 @@
 [2026-10-22 17:27] [Claude] [Update: published OTA build 29877834 (real prices, INR 97), not tested on device]
 [2026-10-22 19:20] [Claude] [Add: default assistant option, idle notification removed; wake word dropped]
 [2026-10-22 19:23] [Claude] [Update: published OTA build 29877950 (default assistant, no idle notification), not tested on device]
+[2026-10-24 10:47] [Claude] [Fix: voice drain timeout no longer kills live session ('Audio playback did not finish')]
+[2026-10-24 10:54] [Claude] [Update: published OTA build 29880319 (voice drain fix), not tested on device]

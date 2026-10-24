@@ -56,6 +56,8 @@ class AudioPlayer(
          *  written before declaring playback idle anyway -- guards against the mic staying muted
          *  forever if playback-head tracking ever misbehaves on a given device/OEM. */
         const val DRAIN_TIMEOUT_MS = 3000L
+        /** Absolute ceiling on a drain wait even if the playback head keeps creeping forward. */
+        const val MAX_DRAIN_MS = 15000L
         const val BYTES_PER_FRAME = 2 // 16-bit mono PCM
     }
 
@@ -325,19 +327,33 @@ class AudioPlayer(
      *  via [notifyTurnComplete] that no more chunks are coming for this turn. */
     private suspend fun waitForDrainThenNotifyIdle(audioTrack: AudioTrack): QueuedAudio? {
         val targetFrames = totalFramesWritten
-        val deadline = System.currentTimeMillis() + DRAIN_TIMEOUT_MS
-        while (!playbackHasReached(audioTrack.playbackHeadPosition, targetFrames) &&
-            System.currentTimeMillis() < deadline) {
+        // Allow for however much audio is genuinely still queued, and keep waiting while the
+        // head is still advancing; only a head that stops moving (or the hard cap) ends the wait.
+        val startedAt = System.currentTimeMillis()
+        val hardDeadline = startedAt + MAX_DRAIN_MS
+        var lastHead = audioTrack.playbackHeadPosition
+        var lastProgressAt = startedAt
+        while (!playbackHasReached(audioTrack.playbackHeadPosition, targetFrames)) {
+            val now = System.currentTimeMillis()
+            if (now >= hardDeadline || now - lastProgressAt >= DRAIN_TIMEOUT_MS) break
             if (resetBufferingRequested.get()) return null
             // Barge-in can produce the next turn before the old track drains. Process that audio
-            // now instead of holding it behind a drain wait of up to three seconds.
+            // now instead of holding it behind a drain wait.
             queue.tryReceive().getOrNull()?.let { return it }
+            val head = audioTrack.playbackHeadPosition
+            if (head != lastHead) {
+                lastHead = head
+                lastProgressAt = now
+            }
             delay(20)
         }
         if (resetBufferingRequested.get()) return null
         if (!playbackHasReached(audioTrack.playbackHeadPosition, targetFrames)) {
-            failPlayback("Audio playback did not finish.")
-            return null
+            // Not fatal: the audio was handed to the device, only the head counter stalled (audio
+            // focus loss, route change, OEM quirk). Tearing down the live session over this is
+            // what made Ultron Live stop working -- log it and carry on to idle instead.
+            latency?.event("playback_drain_timeout", mapOf(
+                "waited_ms" to (System.currentTimeMillis() - startedAt)))
         }
         queue.tryReceive().getOrNull()?.let { return it }
         mainHandler.post { onPlaybackIdle() }
