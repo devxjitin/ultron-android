@@ -4,6 +4,7 @@ import android.text.Html
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLDecoder
@@ -27,6 +28,9 @@ object DuckDuckGoClient {
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
+    private const val MOBILE_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+
     /** [time] narrows to recent results: "day", "week", "month" or "year". */
     suspend fun search(query: String, time: String?, max: Int = 6): Result<List<SearchHit>> = withContext(Dispatchers.IO) {
         val region = "wt-wt"
@@ -38,6 +42,10 @@ object DuckDuckGoClient {
             val hits = (if (page == Page.HTML) parseHtml(body) else parseLite(body)).take(max)
             if (hits.isNotEmpty()) return@withContext Result.success(hits)
         }
+        // DuckDuckGo challenges some IPs (mobile networks included) for hours; Bing's plain page has no such
+        // check, so use it before settling for the thin Instant Answer API.
+        val bing = runCatching { parseBing(getBing(query, time)) }.getOrNull().orEmpty().take(max)
+        if (bing.isNotEmpty()) return@withContext Result.success(bing)
         val answer = runCatching { instantAnswer(query) }.getOrNull().orEmpty()
         if (answer.isNotEmpty()) return@withContext Result.success(answer.take(max))
         Result.failure(
@@ -65,6 +73,42 @@ object DuckDuckGoClient {
             if (!response.isSuccessful && response.code != 202) error("HTTP ${response.code}")
             return response.body?.string().orEmpty()
         }
+    }
+
+    private fun getBing(query: String, time: String?): String {
+        val freshness = when (time) { "day" -> "ex1:\"ez1\""; "week" -> "ex1:\"ez2\""; "month" -> "ex1:\"ez3\""; else -> "" }
+        val url = "https://www.bing.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query).addQueryParameter("setlang", "en").addQueryParameter("cc", "us")
+            .apply { if (freshness.isNotEmpty()) addQueryParameter("filters", freshness) }.build()
+        val request = Request.Builder().url(url).header("User-Agent", MOBILE_USER_AGENT)
+            .header("Accept-Language", "en-US,en;q=0.9").build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("HTTP ${response.code}")
+            return response.body?.string().orEmpty()
+        }
+    }
+
+    internal fun parseBing(body: String): List<SearchHit> {
+        val blocks = Regex("""<li class="b_algo"[^>]*>(.*?)</li>""", RegexOption.DOT_MATCHES_ALL).findAll(body)
+        return blocks.mapNotNull { block ->
+            val html = block.groupValues[1]
+            val head = Regex("""<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL).find(html)
+                ?: Regex("""<a[^>]*href="([^"]+)"[^>]*>\s*<h2[^>]*>(.*?)</h2>""", RegexOption.DOT_MATCHES_ALL).find(html)
+                ?: return@mapNotNull null
+            val url = bingTarget(head.groupValues[1].replace("&amp;", "&")) ?: return@mapNotNull null
+            val snippet = Regex("""<p[^>]*>(.*?)</p>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.get(1).orEmpty()
+            SearchHit(clean(head.groupValues[2]), url, clean(snippet))
+        }.toList()
+    }
+
+    /** Bing sometimes wraps the result as /ck/a?...&u=a1<base64 address>; a plain address passes through. */
+    internal fun bingTarget(href: String): String? {
+        val wrapped = Regex("""[?&]u=a1([A-Za-z0-9_-]+)""").find(href)?.groupValues?.get(1)
+        val url = if (wrapped != null) {
+            runCatching { String(android.util.Base64.decode(wrapped, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING)) }
+                .getOrNull() ?: return null
+        } else href
+        return url.takeIf { it.startsWith("http://") || it.startsWith("https://") }
     }
 
     internal fun isChallenge(body: String): Boolean =
