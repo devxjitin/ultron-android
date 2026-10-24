@@ -5,6 +5,8 @@ import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.McpToolSpec
+import com.assistant.app.data.Skill
+import com.assistant.app.data.USE_SKILL_TOOL
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -89,6 +91,18 @@ object ToolDeclarations {
             declaration.keys().asSequence().filter { it.startsWith("_") }.toList().forEach { declaration.remove(it) }
             copy.put(declaration)
         }
+    }
+
+    /** use_skill: loads the full instructions of one skill, so unused skills never fill the prompt. */
+    fun skill(skills: List<Skill>, nonBlocking: Boolean = false): JSONObject {
+        val declaration = JSONObject().put("name", USE_SKILL_TOOL)
+            .put("description", "Loads the instructions of one skill. Call it only when the request clearly matches a skill listed in the system prompt, then follow what it returns.")
+            .put("parameters", JSONObject().put("type", "OBJECT")
+                .put("properties", JSONObject().put("name", JSONObject().put("type", "STRING").put("description", "Skill name.")
+                    .put("enum", JSONArray(skills.map { it.name }))))
+                .put("required", JSONArray().put("name")))
+        if (nonBlocking) declaration.put("behavior", "NON_BLOCKING")
+        return declaration
     }
 
     /** save_memory / forget_memory: the assistant's personal memory about the user. */

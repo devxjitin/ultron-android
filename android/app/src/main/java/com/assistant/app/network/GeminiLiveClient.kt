@@ -14,6 +14,7 @@ import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.enabledGoogleTools
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
+import com.assistant.app.data.SkillRegistry
 import com.assistant.app.util.UserFacingError
 import com.assistant.app.util.newLatencySession
 import okhttp3.Request
@@ -296,6 +297,7 @@ class GeminiLiveClient(
         val declarations = JSONArray()
         searchKnowledgeBaseTool().optJSONArray("functionDeclarations")?.let { declarations.put(it.get(0)) }
         if (settings.memoryEnabled) ToolDeclarations.memory(extendedThinking).forEach { declarations.put(it) }
+        SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { declarations.put(ToolDeclarations.skill(it, extendedThinking)) }
         DeviceTool.entries.filter { it in settings.enabledDeviceTools }
             .forEach { declarations.put(ToolDeclarations.device(it, extendedThinking)) }
         if (settings.githubLogin.isNotEmpty()) {

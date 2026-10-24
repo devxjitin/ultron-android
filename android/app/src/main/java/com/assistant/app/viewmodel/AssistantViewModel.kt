@@ -37,6 +37,8 @@ import com.assistant.app.data.GITHUB_OAUTH_SCOPE
 import com.assistant.app.data.GITHUB_MCP_URL
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
+import com.assistant.app.data.SkillRegistry
+import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
 import com.assistant.app.data.formatChatsAsText
 import com.assistant.app.data.memoriesForPrompt
@@ -295,6 +297,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun isSessionActive(state: VoiceState) = state != VoiceState.IDLE && state != VoiceState.ERROR
 
     init {
+        SkillRegistry.load(application)
         // The notification mirrors the session: "listening" (with a Stop button) while one is
         // active, "ready" otherwise. A reconnect passes through RESETTING, so it never flickers.
         AppForegroundService.onStopRequested = { stopSession() }
@@ -574,6 +577,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val tools = chatToolDeclarations(settings)
                 val hasTools = tools.length() > 1 // the first is the knowledge search, not an online tool
                 if (settings.memoryEnabled) ToolDeclarations.memory().forEach { tools.put(it) }
+                SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { tools.put(ToolDeclarations.skill(it)) }
                 val instruction = KnowledgeBaseProvider.buildChatInstruction(
                     settings.chatPrompt,
                     if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
@@ -695,6 +699,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         name == "search_knowledge_base" -> runChatKnowledgeSearch(args)
         DeviceTool.fromFunctionName(name)?.let { it in PhoneConnectors.chatTools } == true -> runDeviceTool(DeviceTool.fromFunctionName(name)!!, args)
         name == MEMORY_SAVE_TOOL || name == MEMORY_FORGET_TOOL -> runMemoryTool(name, args)
+        name == USE_SKILL_TOOL -> SkillRegistry.use(args.optString("name"))
         name.startsWith(GITHUB_TOOL_PREFIX) -> runGithubTool(name.removePrefix(GITHUB_TOOL_PREFIX), args)
         GoogleService.fromToolName(name) != null -> GoogleService.fromToolName(name)!!.let { runGoogleTool(it, name.removePrefix(it.toolPrefix), args) }
         else -> "status=unavailable\nThat tool is not available in the text chat."
@@ -1143,6 +1148,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         functionName == "search_knowledge_base" -> "Searching knowledge"
         functionName == MEMORY_SAVE_TOOL -> "Saving to memory"
         functionName == MEMORY_FORGET_TOOL -> "Forgetting a memory"
+        functionName == USE_SKILL_TOOL -> "Loading a skill"
         functionName.startsWith(GITHUB_TOOL_PREFIX) ->
             "GitHub: " + functionName.removePrefix(GITHUB_TOOL_PREFIX).replace('_', ' ')
         GoogleService.fromToolName(functionName) != null -> GoogleService.fromToolName(functionName)!!.let {
@@ -2404,6 +2410,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             runDeviceTool(deviceTool, call.args)
                         } else if (call.name == MEMORY_SAVE_TOOL || call.name == MEMORY_FORGET_TOOL) {
                             runToolSafely(call.name) { runMemoryTool(call.name, call.args) }
+                        } else if (call.name == USE_SKILL_TOOL) {
+                            SkillRegistry.use(call.args.optString("name"))
                         } else if (call.name.startsWith(GITHUB_TOOL_PREFIX)) {
                             runToolSafely(call.name) { runGithubTool(call.name.removePrefix(GITHUB_TOOL_PREFIX), call.args) }
                         } else if (GoogleService.fromToolName(call.name) != null) {
