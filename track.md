@@ -353,3 +353,4 @@
 [2026-10-24 17:33] [Claude] [Update: published OTA build 29880720 (on-demand skills), not tested on device]
 [2026-10-24 17:38] [Claude] [Add: Skills page in sidebar (toggle, add, edit, delete skills)]
 [2026-10-24 17:41] [Claude] [Update: published OTA build 29880729 (Skills page), not tested on device]
+[2026-10-24 17:48] [Claude] [Update: persona now very friendly with Jitin, reserved with others, polite per person via saved tone rules]
