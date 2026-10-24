@@ -351,3 +351,4 @@
 [2026-10-24 12:05] [Claude] [Update: published OTA build 29880600 (cancel_alarm tool), not tested on device]
 [2026-10-24 17:25] [Claude] [Add: on-demand skills (SKILL.md) with use_skill tool; only name+description in prompt]
 [2026-10-24 17:33] [Claude] [Update: published OTA build 29880720 (on-demand skills), not tested on device]
+[2026-10-24 17:38] [Claude] [Add: Skills page in sidebar (toggle, add, edit, delete skills)]

@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +57,8 @@ import com.assistant.app.ui.components.ChatSearchPage
 import com.assistant.app.ui.components.LibraryPage
 import com.assistant.app.ui.components.PersonalizationPage
 import com.assistant.app.ui.components.StoragePage
+import com.assistant.app.ui.components.SkillsPage
+import com.assistant.app.data.SkillRegistry
 import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.data.AttachmentRef
 import com.assistant.app.data.LibraryItem
@@ -126,6 +129,10 @@ fun AssistantScreen(
     onPersonalizationTapped: () -> Unit = {},
     onUsageTapped: () -> Unit = {},
     onStorageTapped: () -> Unit = {},
+    onSkillsTapped: () -> Unit = {},
+    onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
+    onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
+    onSkillDeleted: (String) -> Unit = {},
     onPersonalizationChanged: (Personalization) -> Unit = {},
     onLoadAttachment: (AttachmentRef) -> ChatAttachment? = { null },
     onLibraryDelete: (LibraryItem) -> Unit = {},
@@ -192,6 +199,7 @@ fun AssistantScreen(
                     AdminPage.PERSONALIZATION -> NavTab.PERSONALIZATION
                     AdminPage.USAGE -> NavTab.USAGE
                     AdminPage.STORAGE -> NavTab.STORAGE
+                    AdminPage.SKILLS -> NavTab.SKILLS
                 }
             uiState.showConnectors -> NavTab.CONNECTORS
             uiState.showMemory -> NavTab.MEMORY
@@ -249,6 +257,7 @@ fun AssistantScreen(
                         NavTab.PERSONALIZATION -> guardedNav(onPersonalizationTapped)
                         NavTab.USAGE -> guardedNav(onUsageTapped)
                         NavTab.STORAGE -> guardedNav(onStorageTapped)
+                        NavTab.SKILLS -> guardedNav(onSkillsTapped)
                         NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
@@ -430,6 +439,10 @@ fun AssistantScreen(
                     uiState.settings.personalization, uiState.settings.assistantName, onPersonalizationChanged, pageModifier,
                     onDirtyChanged = { personalizationDirty = it }
                 )
+                AdminPage.SKILLS -> {
+                    val skills by SkillRegistry.entries.collectAsState()
+                    SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
+                }
                 AdminPage.USAGE -> UsagePage(
                     uiState.usageDays, pageModifier,
                     dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged

@@ -953,6 +953,22 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onStorageTapped() = openAdminPage(AdminPage.STORAGE)
 
+    fun onSkillsTapped() = openAdminPage(AdminPage.SKILLS)
+
+    // The voice session carries the skill list in its setup, so a change starts a fresh warm session.
+    fun onSkillToggled(name: String, enabled: Boolean) {
+        SkillRegistry.setEnabled(name, enabled)
+        invalidateWarmSessionAndReprewarm()
+    }
+
+    fun onSkillSaved(name: String, description: String, body: String): String? =
+        SkillRegistry.save(name, description, body).also { if (it == null) invalidateWarmSessionAndReprewarm() }
+
+    fun onSkillDeleted(name: String) {
+        SkillRegistry.delete(name)
+        invalidateWarmSessionAndReprewarm()
+    }
+
     /** Back to the home page -- closes whichever full page (Settings/Knowledge/History) is open. */
     fun onHomeTapped() {
         clearAdminDrafts()
