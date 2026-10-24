@@ -31,6 +31,7 @@ object PhoneConnectors {
         PhoneConnector("notifications", Surface.BOTH, listOf(DeviceTool.READ_NOTIFICATIONS)),
         PhoneConnector("app_usage", Surface.BOTH, listOf(DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE)),
         PhoneConnector("duckduckgo", Surface.BOTH, listOf(DeviceTool.WEB_SEARCH)),
+        PhoneConnector("web_reader", Surface.BOTH, listOf(DeviceTool.FETCH_WEBPAGE)),
         PhoneConnector("weather", Surface.BOTH, listOf(DeviceTool.GET_WEATHER)),
         PhoneConnector("youtube", Surface.BOTH, listOf(
             DeviceTool.YOUTUBE_SEARCH, DeviceTool.YOUTUBE_INFO, DeviceTool.YOUTUBE_TRANSCRIPT, DeviceTool.YOUTUBE_CHANNEL,

@@ -70,6 +70,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import com.assistant.app.network.DuckDuckGoClient
+import com.assistant.app.network.WebExtractClient
 import com.assistant.app.network.HttpClients
 import com.assistant.app.network.WeatherClient
 import com.assistant.app.network.WeatherPlace
@@ -215,6 +216,8 @@ class DeviceToolRunner(
                 }
                 sendSms(matches.first().second, message, matches.first().first)
             }
+            DeviceTool.FETCH_WEBPAGE ->
+                WebExtractClient.read(text("url") ?: return MISSING, (number("max_chars") ?: 12_000).coerceIn(1_000, 50_000))
             DeviceTool.GET_WEATHER -> weather(text("place"), (number("days") ?: 3).coerceIn(1, 7))
             DeviceTool.CREATE_CONTACT -> {
                 val name = text("name") ?: return MISSING
