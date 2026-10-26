@@ -26,5 +26,13 @@ data class NimConfig(
 
 private val NOT_CHAT_MODEL = Regex("embed|rerank|reward|guard|safety|parse|ocr|asr|tts|riva|clip", RegexOption.IGNORE_CASE)
 
+private val VISION_MODEL = Regex(
+    "vision|-vl\\b|\\bvl-|internvl|llava|neva|vila|paligemma|pixtral|molmo|fuyu|florence|kosmos|multimodal|gemma-3|llama-4",
+    RegexOption.IGNORE_CASE
+)
+
+/** Whether a NIM model id looks like it accepts images; the catalog gives no capability data, so this goes by the name. */
+fun nimSupportsVision(model: String): Boolean = VISION_MODEL.containsMatchIn(model)
+
 /** Model ids from the catalog that can chat: embedding, ranking, safety and speech models are left out. */
 fun nimChatModels(ids: List<String>): List<String> = ids.distinct().filter { it.isNotBlank() && !NOT_CHAT_MODEL.containsMatchIn(it) }.sorted()

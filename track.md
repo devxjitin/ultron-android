@@ -359,3 +359,5 @@
 [2026-10-24 18:28] [Claude] [Update: published OTA build 29880776 (scroll amount fix), not tested on device]
 [2026-10-24 18:38] [Claude] [Add: NVIDIA NIM chat provider with user-chosen model and model list; AzureChatClient renamed OpenAiChatClient]
 [2026-10-24 18:41] [Claude] [Update: published OTA build 29880789 (NVIDIA NIM chat), not tested on device]
+[2026-10-26 12:10] [Claude] [Fix: NVIDIA non-vision models get text-only content, images stripped or retried]
+[2026-10-26 12:10] [Claude] [Fix: Library lists a re-sent file once; delete removes all copies]

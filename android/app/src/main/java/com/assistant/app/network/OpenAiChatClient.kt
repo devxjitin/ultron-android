@@ -5,6 +5,7 @@ import com.assistant.app.data.AzureMode
 import com.assistant.app.data.NIM_BASE_URL
 import com.assistant.app.data.NimConfig
 import com.assistant.app.data.azureBaseUrl
+import com.assistant.app.data.nimSupportsVision
 import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,7 +28,8 @@ class OpenAiChatClient private constructor(
     private val model: String,
     private val chatUrl: () -> String,
     private val authHeader: Pair<String, String>,
-    private val isAzure: Boolean
+    private val isAzure: Boolean,
+    private val acceptsImages: Boolean = true
 ) {
 
     companion object {
@@ -60,7 +62,8 @@ class OpenAiChatClient private constructor(
 
         /** NVIDIA NIM hosted endpoints (build.nvidia.com); the user picks any model id the key can use. */
         fun nvidia(config: NimConfig, baseUrl: String = NIM_BASE_URL) = OpenAiChatClient(
-            config.model, { baseUrl + "/chat/completions" }, "Authorization" to "Bearer ${config.apiKey}", isAzure = false
+            config.model, { baseUrl + "/chat/completions" }, "Authorization" to "Bearer ${config.apiKey}", isAzure = false,
+            acceptsImages = nimSupportsVision(config.model)
         )
     }
 
@@ -77,7 +80,8 @@ class OpenAiChatClient private constructor(
         listener: ChatStreamListener
     ): String = withContext(Dispatchers.IO) {
         val conversation = JSONArray().put(JSONObject().put("role", "system").put("content", systemInstruction))
-        messages.forEach { conversation.put(messageJson(it)) }
+        var sendImages = acceptsImages
+        messages.forEach { conversation.put(messageJson(it, sendImages)) }
         var openAiTools = toOpenAiTools(tools)
 
         val reply = StringBuilder()
@@ -89,9 +93,19 @@ class OpenAiChatClient private constructor(
             val turn = try {
                 streamOnce(conversation, openAiTools.takeIf { it.length() > 0 }, allowCalls, roundSeparator(reply), listener)
             } catch (e: GeminiEmbeddingClient.HttpFailure) {
-                // Many hosted NIM models do not support tool calling; answer without the tools instead of failing.
-                if (isAzure || openAiTools.length() == 0 || e.statusCode !in listOf(400, 404, 422)) throw e
-                openAiTools = JSONArray()
+                // Many hosted NIM models do not support tool calling or images; answer without them instead of failing.
+                if (isAzure || e.statusCode !in listOf(400, 404, 422)) throw e
+                var downgraded = false
+                if (sendImages && messages.any { m -> m.attachments.any { it.isImage } }) {
+                    sendImages = false
+                    messages.forEachIndexed { i, m -> conversation.put(i + 1, messageJson(m, false)) }
+                    downgraded = true
+                }
+                if (openAiTools.length() > 0) {
+                    openAiTools = JSONArray()
+                    downgraded = true
+                }
+                if (!downgraded) throw e
                 streamOnce(conversation, null, allowCalls, roundSeparator(reply), listener)
             }
             reply.append(turn.text)
@@ -223,17 +237,24 @@ class OpenAiChatClient private constructor(
     /** Azure sends `"content": null` in many chunks; org.json would turn that into the text "null". */
     private fun JSONObject.stringOrEmpty(name: String): String = if (isNull(name)) "" else optString(name)
 
-    private fun messageJson(message: ChatTurnMessage): JSONObject {
+    /** A user message with only text parts goes out as a plain string, which text-only models require. */
+    private fun messageJson(message: ChatTurnMessage, sendImages: Boolean): JSONObject {
         if (!message.fromUser) return JSONObject().put("role", "assistant").put("content", message.text)
         val parts = JSONArray()
-        message.attachments.forEach { parts.put(attachmentPart(it)) }
+        message.attachments.forEach { parts.put(attachmentPart(it, sendImages)) }
         if (message.text.isNotBlank() || parts.length() == 0) parts.put(JSONObject().put("type", "text").put("text", message.text))
+        val texts = (0 until parts.length()).map { parts.getJSONObject(it) }
+        if (texts.all { it.getString("type") == "text" }) {
+            return JSONObject().put("role", "user").put("content", texts.joinToString("\n\n") { it.getString("text") })
+        }
         return JSONObject().put("role", "user").put("content", parts)
     }
 
-    private fun attachmentPart(file: ChatAttachment): JSONObject {
+    private fun attachmentPart(file: ChatAttachment, sendImages: Boolean): JSONObject {
         fun dataUri() = "data:${file.mimeType};base64," + android.util.Base64.encodeToString(file.data, android.util.Base64.NO_WRAP)
         return when {
+            file.isImage && !sendImages -> JSONObject().put("type", "text")
+                .put("text", "[Attached image: ${file.name}. The connected chat model cannot see images; say so if asked about it.]")
             file.isImage -> JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", dataUri()))
             file.isPdf && !isAzure -> JSONObject().put("type", "text")
                 .put("text", "[Attached PDF: ${file.name}. The connected chat model cannot read PDFs; say so if asked about it.]")

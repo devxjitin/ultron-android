@@ -25,6 +25,7 @@ import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.AttachmentRef
 import com.assistant.app.data.LibraryItem
+import com.assistant.app.data.libraryCopies
 import com.assistant.app.data.Personalization
 import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
@@ -1569,10 +1570,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Deletes one Library file for good (the chat keeps its text). */
     fun onLibraryDelete(item: LibraryItem) {
+        val copies = libraryCopies(_uiState.value.chatSessions, item).ifEmpty { listOf(item.sessionId to item.file.path) }
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { chatAttachmentStore.delete(item.file.path) }
-            runCatching { chatHistoryStore.removeAttachment(item.sessionId, item.file.path) }
-            if (item.sessionId == textChatSessionId) reloadOpenChat()
+            withContext(Dispatchers.IO) { copies.forEach { (_, path) -> chatAttachmentStore.delete(path) } }
+            copies.forEach { (sessionId, path) -> runCatching { chatHistoryStore.removeAttachment(sessionId, path) } }
+            if (copies.any { it.first == textChatSessionId }) reloadOpenChat()
         }
     }
 

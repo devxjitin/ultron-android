@@ -109,6 +109,29 @@ class ChatStreamingTest {
         assertTrue(!JSONObject(server.takeRequest().body.readUtf8()).has("tools"))
     }
 
+    @Test fun `nim sends text-only user messages as a plain string`() {
+        server.enqueue(sse(chunk("Hi", "stop"), "[DONE]"))
+        runBlocking { nim().stream("sys", question, JSONArray(), noTool, Recorder()) }
+        val messages = JSONObject(server.takeRequest().body.readUtf8()).getJSONArray("messages")
+        assertEquals("hi", messages.getJSONObject(1).getString("content"))
+    }
+
+    @Test fun `nim text model gets a placeholder instead of an image`() {
+        server.enqueue(sse(chunk("Ok", "stop"), "[DONE]"))
+        val photo = ChatAttachment("cat.png", "image/png", byteArrayOf(1, 2, 3))
+        runBlocking { nim().stream("sys", listOf(ChatTurnMessage(true, "what is this", listOf(photo))), JSONArray(), noTool, Recorder()) }
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(!body.contains("image_url"))
+        assertTrue(body.contains("cannot see images"))
+    }
+
+    @Test fun `nim vision model ids are recognised`() {
+        assertTrue(com.assistant.app.data.nimSupportsVision("meta/llama-3.2-11b-vision-instruct"))
+        assertTrue(com.assistant.app.data.nimSupportsVision("nvidia/nemotron-nano-12b-v2-vl"))
+        assertTrue(!com.assistant.app.data.nimSupportsVision("meta/llama-3.3-70b-instruct"))
+        assertTrue(!com.assistant.app.data.nimSupportsVision("deepseek-ai/deepseek-r1"))
+    }
+
     // ---- Azure
 
     @Test fun `azure reply that ends with stop is complete`() {
