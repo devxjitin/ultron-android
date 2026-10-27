@@ -291,6 +291,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  accepts setup and then immediately closes would otherwise reset this every time and
      *  never trip the cap). */
     private var consecutiveAutoReconnects = 0
+    /** Connects in a row that failed before the server confirmed setup. */
+    private var failedSetups = 0
+    /** Live model used instead of the chosen one after the chosen one stopped answering setup; kept while the app runs. */
+    private var fallbackLiveModel: String? = null
     private val maxAutoReconnects = 3
     private val reconnectBackoffMs = listOf(500L, 2000L, 5000L)
 
@@ -2335,6 +2339,44 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /**
+     * A connect that never got setupComplete (Gemini busy or not answering) is retried once, then the next Live
+     * model is tried, so a struggling model does not leave the user on an error. Returns false when it gives up.
+     */
+    private fun retryFailedSetup(client: GeminiLiveClient): Boolean {
+        if (client.setupDone || userInitiatedStop || client.quotaExhausted) return false
+        if (!isForeground && !backgroundSessionAllowed) return false
+        if (!isNetworkAvailable()) return false
+        failedSetups++
+        val chosen = _uiState.value.settings.liveModel
+        val current = fallbackLiveModel ?: chosen
+        when (failedSetups) {
+            1 -> Unit // the same model once more
+            2 -> {
+                val next = AssistantOptions.liveModels.firstOrNull { it.id != current && !it.extendedThinking }
+                if (next == null) {
+                    failedSetups = 0
+                    return false
+                }
+                fallbackLiveModel = next.id.takeIf { it != chosen }
+                showToast("Voice model is not answering, switching to ${next.label}.", AppNotificationType.INFO)
+            }
+            else -> {
+                failedSetups = 0
+                fallbackLiveModel = null
+                return false
+            }
+        }
+        sessionResumptionHandle = null
+        _uiState.update { it.copy(voiceState = VoiceState.CONNECTING, micAmplitude = 0f, playbackAmplitude = 0f) }
+        reconnectJob?.cancel()
+        reconnectJob = viewModelScope.launch {
+            delay(300L)
+            if (!userInitiatedStop) startSession(isAutoReconnect = true)
+        }
+        return true
+    }
+
     private fun connectLiveSession(
         apiKey: String,
         systemInstruction: String,
@@ -2343,7 +2385,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isWarm: Boolean = false,
         resumeHandle: String? = null
     ) {
-        val client = GeminiLiveClient(apiKey, settings.liveModel)
+        val client = GeminiLiveClient(apiKey, fallbackLiveModel ?: settings.liveModel)
         client.latency.event("session_origin", mapOf("mode" to when {
             isWarm -> "prewarm"
             _uiState.value.voiceState == VoiceState.RESETTING -> "reconnect"
@@ -2367,6 +2409,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
             override fun onSetupComplete() {
                 if (!isCurrent()) return
+                failedSetups = 0
                 if (isWarm && !activateWarmOnReady) {
                     // Nobody asked for it yet -- stay connected and idle, ready for the next tap.
                     isPrewarmReady = true
@@ -2631,6 +2674,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     activateWarmOnReady = false
                 }
                 releaseResources()
+                if (retryFailedSetup(client)) return
                 _uiState.update {
                     it.copy(
                         voiceState = VoiceState.ERROR,
@@ -2655,6 +2699,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     activateWarmOnReady = false
                 }
                 releaseResources()
+                if (retryFailedSetup(client)) return
                 // An expired handle is refused on every retry, so the next connect starts a fresh session
                 // (earlier turns are seeded as history instead) and this close does not count as a failure.
                 if (client.resumeRejected) {

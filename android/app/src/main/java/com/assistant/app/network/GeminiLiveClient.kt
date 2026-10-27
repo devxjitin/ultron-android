@@ -70,7 +70,7 @@ class GeminiLiveClient(
             "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
-        private const val SETUP_TIMEOUT_MS = 12_000L
+        private const val SETUP_TIMEOUT_MS = 8_000L
         private const val QUOTA_MESSAGE =
             "The Gemini quota for this API key is used up. Check the plan in Google AI Studio, or pick another model in Settings."
 
@@ -88,8 +88,14 @@ class GeminiLiveClient(
         AssistantOptions.liveModels.firstOrNull { it.id == model }?.extendedThinking == true
 
     @Volatile private var quotaReported = false
+    /** The key's quota is spent; another connect or model will not help. */
+    @Volatile var quotaExhausted = false
+        private set
     /** Why the server last closed this socket, shown when reconnecting keeps failing. */
     @Volatile var lastCloseReason: String? = null
+        private set
+    /** Set once the server confirmed the setup; a failure before that is a failed connect, not a dropped session. */
+    @Volatile var setupDone = false
         private set
     /** True when the server refused the resumption handle; the caller must reconnect without it. */
     val resumeRejected: Boolean
@@ -183,6 +189,7 @@ class GeminiLiveClient(
                 // A spent quota will not fix itself by reconnecting, so say so instead of looping.
                 if (isQuotaClose(reason)) {
                     quotaReported = true
+                    quotaExhausted = true
                     mainHandler.post {
                         clearSetupTimeout()
                         listener.onError(QUOTA_MESSAGE)
@@ -436,6 +443,7 @@ class GeminiLiveClient(
         if (json.has("setupComplete")) {
             latency.event("setup_ready", at = receivedAtMs)
             Log.i(TAG, "setupComplete received (${System.currentTimeMillis() - connectStartMillis}ms after connect())")
+            setupDone = true
             actions.add {
                 clearSetupTimeout()
                 // Must go out before the ViewModel starts streaming mic audio.
