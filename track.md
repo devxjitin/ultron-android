@@ -386,3 +386,5 @@
 [2026-10-27 20:08] [Claude] [Docs: OTA build 29885194 published]
 [2026-10-27 20:15] [Claude] [Revert: aaj ke saare app changes hataye, code 4b0191d jaisa]
 [2026-10-27 20:15] [Claude] [Docs: OTA build 29885202 published (reverted code)]
+[2026-10-27 20:23] [Claude] [Fix: BT speaker/headset connected ho to awaaz usi me jaaye]
+[2026-10-27 20:23] [Claude] [Docs: OTA build 29885211 published]
