@@ -2671,7 +2671,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     consecutiveAutoReconnects >= maxAutoReconnects -> _uiState.update {
                         it.copy(
                             voiceState = VoiceState.ERROR,
-                            errorMessage = "Session kept disconnecting. Please try again.",
+                            errorMessage = "Session kept disconnecting" +
+                                (client.lastCloseReason?.let { " ($it)" } ?: "") + ". Please try again.",
                             micAmplitude = 0f,
                             playbackAmplitude = 0f
                         )
@@ -2687,7 +2688,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         reconnectJob?.cancel()
                         reconnectJob = viewModelScope.launch {
                             delay(delayMs)
-                            if ((isForeground || backgroundSessionAllowed) && !userInitiatedStop) startSession(isAutoReconnect = true)
+                            if ((isForeground || backgroundSessionAllowed) && !userInitiatedStop) {
+                                startSession(isAutoReconnect = true)
+                            } else {
+                                // Nobody will reconnect it now, so do not leave "Refreshing session" on screen.
+                                _uiState.update { it.copy(voiceState = VoiceState.IDLE) }
+                            }
                         }
                     }
                 }

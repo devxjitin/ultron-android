@@ -88,6 +88,9 @@ class GeminiLiveClient(
         AssistantOptions.liveModels.firstOrNull { it.id == model }?.extendedThinking == true
 
     @Volatile private var quotaReported = false
+    /** Why the server last closed this socket, shown when reconnecting keeps failing. */
+    @Volatile var lastCloseReason: String? = null
+        private set
 
     private fun isQuotaClose(reason: String) =
         reason.contains("quota", ignoreCase = true) || reason.contains("billing", ignoreCase = true)
@@ -164,6 +167,16 @@ class GeminiLiveClient(
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.i(TAG, "onClosing: code=$code reason=$reason")
                 webSocket.close(1000, null)
+                if (code != 1000 || reason.isNotBlank()) lastCloseReason = "code $code${if (reason.isBlank()) "" else ": $reason"}"
+                // An invalid request is rejected the same way on every reconnect, so show it instead of looping.
+                if (code == 1007 && !isQuotaClose(reason)) {
+                    quotaReported = true
+                    mainHandler.post {
+                        clearSetupTimeout()
+                        listener.onError("Gemini rejected the session ($lastCloseReason).")
+                    }
+                    return
+                }
                 // A spent quota will not fix itself by reconnecting, so say so instead of looping.
                 if (isQuotaClose(reason)) {
                     quotaReported = true
@@ -252,8 +265,7 @@ class GeminiLiveClient(
         val generationConfig = JSONObject()
             .put("responseModalities", JSONArray().put("AUDIO"))
             .put("speechConfig", speechConfig)
-            // Below 1.0 keeps tool choice and arguments steady while the voice stays natural.
-            .put("temperature", 0.7)
+            .put("temperature", 1.0)
         if (extendedThinking) {
             generationConfig.put(
                 "thinkingConfig",
