@@ -91,6 +91,9 @@ class GeminiLiveClient(
     /** Why the server last closed this socket, shown when reconnecting keeps failing. */
     @Volatile var lastCloseReason: String? = null
         private set
+    /** True when the server refused the resumption handle; the caller must reconnect without it. */
+    val resumeRejected: Boolean
+        get() = lastCloseReason?.contains("not found or expired", ignoreCase = true) == true
 
     private fun isQuotaClose(reason: String) =
         reason.contains("quota", ignoreCase = true) || reason.contains("billing", ignoreCase = true)
@@ -202,6 +205,7 @@ class GeminiLiveClient(
                         // gets the existing bounded reconnect-with-backoff logic instead of
                         // dead-ending on an error the visitor has to manually retry.
                         Log.w(TAG, "onFailure treated as retryable (httpCode=$httpCode): ${t.javaClass.simpleName}: ${t.message}")
+                        lastCloseReason = "${t.javaClass.simpleName}: ${t.message.orEmpty()}".take(120)
                         listener.onClosed()
                     }
                 }
@@ -507,6 +511,7 @@ class GeminiLiveClient(
         // backoff path immediately rather than after a wasted 15s timeout.
         json.optJSONObject("goAway")?.let {
             Log.i(TAG, "goAway received (timeLeft=${it.optString("timeLeft")}) -- closing to reconnect")
+            lastCloseReason = "server goAway, timeLeft ${it.optString("timeLeft")}"
             actions.add { webSocket?.close(1000, "server goAway") }
         }
 

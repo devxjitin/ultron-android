@@ -193,6 +193,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Latest server handle for the active conversation, used only to resume it after an
      *  automatic reconnect; cleared whenever the user starts or stops a session. */
     private var sessionResumptionHandle: String? = null
+    /** Why the server closed the session that started the current run of auto-reconnects. */
+    private var reconnectCause: String? = null
     private var personaRefreshJob: Job? = null
     private var prewarmJob: Job? = null
     private var isForeground = false
@@ -2653,6 +2655,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     activateWarmOnReady = false
                 }
                 releaseResources()
+                // An expired handle is refused on every retry, so the next connect starts a fresh session
+                // (earlier turns are seeded as history instead) and this close does not count as a failure.
+                if (client.resumeRejected) {
+                    sessionResumptionHandle = null
+                    if (consecutiveAutoReconnects > 0) consecutiveAutoReconnects--
+                }
+                if (consecutiveAutoReconnects == 0) reconnectCause = client.lastCloseReason
                 val currentState = _uiState.value.voiceState
                 when {
                     currentState == VoiceState.ERROR -> Unit // already surfaced by onError
@@ -2672,7 +2681,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         it.copy(
                             voiceState = VoiceState.ERROR,
                             errorMessage = "Session kept disconnecting" +
-                                (client.lastCloseReason?.let { " ($it)" } ?: "") + ". Please try again.",
+                                (listOfNotNull(reconnectCause, client.lastCloseReason).distinct().joinToString("; ")
+                                    .takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: "") + ". Please try again.",
                             micAmplitude = 0f,
                             playbackAmplitude = 0f
                         )
