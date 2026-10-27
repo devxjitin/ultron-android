@@ -513,6 +513,8 @@ private fun ChatBubble(message: ChatMessage, canEdit: Boolean, isStreaming: Bool
                         else -> "Thinking…"
                     }
                 )
+            } else if (message.toolCalls.isNotEmpty()) {
+                ToolsUsedLine(message.toolCalls)
             }
             if (message.text.isNotEmpty()) {
                 if (message.isError) {
@@ -527,6 +529,24 @@ private fun ChatBubble(message: ChatMessage, canEdit: Boolean, isStreaming: Bool
                 ResponseActions(message.text)
             }
         }
+    }
+}
+
+/** What a reply used once its tools are done, e.g. "Used Web search, Gmail: search messages". */
+@Composable
+private fun ToolsUsedLine(calls: List<ChatToolCall>) {
+    val failed = calls.any { it.state == ChatToolState.FAILED }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            if (failed) Icons.Filled.ErrorOutline else Icons.Filled.Check, contentDescription = null,
+            tint = if (failed) AssistantError else AssistantTextMuted, modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            "Used " + calls.map { it.label }.distinct().joinToString(", "),
+            color = AssistantTextMuted, style = MaterialTheme.typography.bodySmall,
+            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }
 

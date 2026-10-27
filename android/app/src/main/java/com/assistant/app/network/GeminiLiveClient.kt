@@ -252,7 +252,8 @@ class GeminiLiveClient(
         val generationConfig = JSONObject()
             .put("responseModalities", JSONArray().put("AUDIO"))
             .put("speechConfig", speechConfig)
-            .put("temperature", 1.0)
+            // Below 1.0 keeps tool choice and arguments steady while the voice stays natural.
+            .put("temperature", 0.7)
         if (extendedThinking) {
             generationConfig.put(
                 "thinkingConfig",

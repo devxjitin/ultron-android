@@ -130,7 +130,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000L
         /** Google access tokens last about an hour; renew a little early. */
         private const val GOOGLE_TOKEN_LIFETIME_MS = 50 * 60 * 1000L
-        private const val TOOL_LABEL_LINGER_MS = 0L
+        private const val TOOL_LABEL_LINGER_MS = 2_500L
         private const val TOOL_LABEL_MAX_MS = 25_000L
         /** Hard cap for one tool call, so a hung tool can never leave the turn waiting forever. */
         private const val TOOL_MAX_MS = 45_000L
@@ -342,7 +342,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // The notification also tells what the assistant is doing, stamped with the time.
         viewModelScope.launch {
             combine(
-                _uiState.map { it.voiceState to it.activeTool }.distinctUntilChanged(),
+                _uiState.map { state -> state.voiceState to state.activeTool?.takeUnless { state.activeToolDone } }.distinctUntilChanged(),
                 conversationStore.recentTurns.catch { emit(emptyList()) }
             ) { (state, tool), turns -> notificationStatus(state, tool, turns.lastOrNull()) }
                 .distinctUntilChanged()
@@ -1192,18 +1192,32 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         else -> DeviceTool.fromFunctionName(functionName)?.label ?: functionName.replace('_', ' ')
     }
 
+    private var toolLabelJob: Job? = null
+
     private fun announceTool(label: String) {
-        _uiState.update { it.copy(activeTool = label) }
+        toolLabelJob?.cancel()
+        _uiState.update { it.copy(activeTool = label, activeToolDone = false) }
         // Safety net so a session that dies mid-tool never leaves the name on screen.
-        clearToolLater(label, TOOL_LABEL_MAX_MS)
+        toolLabelJob = viewModelScope.launch {
+            delay(TOOL_LABEL_MAX_MS)
+            _uiState.update { it.copy(activeTool = null, activeToolDone = false) }
+        }
     }
 
-    /** Keeps the tool name visible a moment after it finishes, then removes it if it is still the same one. */
-    private fun clearToolLater(label: String, afterMs: Long = TOOL_LABEL_LINGER_MS) {
-        viewModelScope.launch {
-            delay(afterMs)
-            _uiState.update { if (it.activeTool == label && pendingToolCallIds.isEmpty()) it.copy(activeTool = null) else it }
+    /** Marks the shown tool as done and keeps it on screen a moment, so a quick action is still seen. */
+    private fun finishToolLabel() {
+        if (_uiState.value.activeTool == null || _uiState.value.activeToolDone) return
+        toolLabelJob?.cancel()
+        _uiState.update { it.copy(activeToolDone = true) }
+        toolLabelJob = viewModelScope.launch {
+            delay(TOOL_LABEL_LINGER_MS)
+            _uiState.update { it.copy(activeTool = null, activeToolDone = false) }
         }
+    }
+
+    private fun clearToolLabel() {
+        toolLabelJob?.cancel()
+        _uiState.update { it.copy(activeTool = null, activeToolDone = false) }
     }
 
     /** Starts "Sign in with GitHub": shows a code, the user approves it in the phone's browser. */
@@ -2433,8 +2447,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // sent and the model has now finished its follow-up turn, possibly with no audio
                 // at all. Deferring again would leave the mic muted and the UI on SPEAKING forever.
                 awaitingToolContinuation = false
-                // The reply to every tool is done, so no tool name may stay on screen into the next request.
-                _uiState.update { it.copy(activeTool = null) }
+                // The reply to every tool is done, so the tool name only lingers briefly as done.
+                finishToolLabel()
                 finalizeTurnIfAny()
                 // A full turn actually completed -- this session is genuinely working, so the
                 // reconnect-loop guard can relax again.
@@ -2552,14 +2566,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, resultText)
                             batch.traces[call.id] = trace to searchStartedAt
                             pendingToolJobs.remove(call.id)
-                            clearToolLater(toolDisplayName(call.name))
                             flushToolBatch(client, batch)
                         }
                     }
                     if (job == null) {
                         pendingToolCallIds.remove(call.id)
                         trace?.failure()
-                        clearToolLater(toolDisplayName(call.name))
                         flushToolBatch(client, batch)
                     } else {
                         pendingToolJobs[call.id] = job
@@ -2590,7 +2602,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 toolBatches.toList().forEach { flushToolBatch(client, it) }
                 if (pendingToolCallIds.isEmpty()) {
                     awaitingToolContinuation = false
-                    _uiState.update { it.copy(activeTool = null) }
+                    clearToolLabel()
                 }
             }
 
@@ -2958,7 +2970,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (liveClient !== client || call.id !in pendingToolCallIds || call.id in batch.results) return
         pendingToolJobs.remove(call.id)?.cancel()
         batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, "status=error\n$reason Tell him it did not work.")
-        clearToolLater(toolDisplayName(call.name))
         flushToolBatch(client, batch)
     }
 
@@ -2986,8 +2997,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         // Also after a rejected send, so a dead socket cannot leave the UI on PROCESSING.
         if (pendingToolCallIds.isEmpty()) startTurnTimeout()
-        // The ids only leave pendingToolCallIds here, after clearToolLater already looked, so the label is removed now.
-        if (pendingToolCallIds.isEmpty()) _uiState.update { it.copy(activeTool = null) }
+        if (pendingToolCallIds.isEmpty()) finishToolLabel()
     }
 
     private fun cancelPendingToolCalls() {
@@ -2996,7 +3006,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         pendingToolCallIds.clear()
         toolBatches.clear()
         awaitingToolContinuation = false
-        _uiState.update { it.copy(activeTool = null) }
+        clearToolLabel()
     }
 
     /** Restarts the idle-timeout countdown -- called whenever there's a sign of real

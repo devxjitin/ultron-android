@@ -178,7 +178,6 @@ class DeviceToolRunner(
             DeviceTool.FLASHLIGHT -> flashlight(text("state"))
             DeviceTool.MEDIA_CONTROL -> mediaControl(text("command"))
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
-            DeviceTool.SEARCH_YOUTUBE_APP -> searchYoutubeApp(text("query") ?: return MISSING)
             DeviceTool.OPEN_LATEST_PHOTO -> {
                 imagePermissionProblem()?.let { return it }
                 openLatestPhoto(text("source") ?: "any")
@@ -892,28 +891,6 @@ class DeviceToolRunner(
         }
     }
 
-    /** Opens the YouTube app on its search results, so the search happens on the screen instead of in the background. */
-    private fun searchYoutubeApp(query: String): String {
-        val text = query.trim().take(200)
-        if (text.isEmpty()) return MISSING
-        val youtube = "com.google.android.youtube"
-        val results = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(text)}")
-        val attempts = listOf(
-            Intent(Intent.ACTION_VIEW, results).setPackage(youtube),
-            Intent(Intent.ACTION_SEARCH).setPackage(youtube).putExtra(android.app.SearchManager.QUERY, text),
-            Intent(Intent.ACTION_VIEW, results)
-        )
-        for (intent in attempts) {
-            try {
-                start(intent)
-                return "status=ok\nOpened YouTube with the search for \"$text\". The results are on the screen now."
-            } catch (e: android.content.ActivityNotFoundException) {
-                // try the next way of opening it
-            }
-        }
-        return "status=failed\nCould not open YouTube."
-    }
-
     private fun recentPhotos(days: Int, limit: Int): String {
         val since = System.currentTimeMillis() / 1000 - days * 86_400L
         val dateFormat = DateTimeFormatter.ofPattern("d MMM, hh:mm a", Locale.ENGLISH)
@@ -1343,7 +1320,7 @@ class DeviceToolRunner(
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
-            DeviceTool.OPEN_LATEST_PHOTO, DeviceTool.SEARCH_YOUTUBE_APP
+            DeviceTool.OPEN_LATEST_PHOTO
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L
