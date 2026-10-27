@@ -372,3 +372,4 @@
 [2026-10-27 18:55] [Claude] [Update: published OTA build 29885106 (7 voice fixes), not tested on device]
 [2026-10-27 19:10] [Claude] [Revert: spoken pre-ack before tools is back, confirm after result stays]
 [2026-10-27 19:15] [Claude] [Update: published OTA build 29885122 (pre-ack back), not tested on device]
+[2026-10-27 19:40] [Claude] [Update: can-do persona, no accha/theek hai fillers, Hindi pronunciation rule, tool called in same turn]
