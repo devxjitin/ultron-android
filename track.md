@@ -370,3 +370,4 @@
 [2026-10-27 18:27] [Claude] [Add: search_youtube_app opens YouTube search on screen; open_latest_photo opens newest picture]
 [2026-10-27 18:40] [Claude] [WIP: OTA build ok but not published, aws login expired]
 [2026-10-27 18:55] [Claude] [Update: published OTA build 29885106 (7 voice fixes), not tested on device]
+[2026-10-27 19:10] [Claude] [Revert: spoken pre-ack before tools is back, confirm after result stays]

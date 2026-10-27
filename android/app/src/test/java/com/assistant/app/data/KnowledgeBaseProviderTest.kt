@@ -127,10 +127,10 @@ class KnowledgeBaseProviderTest {
     }
 
     @Test
-    fun `auto language follows the spoken language and tools run without a spoken pre-ack`() {
+    fun `auto language follows the spoken language and tools keep the short spoken pre-ack`() {
         val prompt = KnowledgeBaseProvider.buildSystemInstruction("p", "", "Guide")
         assertTrue(prompt.contains("same language he just spoke"))
         assertFalse(prompt.contains("Speak and reply in"))
-        assertTrue(prompt.contains("say nothing first"))
+        assertTrue(prompt.contains("tiny spontaneous reaction"))
     }
 }
