@@ -368,3 +368,4 @@
 [2026-10-27 18:27] [Claude] [Add: Auto language option (default), replies in the language the user speaks]
 [2026-10-27 18:27] [Claude] [Fix: loud room no longer interrupts reply, mic gate plus echo canceller and noise suppressor]
 [2026-10-27 18:27] [Claude] [Add: search_youtube_app opens YouTube search on screen; open_latest_photo opens newest picture]
+[2026-10-27 18:40] [Claude] [WIP: OTA build ok but not published, aws login expired]
