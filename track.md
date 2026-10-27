@@ -380,3 +380,5 @@
 [2026-10-27 19:38] [Claude] [Docs: OTA build 29885166 published]
 [2026-10-27 19:51] [Claude] [Fix: Refreshing session loop, temperature back to 1.0, show close reason]
 [2026-10-27 19:51] [Claude] [Docs: OTA build 29885178 published]
+[2026-10-27 19:58] [Claude] [Fix: drop expired resumption handle, reconnect fresh (1008 loop)]
+[2026-10-27 19:58] [Claude] [Docs: OTA build 29885185 published]
