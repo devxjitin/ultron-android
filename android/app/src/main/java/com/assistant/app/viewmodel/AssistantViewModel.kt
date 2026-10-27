@@ -225,11 +225,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var previousAudioMode: Int? = null
     private var previousSpeakerphoneOn: Boolean? = null
     private var usedCommunicationDevice = false
-    /** True while this session has claimed communication mode + speakerphone; false while it
-     *  left routing alone because an external speaker/headset is connected. */
-    private var communicationRouteApplied = false
-    /** Re-routes mid-session when a BT speaker / headset connects or disconnects. */
-    private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
     /** Voice-call volume before this session raised it from 0, restored when the session ends. */
     private var previousVoiceCallVolume: Int? = null
     private var raisedVoiceCallVolume: Int? = null
@@ -3146,53 +3141,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         audioFocusRequest = request
 
-        if (!hasExternalOutput()) applyCommunicationRoute()
-        val callback = object : android.media.AudioDeviceCallback() {
-            override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>) = refreshOutputRoute()
-            override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>) = refreshOutputRoute()
-        }
-        audioManager.registerAudioDeviceCallback(callback, android.os.Handler(android.os.Looper.getMainLooper()))
-        audioDeviceCallback = callback
-        return true
-    }
-
-    /** A Bluetooth speaker/headset, wired headset or USB audio output is connected. Most BT
-     *  speakers are A2DP-only, and communication mode never routes to A2DP, so while one is
-     *  connected the session leaves the system's media routing alone and plays there. */
-    private fun hasExternalOutput(): Boolean {
-        val externalTypes = mutableSetOf(
-            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-            android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
-            android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-            android.media.AudioDeviceInfo.TYPE_USB_HEADSET,
-            android.media.AudioDeviceInfo.TYPE_USB_DEVICE,
-            android.media.AudioDeviceInfo.TYPE_HEARING_AID,
-        )
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            externalTypes += android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
-            externalTypes += android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER
-        }
-        return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in externalTypes }
-    }
-
-    /** Switches routing when an external output connects/disconnects during a session. */
-    private fun refreshOutputRoute() {
-        if (audioFocusRequest == null) return
-        val external = hasExternalOutput()
-        if (external && communicationRouteApplied) {
-            undoCommunicationRoute()
-        } else if (!external && !communicationRouteApplied) {
-            applyCommunicationRoute()
-        }
-    }
-
-    private fun applyCommunicationRoute() {
         // MicStreamer records with VOICE_COMMUNICATION for platform echo cancellation, which needs
         // the device in communication audio mode -- otherwise the audio policy engine can leave
         // the very first playback (AudioTrack) silent while routing settles. That mode defaults
         // routing to the earpiece (phone-call behavior), so speakerphone is forced on explicitly
         // or nothing is audible on a kiosk tablet.
-        communicationRouteApplied = true
         previousAudioMode = audioManager.mode
         previousSpeakerphoneOn = audioManager.isSpeakerphoneOn
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
@@ -3217,22 +3170,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             raisedVoiceCallVolume = raised
             audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, raised, 0)
         }
+        return true
     }
 
     private fun releaseCommunicationAudio() {
-        audioDeviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
-        audioDeviceCallback = null
         audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
         audioFocusRequest = null
+        // Restore whatever mode/routing was active before this session claimed it -- not always
+        // NORMAL/speaker-off (e.g. another app may already have been mid-call).
         pausedByFocusLoss = false
-        undoCommunicationRoute()
-    }
-
-    /** Restore whatever mode/routing was active before this session claimed it -- not always
-     *  NORMAL/speaker-off (e.g. another app may already have been mid-call). */
-    private fun undoCommunicationRoute() {
-        if (!communicationRouteApplied) return
-        communicationRouteApplied = false
         if (usedCommunicationDevice && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             audioManager.clearCommunicationDevice()
             usedCommunicationDevice = false
