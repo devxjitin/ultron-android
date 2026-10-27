@@ -374,3 +374,7 @@
 [2026-10-27 19:15] [Claude] [Update: published OTA build 29885122 (pre-ack back), not tested on device]
 [2026-10-27 19:40] [Claude] [Update: can-do persona, no accha/theek hai fillers, Hindi pronunciation rule, tool called in same turn]
 [2026-10-27 19:48] [Claude] [Update: published OTA build 29885146 (persona and filler fixes), not tested on device]
+[2026-10-27 19:38] [Claude] [Fix: tool chip visible while speaking, chat shows used tools]
+[2026-10-27 19:38] [Claude] [Remove: search_youtube_app tool]
+[2026-10-27 19:38] [Claude] [Update: rewrote Ultron voice prompt, Live temperature 0.7]
+[2026-10-27 19:38] [Claude] [Docs: OTA build 29885166 published]
