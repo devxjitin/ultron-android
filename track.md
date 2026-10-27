@@ -382,3 +382,5 @@
 [2026-10-27 19:51] [Claude] [Docs: OTA build 29885178 published]
 [2026-10-27 19:58] [Claude] [Fix: drop expired resumption handle, reconnect fresh (1008 loop)]
 [2026-10-27 19:58] [Claude] [Docs: OTA build 29885185 published]
+[2026-10-27 20:08] [Claude] [Fix: retry failed Live setup, fall back to next Live model]
+[2026-10-27 20:08] [Claude] [Docs: OTA build 29885194 published]
