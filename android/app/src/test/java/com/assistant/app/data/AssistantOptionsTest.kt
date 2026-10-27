@@ -39,4 +39,11 @@ class AssistantOptionsTest {
     fun `dataset model is fixed to Gemini 3 5 Flash-Lite`() {
         assertEquals("gemini-3.5-flash-lite", AssistantOptions.DATASET_MODEL)
     }
+
+    @Test
+    fun `auto language is the default and sends no language to the prompt`() {
+        assertEquals(AssistantOptions.AUTO_LANGUAGE_CODE, AssistantOptions.defaultLanguageCode)
+        assertEquals("", AssistantOptions.promptLanguage("auto"))
+        assertEquals("Hindi", AssistantOptions.promptLanguage("hi-IN"))
+    }
 }

@@ -70,6 +70,7 @@ class OpenAiChatClient private constructor(
     private val client = HttpClients.shared.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(5, TimeUnit.MINUTES)
         .build()
 
     suspend fun stream(

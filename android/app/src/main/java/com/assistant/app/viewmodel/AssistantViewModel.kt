@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
+import com.assistant.app.audio.AudioRouting
 import com.assistant.app.audio.MicStreamer
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AzureConfig
@@ -131,6 +132,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val GOOGLE_TOKEN_LIFETIME_MS = 50 * 60 * 1000L
         private const val TOOL_LABEL_LINGER_MS = 0L
         private const val TOOL_LABEL_MAX_MS = 25_000L
+        /** Hard cap for one tool call, so a hung tool can never leave the turn waiting forever. */
+        private const val TOOL_MAX_MS = 45_000L
         /** No conversational activity (transcript text or a turn boundary) for this long while
          *  a session is active auto-stops it and clears saved history, so a later session
          *  doesn't inherit a stale leftover conversation or an abandoned open mic. */
@@ -225,6 +228,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var previousAudioMode: Int? = null
     private var previousSpeakerphoneOn: Boolean? = null
     private var usedCommunicationDevice = false
+    /** True while the voice is routed to a Bluetooth speaker or headphones instead of the built-in speaker. */
+    private var usedExternalRoute = false
+    private val routeCallback = object : android.media.AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) = onAudioRouteChanged()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) = onAudioRouteChanged()
+    }
     /** Voice-call volume before this session raised it from 0, restored when the session ends. */
     private var previousVoiceCallVolume: Int? = null
     private var raisedVoiceCallVolume: Int? = null
@@ -2284,7 +2293,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (!isForeground && !backgroundSessionAllowed) return@launch
             val systemInstruction = KnowledgeBaseProvider.buildSystemInstruction(
                 settings.systemPrompt,
-                AssistantOptions.languageLabel(settings.languageCode),
+                AssistantOptions.promptLanguage(settings.languageCode),
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
                 if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
@@ -2376,6 +2385,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     // input) so the user can interrupt it mid-reply. Barge-in off: mute as before.
                     if (!_uiState.value.settings.bargeInEnabled) {
                         micStreamer?.setMuted(true)
+                    } else {
+                        // Echo cancellation alone does not stop a loud room from tripping the server's
+                        // voice detection, so only sustained sound gets through while it speaks.
+                        micStreamer?.setBargeInGate(true)
                     }
                     _uiState.update { it.copy(voiceState = VoiceState.SPEAKING) }
                     startSpeakingWatchdog()
@@ -2550,6 +2563,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         flushToolBatch(client, batch)
                     } else {
                         pendingToolJobs[call.id] = job
+                        // A crashed tool coroutine would otherwise never post a result and the model
+                        // would wait for it forever.
+                        job.invokeOnCompletion { cause ->
+                            if (cause != null && cause !is CancellationException) {
+                                viewModelScope.launch {
+                                    failToolCall(client, batch, call, "The tool crashed.")
+                                }
+                            }
+                        }
+                        viewModelScope.launch {
+                            delay(TOOL_MAX_MS)
+                            failToolCall(client, batch, call, "The tool took too long.")
+                        }
                     }
                 }
             }
@@ -2697,6 +2723,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 client.latency.playbackIdle()
                 // Playback has actually finished (or was interrupted) -- safe to unmute now.
                 micStreamer?.setMuted(false)
+                micStreamer?.setBargeInGate(false)
                 resetSpeechDetection()
                 // PROCESSING is included so a turn that completes with no audio (empty reply)
                 // also returns to LISTENING here, instead of staying stuck until fresh speech
@@ -2735,6 +2762,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         audioPlayer = createdPlayer
+        createdPlayer.setPreferredOutput(AudioRouting.externalOutput(audioManager))
 
         val mic = MicStreamer(
             onChunk = { chunk -> client.sendAudioChunk(chunk) },
@@ -2881,7 +2909,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val settings = settingsStore.settings.first()
                 val systemInstruction = KnowledgeBaseProvider.buildSystemInstruction(
                     settings.systemPrompt,
-                    AssistantOptions.languageLabel(settings.languageCode),
+                    AssistantOptions.promptLanguage(settings.languageCode),
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
                     if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
@@ -2925,6 +2953,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         assistantTextBuffer.clear()
     }
 
+    /** Posts an error result for a call that crashed or hung, unless it already has a result or was dropped. */
+    private fun failToolCall(client: GeminiLiveClient, batch: ToolBatch, call: GeminiLiveClient.FunctionCall, reason: String) {
+        if (liveClient !== client || call.id !in pendingToolCallIds || call.id in batch.results) return
+        pendingToolJobs.remove(call.id)?.cancel()
+        batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, "status=error\n$reason Tell him it did not work.")
+        clearToolLater(toolDisplayName(call.name))
+        flushToolBatch(client, batch)
+    }
+
     /** Sends a batch's results once every call in it that is still wanted has one. Gemini waits for every response in a
      *  toolCall message, so the reply watchdog starts only after the last of them is actually sent. */
     private fun flushToolBatch(client: GeminiLiveClient, batch: ToolBatch) {
@@ -2932,7 +2969,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (wanted.any { it !in batch.results }) return
         toolBatches.remove(batch)
         val results = wanted.mapNotNull { batch.results[it] }
-        if (results.isEmpty()) return
+        if (results.isEmpty()) {
+            // Every call was cancelled: nothing to send, but the UI still needs a way out of PROCESSING.
+            if (pendingToolCallIds.isEmpty()) startTurnTimeout()
+            return
+        }
         val accepted = liveClient === client && client.sendToolResponses(results)
         val now = SystemClock.elapsedRealtime()
         results.forEach { result ->
@@ -2943,7 +2984,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (!accepted) trace?.failure()
             pendingToolCallIds.remove(result.id)
         }
-        if (accepted && pendingToolCallIds.isEmpty()) startTurnTimeout()
+        // Also after a rejected send, so a dead socket cannot leave the UI on PROCESSING.
+        if (pendingToolCallIds.isEmpty()) startTurnTimeout()
         // The ids only leave pendingToolCallIds here, after clearToolLater already looked, so the label is removed now.
         if (pendingToolCallIds.isEmpty()) _uiState.update { it.copy(activeTool = null) }
     }
@@ -3006,6 +3048,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     awaitingToolContinuation = false
                     finalizeTurnIfAny()
                     micStreamer?.setMuted(false)
+                    micStreamer?.setBargeInGate(false)
                     resetSpeechDetection()
                     audioPlayer?.clearQueueForInterruption()
                     _uiState.update { it.copy(voiceState = VoiceState.LISTENING, playbackAmplitude = 0f) }
@@ -3071,6 +3114,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         if (_uiState.value.voiceState == VoiceState.LISTENING &&
             hasHeardSpeechThisTurn &&
+            pendingToolCallIds.isEmpty() &&
             now - lastLoudAtMillis >= SILENCE_TO_PROCESSING_MS
         ) {
             Log.i("AssistantLatency", "local speech end after ${now - lastLoudAtMillis}ms silence")
@@ -3140,7 +3184,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return false
         }
         audioFocusRequest = request
+        audioManager.registerAudioDeviceCallback(routeCallback, null)
+        // A Bluetooth speaker or headphones the user connected wins over the built-in speaker. Forcing the
+        // loudspeaker here is what kept the voice off their Bluetooth speaker.
+        usedExternalRoute = AudioRouting.externalOutput(audioManager) != null
+        if (!usedExternalRoute) applyBuiltInSpeakerRoute()
+        return true
+    }
 
+    /** Switches routing when a Bluetooth speaker or headphones are connected or removed mid-session. */
+    private fun onAudioRouteChanged() {
+        if (audioFocusRequest == null) return
+        val external = AudioRouting.externalOutput(audioManager)
+        if ((external != null) != usedExternalRoute) {
+            if (external != null) undoBuiltInSpeakerRoute() else applyBuiltInSpeakerRoute()
+            usedExternalRoute = external != null
+        }
+        audioPlayer?.setPreferredOutput(external)
+    }
+
+    private fun applyBuiltInSpeakerRoute() {
         // MicStreamer records with VOICE_COMMUNICATION for platform echo cancellation, which needs
         // the device in communication audio mode -- otherwise the audio policy engine can leave
         // the very first playback (AudioTrack) silent while routing settles. That mode defaults
@@ -3170,7 +3233,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             raisedVoiceCallVolume = raised
             audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, raised, 0)
         }
-        return true
     }
 
     private fun releaseCommunicationAudio() {
@@ -3179,6 +3241,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // Restore whatever mode/routing was active before this session claimed it -- not always
         // NORMAL/speaker-off (e.g. another app may already have been mid-call).
         pausedByFocusLoss = false
+        runCatching { audioManager.unregisterAudioDeviceCallback(routeCallback) }
+        undoBuiltInSpeakerRoute()
+        usedExternalRoute = false
+        audioPlayer?.setPreferredOutput(null)
+    }
+
+    private fun undoBuiltInSpeakerRoute() {
         if (usedCommunicationDevice && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             audioManager.clearCommunicationDevice()
             usedCommunicationDevice = false

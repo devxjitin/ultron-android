@@ -244,7 +244,10 @@ class GeminiLiveClient(
         )
         val speechConfig = JSONObject()
             .put("voiceConfig", voiceConfig)
-            .put("languageCode", settings.languageCode)
+        // Auto mode leaves the language unset so the model follows whatever the user speaks.
+        if (!AssistantOptions.isAutoLanguage(settings.languageCode)) {
+            speechConfig.put("languageCode", settings.languageCode)
+        }
 
         val generationConfig = JSONObject()
             .put("responseModalities", JSONArray().put("AUDIO"))
@@ -456,13 +459,14 @@ class GeminiLiveClient(
         }
 
         json.optJSONObject("toolCall")?.optJSONArray("functionCalls")?.let { functionCalls ->
-            val calls = (0 until functionCalls.length()).map { i ->
-                val call = functionCalls.getJSONObject(i)
-                FunctionCall(
-                    id = call.getString("id"),
-                    name = call.getString("name"),
-                    args = call.optJSONObject("args") ?: JSONObject()
-                )
+            // A frame missing its id or name is skipped instead of throwing on the socket thread,
+            // which would fail the whole session and reconnect.
+            val calls = (0 until functionCalls.length()).mapNotNull { i ->
+                val call = functionCalls.optJSONObject(i) ?: return@mapNotNull null
+                val id = call.optString("id")
+                val name = call.optString("name")
+                if (id.isEmpty() || name.isEmpty()) return@mapNotNull null
+                FunctionCall(id = id, name = name, args = call.optJSONObject("args") ?: JSONObject())
             }
             if (calls.isNotEmpty()) actions.add { listener?.onToolCall(calls) }
         }

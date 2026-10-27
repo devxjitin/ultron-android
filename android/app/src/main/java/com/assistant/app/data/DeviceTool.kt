@@ -234,6 +234,21 @@ enum class DeviceTool(
         listOf(ToolParam("name", ToolParamType.STRING, "The app name as the user said it."))
     ),
 
+    SEARCH_YOUTUBE_APP(
+        ToolGroup.APPS, "search_youtube_app", "Search in YouTube app", "Open YouTube on the phone with a search.",
+        "Opens the YouTube app on the screen with the search results for a query, so the user sees and picks the video. " +
+            "Use this whenever he wants to search or play something on YouTube. It does not read results back.",
+        listOf(ToolParam("query", ToolParamType.STRING, "What to search for on YouTube."))
+    ),
+
+    OPEN_LATEST_PHOTO(
+        ToolGroup.APPS, "open_latest_photo", "Open latest photo", "Open the newest photo or screenshot in the gallery.",
+        "Opens the most recent picture on the phone full screen in the gallery viewer, however old it is. " +
+            "Use this when he asks to see or open his last photo, image or screenshot.",
+        listOf(ToolParam("source", ToolParamType.STRING, "Which pictures to pick from. Default any.", required = false,
+            choices = listOf("any", "camera", "screenshot")))
+    ),
+
     OPEN_CAMERA(
         ToolGroup.APPS, "open_camera", "Open camera", "Open the camera for a photo or video.",
         "Opens the camera app ready to take a photo or record a video.",
@@ -452,7 +467,8 @@ enum class DeviceTool(
     ),
     YOUTUBE_SEARCH(
         ToolGroup.YOUTUBE, "youtube_search", "Search YouTube", "Search YouTube videos.",
-        "Searches YouTube and returns the top videos with title, channel, duration, views and address.",
+        "Searches YouTube in the background and returns the top videos with title, channel, duration, views and address. " +
+            "Use it only when the results should be told to him or listed in chat. To search or play on the phone's YouTube app, use search_youtube_app.",
         listOf(
             ToolParam("query", ToolParamType.STRING, "What to search for."),
             ToolParam("limit", ToolParamType.INTEGER, "How many videos, 1-25. Default 10.", required = false)

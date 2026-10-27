@@ -34,6 +34,7 @@ class McpClient(
     private val http = HttpClients.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS)
+        .callTimeout(40, TimeUnit.SECONDS) // keep-alive lines reset the read timeout, so cap the whole call
         .build()
 
     private val lock = Mutex()

@@ -361,3 +361,10 @@
 [2026-10-24 18:41] [Claude] [Update: published OTA build 29880789 (NVIDIA NIM chat), not tested on device]
 [2026-10-26 12:10] [Claude] [Fix: NVIDIA non-vision models get text-only content, images stripped or retried]
 [2026-10-26 12:10] [Claude] [Fix: Library lists a re-sent file once; delete removes all copies]
+
+[2026-10-27 18:27] [Claude] [Fix: voice plays on Bluetooth speaker or headphones when connected, built-in speaker otherwise]
+[2026-10-27 18:27] [Claude] [Fix: stuck Thinking, tool calls now time out at 45s and always return a result]
+[2026-10-27 18:27] [Claude] [Update: phone actions run first with no spoken pre-ack, then short confirm]
+[2026-10-27 18:27] [Claude] [Add: Auto language option (default), replies in the language the user speaks]
+[2026-10-27 18:27] [Claude] [Fix: loud room no longer interrupts reply, mic gate plus echo canceller and noise suppressor]
+[2026-10-27 18:27] [Claude] [Add: search_youtube_app opens YouTube search on screen; open_latest_photo opens newest picture]

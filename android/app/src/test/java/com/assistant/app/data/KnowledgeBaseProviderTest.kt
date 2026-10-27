@@ -125,4 +125,12 @@ class KnowledgeBaseProviderTest {
         assertTrue(result.contains("Brevity must not omit requested records"))
         assertTrue(result.contains("Do not call a list complete when coverage is partial or unverified"))
     }
+
+    @Test
+    fun `auto language follows the spoken language and tools run without a spoken pre-ack`() {
+        val prompt = KnowledgeBaseProvider.buildSystemInstruction("p", "", "Guide")
+        assertTrue(prompt.contains("same language he just spoke"))
+        assertFalse(prompt.contains("Speak and reply in"))
+        assertTrue(prompt.contains("say nothing first"))
+    }
 }

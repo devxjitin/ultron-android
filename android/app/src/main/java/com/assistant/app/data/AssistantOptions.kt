@@ -80,6 +80,7 @@ object AssistantOptions {
      *  list (https://ai.google.dev/gemini-api/docs/live-api/capabilities); the app UI itself always
      *  stays in English regardless of this choice. */
     val languages: List<Language> = listOf(
+        Language("Auto (match my language)", AUTO_LANGUAGE_CODE),
         Language("English (India)", "en-IN"),
         Language("Hindi", "hi-IN"),
         Language("Bengali", "bn"),
@@ -95,10 +96,18 @@ object AssistantOptions {
         Language("Assamese", "as")
     )
 
-    val defaultLanguageCode: String = languages.first().code
+    /** No fixed language: the assistant answers in whatever language the user speaks. */
+    const val AUTO_LANGUAGE_CODE = "auto"
+
+    val defaultLanguageCode: String = AUTO_LANGUAGE_CODE
+
+    fun isAutoLanguage(code: String): Boolean = code == AUTO_LANGUAGE_CODE
 
     fun languageLabel(code: String): String =
         languages.firstOrNull { it.code == code }?.label ?: languages.first().label
+
+    /** Language name for the system prompt; blank in auto mode so no language is forced. */
+    fun promptLanguage(code: String): String = if (isAutoLanguage(code)) "" else languageLabel(code)
 
     fun isApprovedLanguage(code: String): Boolean = languages.any { it.code == code }
 }
