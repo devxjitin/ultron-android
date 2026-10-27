@@ -378,3 +378,5 @@
 [2026-10-27 19:38] [Claude] [Remove: search_youtube_app tool]
 [2026-10-27 19:38] [Claude] [Update: rewrote Ultron voice prompt, Live temperature 0.7]
 [2026-10-27 19:38] [Claude] [Docs: OTA build 29885166 published]
+[2026-10-27 19:51] [Claude] [Fix: Refreshing session loop, temperature back to 1.0, show close reason]
+[2026-10-27 19:51] [Claude] [Docs: OTA build 29885178 published]
