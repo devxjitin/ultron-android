@@ -234,14 +234,6 @@ enum class DeviceTool(
         listOf(ToolParam("name", ToolParamType.STRING, "The app name as the user said it."))
     ),
 
-    OPEN_LATEST_PHOTO(
-        ToolGroup.APPS, "open_latest_photo", "Open latest photo", "Open the newest photo or screenshot in the gallery.",
-        "Opens the most recent picture on the phone full screen in the gallery viewer, however old it is. " +
-            "Use this when he asks to see or open his last photo, image or screenshot.",
-        listOf(ToolParam("source", ToolParamType.STRING, "Which pictures to pick from. Default any.", required = false,
-            choices = listOf("any", "camera", "screenshot")))
-    ),
-
     OPEN_CAMERA(
         ToolGroup.APPS, "open_camera", "Open camera", "Open the camera for a photo or video.",
         "Opens the camera app ready to take a photo or record a video.",

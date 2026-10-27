@@ -178,10 +178,6 @@ class DeviceToolRunner(
             DeviceTool.FLASHLIGHT -> flashlight(text("state"))
             DeviceTool.MEDIA_CONTROL -> mediaControl(text("command"))
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
-            DeviceTool.OPEN_LATEST_PHOTO -> {
-                imagePermissionProblem()?.let { return it }
-                openLatestPhoto(text("source") ?: "any")
-            }
             DeviceTool.SEARCH_CONTACT -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
@@ -840,57 +836,6 @@ class DeviceToolRunner(
         else "status=ok\nThat slot clashes with: ${clashes.joinToString()}."
     }
 
-    /** Null when the app may read pictures (full or partial access); otherwise the permission request result. */
-    private fun imagePermissionProblem(): String? {
-        fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
-        return if (Build.VERSION.SDK_INT >= 34) {
-            if (allowed(Manifest.permission.READ_MEDIA_IMAGES) || allowed(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)) null
-            else missingPermission(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-        } else {
-            missingPermission(
-                if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-            )
-        }
-    }
-
-    /** Opens the newest picture in the gallery viewer. The old recent-photos tool only listed names. */
-    private fun openLatestPhoto(source: String): String {
-        val (selection, args) = when (if (Build.VERSION.SDK_INT >= 29) source else "any") {
-            "camera" -> "${Images.Media.RELATIVE_PATH} LIKE ?" to arrayOf("DCIM/Camera%")
-            "screenshot" -> "${Images.Media.RELATIVE_PATH} LIKE ?" to arrayOf("%Screenshots%")
-            else -> null to null
-        }
-        val query = Bundle().apply {
-            if (selection != null) {
-                putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, args)
-            }
-            putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${Images.Media.DATE_ADDED} DESC, ${Images.Media._ID} DESC")
-            putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, 1)
-        }
-        var id = -1L
-        var name = ""
-        app.contentResolver.query(
-            Images.Media.EXTERNAL_CONTENT_URI, arrayOf(Images.Media._ID, Images.Media.DISPLAY_NAME), query, null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                id = cursor.getLong(0)
-                name = cursor.getString(1).orEmpty()
-            }
-        }
-        if (id < 0) {
-            val what = when (source) { "camera" -> "camera photos"; "screenshot" -> "screenshots"; else -> "pictures" }
-            return "status=empty\nThere are no $what on the phone."
-        }
-        val uri = ContentUris.withAppendedId(Images.Media.EXTERNAL_CONTENT_URI, id)
-        return try {
-            start(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-            "status=ok\nOpened the latest picture ($name)."
-        } catch (e: android.content.ActivityNotFoundException) {
-            "status=failed\nNo app on the phone can show pictures."
-        }
-    }
-
     private fun recentPhotos(days: Int, limit: Int): String {
         val since = System.currentTimeMillis() / 1000 - days * 86_400L
         val dateFormat = DateTimeFormatter.ofPattern("d MMM, hh:mm a", Locale.ENGLISH)
@@ -1186,9 +1131,7 @@ class DeviceToolRunner(
         "ring" -> AudioManager.STREAM_RING
         "alarm" -> AudioManager.STREAM_ALARM
         "notification" -> AudioManager.STREAM_NOTIFICATION
-        // The assistant plays on the call volume in communication mode, but on the media volume when it is
-        // routed to a Bluetooth speaker or headphones.
-        else -> if (com.assistant.app.audio.AudioRouting.externalOutput(audioManager) != null) AudioManager.STREAM_MUSIC else VOLUME_STREAM
+        else -> VOLUME_STREAM
     }
 
     private fun streamLabel(name: String) = name.replaceFirstChar { it.uppercase() }
@@ -1319,8 +1262,7 @@ class DeviceToolRunner(
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
             DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
-            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
-            DeviceTool.OPEN_LATEST_PHOTO
+            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L

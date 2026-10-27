@@ -105,8 +105,6 @@ data class AssistantUiState(
     val errorMessage: String? = null,
     /** Name of the tool the assistant is running right now (or just ran), shown on the home screen. */
     val activeTool: String? = null,
-    /** True once [activeTool] has finished; it stays on screen a moment so even a quick action is seen. */
-    val activeToolDone: Boolean = false,
     val hasApiKey: Boolean = false,
     val currentApiKey: String = "",
     /** Azure OpenAI settings for the typed chat; when active, the chat uses it instead of Gemini. */

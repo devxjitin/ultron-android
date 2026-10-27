@@ -1,7 +1,6 @@
 package com.assistant.app.audio
 
 import android.media.AudioAttributes
-import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Handler
@@ -75,14 +74,6 @@ class AudioPlayer(
     )
     private var job: Job? = null
     @Volatile private var track: AudioTrack? = null
-
-    /** Output the user connected on purpose (Bluetooth speaker, headphones); null follows the system route. */
-    @Volatile private var preferredOutput: AudioDeviceInfo? = null
-
-    fun setPreferredOutput(device: AudioDeviceInfo?) {
-        preferredOutput = device
-        runCatching { track?.preferredDevice = device }
-    }
     private val trackLock = Any()
     private val resetBufferingRequested = AtomicBoolean(false)
     /** Set by [notifyTurnComplete] -- the player loop only waits for a real drain-to-silence
@@ -145,7 +136,6 @@ class AudioPlayer(
             return false
         }
 
-        runCatching { audioTrack.preferredDevice = preferredOutput }
         try {
             audioTrack.play()
         } catch (e: Exception) {

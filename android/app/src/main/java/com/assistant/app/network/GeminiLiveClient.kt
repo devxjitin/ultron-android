@@ -70,7 +70,7 @@ class GeminiLiveClient(
             "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
-        private const val SETUP_TIMEOUT_MS = 8_000L
+        private const val SETUP_TIMEOUT_MS = 12_000L
         private const val QUOTA_MESSAGE =
             "The Gemini quota for this API key is used up. Check the plan in Google AI Studio, or pick another model in Settings."
 
@@ -88,18 +88,6 @@ class GeminiLiveClient(
         AssistantOptions.liveModels.firstOrNull { it.id == model }?.extendedThinking == true
 
     @Volatile private var quotaReported = false
-    /** The key's quota is spent; another connect or model will not help. */
-    @Volatile var quotaExhausted = false
-        private set
-    /** Why the server last closed this socket, shown when reconnecting keeps failing. */
-    @Volatile var lastCloseReason: String? = null
-        private set
-    /** Set once the server confirmed the setup; a failure before that is a failed connect, not a dropped session. */
-    @Volatile var setupDone = false
-        private set
-    /** True when the server refused the resumption handle; the caller must reconnect without it. */
-    val resumeRejected: Boolean
-        get() = lastCloseReason?.contains("not found or expired", ignoreCase = true) == true
 
     private fun isQuotaClose(reason: String) =
         reason.contains("quota", ignoreCase = true) || reason.contains("billing", ignoreCase = true)
@@ -176,20 +164,9 @@ class GeminiLiveClient(
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.i(TAG, "onClosing: code=$code reason=$reason")
                 webSocket.close(1000, null)
-                if (code != 1000 || reason.isNotBlank()) lastCloseReason = "code $code${if (reason.isBlank()) "" else ": $reason"}"
-                // An invalid request is rejected the same way on every reconnect, so show it instead of looping.
-                if (code == 1007 && !isQuotaClose(reason)) {
-                    quotaReported = true
-                    mainHandler.post {
-                        clearSetupTimeout()
-                        listener.onError("Gemini rejected the session ($lastCloseReason).")
-                    }
-                    return
-                }
                 // A spent quota will not fix itself by reconnecting, so say so instead of looping.
                 if (isQuotaClose(reason)) {
                     quotaReported = true
-                    quotaExhausted = true
                     mainHandler.post {
                         clearSetupTimeout()
                         listener.onError(QUOTA_MESSAGE)
@@ -212,7 +189,6 @@ class GeminiLiveClient(
                         // gets the existing bounded reconnect-with-backoff logic instead of
                         // dead-ending on an error the visitor has to manually retry.
                         Log.w(TAG, "onFailure treated as retryable (httpCode=$httpCode): ${t.javaClass.simpleName}: ${t.message}")
-                        lastCloseReason = "${t.javaClass.simpleName}: ${t.message.orEmpty()}".take(120)
                         listener.onClosed()
                     }
                 }
@@ -268,10 +244,7 @@ class GeminiLiveClient(
         )
         val speechConfig = JSONObject()
             .put("voiceConfig", voiceConfig)
-        // Auto mode leaves the language unset so the model follows whatever the user speaks.
-        if (!AssistantOptions.isAutoLanguage(settings.languageCode)) {
-            speechConfig.put("languageCode", settings.languageCode)
-        }
+            .put("languageCode", settings.languageCode)
 
         val generationConfig = JSONObject()
             .put("responseModalities", JSONArray().put("AUDIO"))
@@ -443,7 +416,6 @@ class GeminiLiveClient(
         if (json.has("setupComplete")) {
             latency.event("setup_ready", at = receivedAtMs)
             Log.i(TAG, "setupComplete received (${System.currentTimeMillis() - connectStartMillis}ms after connect())")
-            setupDone = true
             actions.add {
                 clearSetupTimeout()
                 // Must go out before the ViewModel starts streaming mic audio.
@@ -484,14 +456,13 @@ class GeminiLiveClient(
         }
 
         json.optJSONObject("toolCall")?.optJSONArray("functionCalls")?.let { functionCalls ->
-            // A frame missing its id or name is skipped instead of throwing on the socket thread,
-            // which would fail the whole session and reconnect.
-            val calls = (0 until functionCalls.length()).mapNotNull { i ->
-                val call = functionCalls.optJSONObject(i) ?: return@mapNotNull null
-                val id = call.optString("id")
-                val name = call.optString("name")
-                if (id.isEmpty() || name.isEmpty()) return@mapNotNull null
-                FunctionCall(id = id, name = name, args = call.optJSONObject("args") ?: JSONObject())
+            val calls = (0 until functionCalls.length()).map { i ->
+                val call = functionCalls.getJSONObject(i)
+                FunctionCall(
+                    id = call.getString("id"),
+                    name = call.getString("name"),
+                    args = call.optJSONObject("args") ?: JSONObject()
+                )
             }
             if (calls.isNotEmpty()) actions.add { listener?.onToolCall(calls) }
         }
@@ -519,7 +490,6 @@ class GeminiLiveClient(
         // backoff path immediately rather than after a wasted 15s timeout.
         json.optJSONObject("goAway")?.let {
             Log.i(TAG, "goAway received (timeLeft=${it.optString("timeLeft")}) -- closing to reconnect")
-            lastCloseReason = "server goAway, timeLeft ${it.optString("timeLeft")}"
             actions.add { webSocket?.close(1000, "server goAway") }
         }
 

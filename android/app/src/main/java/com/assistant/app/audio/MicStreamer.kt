@@ -3,8 +3,6 @@ package com.assistant.app.audio
 import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.NoiseSuppressor
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
@@ -36,14 +34,6 @@ class MicStreamer(
     private val muted = AtomicBoolean(false)
     private val userMuted = AtomicBoolean(false)
     @Volatile private var gain = sensitivity.gain
-    private val gatedWhileSpeaking = AtomicBoolean(false)
-    private val bargeInGate = BargeInGate()
-
-    /** While true (assistant speaking with barge-in on), only sustained sound above the room's noise
-     *  reaches the server, so background noise cannot cut the reply off. */
-    fun setBargeInGate(value: Boolean) {
-        gatedWhileSpeaking.set(value)
-    }
 
     fun setSensitivity(sensitivity: MicSensitivity) {
         gain = sensitivity.gain
@@ -115,23 +105,12 @@ class MicStreamer(
             return false
         }
         audioRecord = record
-        // Ask for the hardware echo canceller and noise suppressor explicitly; the VOICE_COMMUNICATION
-        // source only enables them on some devices.
-        val effects = buildList {
-            if (AcousticEchoCanceler.isAvailable()) {
-                runCatching { AcousticEchoCanceler.create(record.audioSessionId)?.also { it.enabled = true } }.getOrNull()?.let { add(it) }
-            }
-            if (NoiseSuppressor.isAvailable()) {
-                runCatching { NoiseSuppressor.create(record.audioSessionId)?.also { it.enabled = true } }.getOrNull()?.let { add(it) }
-            }
-        }
 
         // 40 ms chunks follow the Live API's low-latency streaming guidance.
         val chunkSize = sampleRate * 40 / 1000 * 2
         job = scope.launch {
             try {
                 val buffer = ByteArray(chunkSize)
-                var gateWasActive = false
                 while (isActive) {
                     val read = record.read(buffer, 0, buffer.size)
                     if (read > 0) {
@@ -142,13 +121,7 @@ class MicStreamer(
                             mainHandler.post { callbackGate.run { onAmplitude(amplitude) } }
                             // Keep silence and quiet/short words flowing to server VAD. A UI
                             // amplitude callback must never gate the next word's first chunk.
-                            val gated = gatedWhileSpeaking.get()
-                            if (gated || gateWasActive) {
-                                gateWasActive = gated
-                                bargeInGate.process(chunk, amplitude, gated).forEach(onChunk)
-                            } else {
-                                onChunk(chunk)
-                            }
+                            onChunk(chunk)
                         }
                     } else if (read < 0) {
                         // Negative return is a device-level error code (e.g. ERROR_DEAD_OBJECT
@@ -169,7 +142,6 @@ class MicStreamer(
                 } catch (_: IllegalStateException) {
                     // already stopped
                 }
-                effects.forEach { runCatching { it.release() } }
                 record.release()
                 if (audioRecord === record) audioRecord = null
             }

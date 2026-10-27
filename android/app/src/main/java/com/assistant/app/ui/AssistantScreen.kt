@@ -2,7 +2,6 @@ package com.assistant.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.border
@@ -335,7 +334,7 @@ fun AssistantScreen(
                     Modifier.widthIn(max = 900.dp).fillMaxWidth()
                         .height(if (compact) 80.dp else (availableHeight * 0.28f).coerceIn(160.dp, 270.dp)))
                 StatusLine(uiState, strings, hasMicPermission, micPermissionPermanentlyDenied)
-                uiState.activeTool?.let { ToolChip(it, uiState.activeToolDone) }
+                uiState.activeTool?.takeIf { uiState.voiceState != VoiceState.SPEAKING }?.let { ToolChip(it) }
                 Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                     if (uiState.voiceState in setOf(VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING)) {
@@ -622,7 +621,7 @@ fun AssistantScreen(
 
 /** Shows which tool the assistant is running, so tool calls are visible and not only "thinking". */
 @Composable
-private fun ToolChip(name: String, done: Boolean) {
+private fun ToolChip(name: String) {
     androidx.compose.foundation.layout.Row(
         Modifier.padding(top = 14.dp)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
@@ -632,15 +631,11 @@ private fun ToolChip(name: String, done: Boolean) {
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (done) {
-            Icon(Icons.Filled.Check, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(14.dp))
-        } else {
-            androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = AssistantAccent
-            )
-        }
+        androidx.compose.material3.CircularProgressIndicator(
+            modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = AssistantAccent
+        )
         Spacer(Modifier.width(10.dp))
-        Text(if (done) "Done: $name" else "Using: $name", color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 13.sp,
+        Text("Using: $name", color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 13.sp,
             fontWeight = FontWeight.Medium, maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }

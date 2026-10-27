@@ -12,7 +12,6 @@ import androidx.lifecycle.viewModelScope
 import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
-import com.assistant.app.audio.AudioRouting
 import com.assistant.app.audio.MicStreamer
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AzureConfig
@@ -130,10 +129,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000L
         /** Google access tokens last about an hour; renew a little early. */
         private const val GOOGLE_TOKEN_LIFETIME_MS = 50 * 60 * 1000L
-        private const val TOOL_LABEL_LINGER_MS = 2_500L
+        private const val TOOL_LABEL_LINGER_MS = 0L
         private const val TOOL_LABEL_MAX_MS = 25_000L
-        /** Hard cap for one tool call, so a hung tool can never leave the turn waiting forever. */
-        private const val TOOL_MAX_MS = 45_000L
         /** No conversational activity (transcript text or a turn boundary) for this long while
          *  a session is active auto-stops it and clears saved history, so a later session
          *  doesn't inherit a stale leftover conversation or an abandoned open mic. */
@@ -193,8 +190,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Latest server handle for the active conversation, used only to resume it after an
      *  automatic reconnect; cleared whenever the user starts or stops a session. */
     private var sessionResumptionHandle: String? = null
-    /** Why the server closed the session that started the current run of auto-reconnects. */
-    private var reconnectCause: String? = null
     private var personaRefreshJob: Job? = null
     private var prewarmJob: Job? = null
     private var isForeground = false
@@ -230,12 +225,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var previousAudioMode: Int? = null
     private var previousSpeakerphoneOn: Boolean? = null
     private var usedCommunicationDevice = false
-    /** True while the voice is routed to a Bluetooth speaker or headphones instead of the built-in speaker. */
-    private var usedExternalRoute = false
-    private val routeCallback = object : android.media.AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) = onAudioRouteChanged()
-        override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) = onAudioRouteChanged()
-    }
     /** Voice-call volume before this session raised it from 0, restored when the session ends. */
     private var previousVoiceCallVolume: Int? = null
     private var raisedVoiceCallVolume: Int? = null
@@ -291,10 +280,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  accepts setup and then immediately closes would otherwise reset this every time and
      *  never trip the cap). */
     private var consecutiveAutoReconnects = 0
-    /** Connects in a row that failed before the server confirmed setup. */
-    private var failedSetups = 0
-    /** Live model used instead of the chosen one after the chosen one stopped answering setup; kept while the app runs. */
-    private var fallbackLiveModel: String? = null
     private val maxAutoReconnects = 3
     private val reconnectBackoffMs = listOf(500L, 2000L, 5000L)
 
@@ -348,7 +333,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // The notification also tells what the assistant is doing, stamped with the time.
         viewModelScope.launch {
             combine(
-                _uiState.map { state -> state.voiceState to state.activeTool?.takeUnless { state.activeToolDone } }.distinctUntilChanged(),
+                _uiState.map { it.voiceState to it.activeTool }.distinctUntilChanged(),
                 conversationStore.recentTurns.catch { emit(emptyList()) }
             ) { (state, tool), turns -> notificationStatus(state, tool, turns.lastOrNull()) }
                 .distinctUntilChanged()
@@ -1198,32 +1183,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         else -> DeviceTool.fromFunctionName(functionName)?.label ?: functionName.replace('_', ' ')
     }
 
-    private var toolLabelJob: Job? = null
-
     private fun announceTool(label: String) {
-        toolLabelJob?.cancel()
-        _uiState.update { it.copy(activeTool = label, activeToolDone = false) }
+        _uiState.update { it.copy(activeTool = label) }
         // Safety net so a session that dies mid-tool never leaves the name on screen.
-        toolLabelJob = viewModelScope.launch {
-            delay(TOOL_LABEL_MAX_MS)
-            _uiState.update { it.copy(activeTool = null, activeToolDone = false) }
-        }
+        clearToolLater(label, TOOL_LABEL_MAX_MS)
     }
 
-    /** Marks the shown tool as done and keeps it on screen a moment, so a quick action is still seen. */
-    private fun finishToolLabel() {
-        if (_uiState.value.activeTool == null || _uiState.value.activeToolDone) return
-        toolLabelJob?.cancel()
-        _uiState.update { it.copy(activeToolDone = true) }
-        toolLabelJob = viewModelScope.launch {
-            delay(TOOL_LABEL_LINGER_MS)
-            _uiState.update { it.copy(activeTool = null, activeToolDone = false) }
+    /** Keeps the tool name visible a moment after it finishes, then removes it if it is still the same one. */
+    private fun clearToolLater(label: String, afterMs: Long = TOOL_LABEL_LINGER_MS) {
+        viewModelScope.launch {
+            delay(afterMs)
+            _uiState.update { if (it.activeTool == label && pendingToolCallIds.isEmpty()) it.copy(activeTool = null) else it }
         }
-    }
-
-    private fun clearToolLabel() {
-        toolLabelJob?.cancel()
-        _uiState.update { it.copy(activeTool = null, activeToolDone = false) }
     }
 
     /** Starts "Sign in with GitHub": shows a code, the user approves it in the phone's browser. */
@@ -2313,7 +2284,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (!isForeground && !backgroundSessionAllowed) return@launch
             val systemInstruction = KnowledgeBaseProvider.buildSystemInstruction(
                 settings.systemPrompt,
-                AssistantOptions.promptLanguage(settings.languageCode),
+                AssistantOptions.languageLabel(settings.languageCode),
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
                 if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
@@ -2339,44 +2310,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /**
-     * A connect that never got setupComplete (Gemini busy or not answering) is retried once, then the next Live
-     * model is tried, so a struggling model does not leave the user on an error. Returns false when it gives up.
-     */
-    private fun retryFailedSetup(client: GeminiLiveClient): Boolean {
-        if (client.setupDone || userInitiatedStop || client.quotaExhausted) return false
-        if (!isForeground && !backgroundSessionAllowed) return false
-        if (!isNetworkAvailable()) return false
-        failedSetups++
-        val chosen = _uiState.value.settings.liveModel
-        val current = fallbackLiveModel ?: chosen
-        when (failedSetups) {
-            1 -> Unit // the same model once more
-            2 -> {
-                val next = AssistantOptions.liveModels.firstOrNull { it.id != current && !it.extendedThinking }
-                if (next == null) {
-                    failedSetups = 0
-                    return false
-                }
-                fallbackLiveModel = next.id.takeIf { it != chosen }
-                showToast("Voice model is not answering, switching to ${next.label}.", AppNotificationType.INFO)
-            }
-            else -> {
-                failedSetups = 0
-                fallbackLiveModel = null
-                return false
-            }
-        }
-        sessionResumptionHandle = null
-        _uiState.update { it.copy(voiceState = VoiceState.CONNECTING, micAmplitude = 0f, playbackAmplitude = 0f) }
-        reconnectJob?.cancel()
-        reconnectJob = viewModelScope.launch {
-            delay(300L)
-            if (!userInitiatedStop) startSession(isAutoReconnect = true)
-        }
-        return true
-    }
-
     private fun connectLiveSession(
         apiKey: String,
         systemInstruction: String,
@@ -2385,7 +2318,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isWarm: Boolean = false,
         resumeHandle: String? = null
     ) {
-        val client = GeminiLiveClient(apiKey, fallbackLiveModel ?: settings.liveModel)
+        val client = GeminiLiveClient(apiKey, settings.liveModel)
         client.latency.event("session_origin", mapOf("mode" to when {
             isWarm -> "prewarm"
             _uiState.value.voiceState == VoiceState.RESETTING -> "reconnect"
@@ -2409,7 +2342,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
             override fun onSetupComplete() {
                 if (!isCurrent()) return
-                failedSetups = 0
                 if (isWarm && !activateWarmOnReady) {
                     // Nobody asked for it yet -- stay connected and idle, ready for the next tap.
                     isPrewarmReady = true
@@ -2444,10 +2376,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     // input) so the user can interrupt it mid-reply. Barge-in off: mute as before.
                     if (!_uiState.value.settings.bargeInEnabled) {
                         micStreamer?.setMuted(true)
-                    } else {
-                        // Echo cancellation alone does not stop a loud room from tripping the server's
-                        // voice detection, so only sustained sound gets through while it speaks.
-                        micStreamer?.setBargeInGate(true)
                     }
                     _uiState.update { it.copy(voiceState = VoiceState.SPEAKING) }
                     startSpeakingWatchdog()
@@ -2492,8 +2420,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // sent and the model has now finished its follow-up turn, possibly with no audio
                 // at all. Deferring again would leave the mic muted and the UI on SPEAKING forever.
                 awaitingToolContinuation = false
-                // The reply to every tool is done, so the tool name only lingers briefly as done.
-                finishToolLabel()
+                // The reply to every tool is done, so no tool name may stay on screen into the next request.
+                _uiState.update { it.copy(activeTool = null) }
                 finalizeTurnIfAny()
                 // A full turn actually completed -- this session is genuinely working, so the
                 // reconnect-loop guard can relax again.
@@ -2611,28 +2539,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, resultText)
                             batch.traces[call.id] = trace to searchStartedAt
                             pendingToolJobs.remove(call.id)
+                            clearToolLater(toolDisplayName(call.name))
                             flushToolBatch(client, batch)
                         }
                     }
                     if (job == null) {
                         pendingToolCallIds.remove(call.id)
                         trace?.failure()
+                        clearToolLater(toolDisplayName(call.name))
                         flushToolBatch(client, batch)
                     } else {
                         pendingToolJobs[call.id] = job
-                        // A crashed tool coroutine would otherwise never post a result and the model
-                        // would wait for it forever.
-                        job.invokeOnCompletion { cause ->
-                            if (cause != null && cause !is CancellationException) {
-                                viewModelScope.launch {
-                                    failToolCall(client, batch, call, "The tool crashed.")
-                                }
-                            }
-                        }
-                        viewModelScope.launch {
-                            delay(TOOL_MAX_MS)
-                            failToolCall(client, batch, call, "The tool took too long.")
-                        }
                     }
                 }
             }
@@ -2647,7 +2564,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 toolBatches.toList().forEach { flushToolBatch(client, it) }
                 if (pendingToolCallIds.isEmpty()) {
                     awaitingToolContinuation = false
-                    clearToolLabel()
+                    _uiState.update { it.copy(activeTool = null) }
                 }
             }
 
@@ -2674,7 +2591,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     activateWarmOnReady = false
                 }
                 releaseResources()
-                if (retryFailedSetup(client)) return
                 _uiState.update {
                     it.copy(
                         voiceState = VoiceState.ERROR,
@@ -2699,14 +2615,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     activateWarmOnReady = false
                 }
                 releaseResources()
-                if (retryFailedSetup(client)) return
-                // An expired handle is refused on every retry, so the next connect starts a fresh session
-                // (earlier turns are seeded as history instead) and this close does not count as a failure.
-                if (client.resumeRejected) {
-                    sessionResumptionHandle = null
-                    if (consecutiveAutoReconnects > 0) consecutiveAutoReconnects--
-                }
-                if (consecutiveAutoReconnects == 0) reconnectCause = client.lastCloseReason
                 val currentState = _uiState.value.voiceState
                 when {
                     currentState == VoiceState.ERROR -> Unit // already surfaced by onError
@@ -2725,9 +2633,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     consecutiveAutoReconnects >= maxAutoReconnects -> _uiState.update {
                         it.copy(
                             voiceState = VoiceState.ERROR,
-                            errorMessage = "Session kept disconnecting" +
-                                (listOfNotNull(reconnectCause, client.lastCloseReason).distinct().joinToString("; ")
-                                    .takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: "") + ". Please try again.",
+                            errorMessage = "Session kept disconnecting. Please try again.",
                             micAmplitude = 0f,
                             playbackAmplitude = 0f
                         )
@@ -2743,12 +2649,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         reconnectJob?.cancel()
                         reconnectJob = viewModelScope.launch {
                             delay(delayMs)
-                            if ((isForeground || backgroundSessionAllowed) && !userInitiatedStop) {
-                                startSession(isAutoReconnect = true)
-                            } else {
-                                // Nobody will reconnect it now, so do not leave "Refreshing session" on screen.
-                                _uiState.update { it.copy(voiceState = VoiceState.IDLE) }
-                            }
+                            if ((isForeground || backgroundSessionAllowed) && !userInitiatedStop) startSession(isAutoReconnect = true)
                         }
                     }
                 }
@@ -2796,7 +2697,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 client.latency.playbackIdle()
                 // Playback has actually finished (or was interrupted) -- safe to unmute now.
                 micStreamer?.setMuted(false)
-                micStreamer?.setBargeInGate(false)
                 resetSpeechDetection()
                 // PROCESSING is included so a turn that completes with no audio (empty reply)
                 // also returns to LISTENING here, instead of staying stuck until fresh speech
@@ -2835,7 +2735,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         audioPlayer = createdPlayer
-        createdPlayer.setPreferredOutput(AudioRouting.externalOutput(audioManager))
 
         val mic = MicStreamer(
             onChunk = { chunk -> client.sendAudioChunk(chunk) },
@@ -2982,7 +2881,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val settings = settingsStore.settings.first()
                 val systemInstruction = KnowledgeBaseProvider.buildSystemInstruction(
                     settings.systemPrompt,
-                    AssistantOptions.promptLanguage(settings.languageCode),
+                    AssistantOptions.languageLabel(settings.languageCode),
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
                     if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
@@ -3026,14 +2925,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         assistantTextBuffer.clear()
     }
 
-    /** Posts an error result for a call that crashed or hung, unless it already has a result or was dropped. */
-    private fun failToolCall(client: GeminiLiveClient, batch: ToolBatch, call: GeminiLiveClient.FunctionCall, reason: String) {
-        if (liveClient !== client || call.id !in pendingToolCallIds || call.id in batch.results) return
-        pendingToolJobs.remove(call.id)?.cancel()
-        batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, "status=error\n$reason Tell him it did not work.")
-        flushToolBatch(client, batch)
-    }
-
     /** Sends a batch's results once every call in it that is still wanted has one. Gemini waits for every response in a
      *  toolCall message, so the reply watchdog starts only after the last of them is actually sent. */
     private fun flushToolBatch(client: GeminiLiveClient, batch: ToolBatch) {
@@ -3041,11 +2932,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (wanted.any { it !in batch.results }) return
         toolBatches.remove(batch)
         val results = wanted.mapNotNull { batch.results[it] }
-        if (results.isEmpty()) {
-            // Every call was cancelled: nothing to send, but the UI still needs a way out of PROCESSING.
-            if (pendingToolCallIds.isEmpty()) startTurnTimeout()
-            return
-        }
+        if (results.isEmpty()) return
         val accepted = liveClient === client && client.sendToolResponses(results)
         val now = SystemClock.elapsedRealtime()
         results.forEach { result ->
@@ -3056,9 +2943,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (!accepted) trace?.failure()
             pendingToolCallIds.remove(result.id)
         }
-        // Also after a rejected send, so a dead socket cannot leave the UI on PROCESSING.
-        if (pendingToolCallIds.isEmpty()) startTurnTimeout()
-        if (pendingToolCallIds.isEmpty()) finishToolLabel()
+        if (accepted && pendingToolCallIds.isEmpty()) startTurnTimeout()
+        // The ids only leave pendingToolCallIds here, after clearToolLater already looked, so the label is removed now.
+        if (pendingToolCallIds.isEmpty()) _uiState.update { it.copy(activeTool = null) }
     }
 
     private fun cancelPendingToolCalls() {
@@ -3067,7 +2954,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         pendingToolCallIds.clear()
         toolBatches.clear()
         awaitingToolContinuation = false
-        clearToolLabel()
+        _uiState.update { it.copy(activeTool = null) }
     }
 
     /** Restarts the idle-timeout countdown -- called whenever there's a sign of real
@@ -3119,7 +3006,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     awaitingToolContinuation = false
                     finalizeTurnIfAny()
                     micStreamer?.setMuted(false)
-                    micStreamer?.setBargeInGate(false)
                     resetSpeechDetection()
                     audioPlayer?.clearQueueForInterruption()
                     _uiState.update { it.copy(voiceState = VoiceState.LISTENING, playbackAmplitude = 0f) }
@@ -3185,7 +3071,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         if (_uiState.value.voiceState == VoiceState.LISTENING &&
             hasHeardSpeechThisTurn &&
-            pendingToolCallIds.isEmpty() &&
             now - lastLoudAtMillis >= SILENCE_TO_PROCESSING_MS
         ) {
             Log.i("AssistantLatency", "local speech end after ${now - lastLoudAtMillis}ms silence")
@@ -3255,26 +3140,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return false
         }
         audioFocusRequest = request
-        audioManager.registerAudioDeviceCallback(routeCallback, null)
-        // A Bluetooth speaker or headphones the user connected wins over the built-in speaker. Forcing the
-        // loudspeaker here is what kept the voice off their Bluetooth speaker.
-        usedExternalRoute = AudioRouting.externalOutput(audioManager) != null
-        if (!usedExternalRoute) applyBuiltInSpeakerRoute()
-        return true
-    }
 
-    /** Switches routing when a Bluetooth speaker or headphones are connected or removed mid-session. */
-    private fun onAudioRouteChanged() {
-        if (audioFocusRequest == null) return
-        val external = AudioRouting.externalOutput(audioManager)
-        if ((external != null) != usedExternalRoute) {
-            if (external != null) undoBuiltInSpeakerRoute() else applyBuiltInSpeakerRoute()
-            usedExternalRoute = external != null
-        }
-        audioPlayer?.setPreferredOutput(external)
-    }
-
-    private fun applyBuiltInSpeakerRoute() {
         // MicStreamer records with VOICE_COMMUNICATION for platform echo cancellation, which needs
         // the device in communication audio mode -- otherwise the audio policy engine can leave
         // the very first playback (AudioTrack) silent while routing settles. That mode defaults
@@ -3304,6 +3170,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             raisedVoiceCallVolume = raised
             audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, raised, 0)
         }
+        return true
     }
 
     private fun releaseCommunicationAudio() {
@@ -3312,13 +3179,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // Restore whatever mode/routing was active before this session claimed it -- not always
         // NORMAL/speaker-off (e.g. another app may already have been mid-call).
         pausedByFocusLoss = false
-        runCatching { audioManager.unregisterAudioDeviceCallback(routeCallback) }
-        undoBuiltInSpeakerRoute()
-        usedExternalRoute = false
-        audioPlayer?.setPreferredOutput(null)
-    }
-
-    private fun undoBuiltInSpeakerRoute() {
         if (usedCommunicationDevice && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             audioManager.clearCommunicationDevice()
             usedCommunicationDevice = false

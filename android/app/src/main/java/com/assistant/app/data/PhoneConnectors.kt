@@ -42,7 +42,7 @@ object PhoneConnectors {
         PhoneConnector("messages", Surface.BOTH, listOf(DeviceTool.SEND_SMS, DeviceTool.SEND_SMS_CONTACT)),
         // Automation: these act on the phone itself, so they stay in the voice assistant.
         PhoneConnector("apps_settings", Surface.VOICE, listOf(
-            DeviceTool.OPEN_APP, DeviceTool.OPEN_LATEST_PHOTO, DeviceTool.OPEN_CAMERA, DeviceTool.OPEN_APP_SETTINGS, DeviceTool.OPEN_SETTINGS,
+            DeviceTool.OPEN_APP, DeviceTool.OPEN_CAMERA, DeviceTool.OPEN_APP_SETTINGS, DeviceTool.OPEN_SETTINGS,
             DeviceTool.SET_WALLPAPER, DeviceTool.GET_CLIPBOARD, DeviceTool.SET_CLIPBOARD, DeviceTool.SHOW_NOTIFICATION
         )),
         PhoneConnector("navigation", Surface.VOICE, listOf(
