@@ -390,3 +390,4 @@
 [2026-10-27 20:23] [Claude] [Docs: OTA build 29885211 published]
 [2026-10-27 20:43] [Claude] [Revert: BT speaker routing wala change hataya]
 [2026-10-27 20:43] [Claude] [Docs: OTA build 29885231 published (reverted code)]
+[2026-10-27 23:14] [Claude] [Update: voice-fixes main me merge+push, sdk-migration aur voice-fixes branch delete]
