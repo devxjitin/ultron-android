@@ -8,6 +8,10 @@ plugins {
     id("io.objectbox")
 }
 
+// Firebase AI Logic needs android/app/google-services.json (gitignored). Without it the app still builds and
+// falls back to the on-device Gemini key.
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+
 // Optional compile-time default API key, read from local.properties (gitignored, never
 // committed). The app also lets the key be entered/changed at runtime from Settings, which
 // takes priority -- this is just a convenience fallback for development.
@@ -175,6 +179,12 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0")
     // Google's own sign-in/consent screen for the Google Workspace connectors (Calendar, Gmail, Drive...).
     implementation("com.google.android.gms:play-services-auth:22.0.0")
+
+    // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-ai")
+    // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -391,3 +391,4 @@
 [2026-10-27 20:43] [Claude] [Revert: BT speaker routing wala change hataya]
 [2026-10-27 20:43] [Claude] [Docs: OTA build 29885231 published (reverted code)]
 [2026-10-27 23:14] [Claude] [Update: voice-fixes main me merge+push, sdk-migration aur voice-fixes branch delete]
+[2026-10-29 00:25] [Claude] [Add: Gemini via Firebase AI Logic (SDK chat/text, Live over Firebase endpoint), own key still wins; on branch firebase-ai-sdk, not published]

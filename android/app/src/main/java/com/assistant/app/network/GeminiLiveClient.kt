@@ -35,7 +35,9 @@ import java.util.concurrent.TimeUnit
  */
 class GeminiLiveClient(
     private val apiKey: String,
-    private val model: String
+    private val model: String,
+    /** When set, the session goes through Firebase AI Logic and [apiKey] is not used. */
+    private val firebase: FirebaseLiveAccess? = null
 ) {
     val latency = newLatencySession()
 
@@ -68,6 +70,9 @@ class GeminiLiveClient(
         private const val HOST = "generativelanguage.googleapis.com"
         private const val ENDPOINT =
             "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+        private const val FIREBASE_HOST = "firebasevertexai.googleapis.com"
+        private const val FIREBASE_ENDPOINT =
+            "google.firebase.vertexai.v1beta.GenerativeService/BidiGenerateContent"
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
         private const val SETUP_TIMEOUT_MS = 12_000L
@@ -122,9 +127,8 @@ class GeminiLiveClient(
         firstAudioChunkLogged = false
         sentAudioChunks = 0
         latency.event("connect_start", mapOf("model" to model))
-        val url = "wss://$HOST/ws/$ENDPOINT?key=$apiKey"
-        val request = Request.Builder().url(url).build()
-        Log.i(TAG, "connect() opening wss://$HOST/ws/$ENDPOINT?key=*** (model=$model, voice=${settings.voiceName})")
+        val request = buildRequest()
+        Log.i(TAG, "connect() opening ${request.url.host} via ${if (firebase != null) "Firebase" else "direct key"} (model=$model, voice=${settings.voiceName})")
 
         val timeoutRunnable = Runnable {
             Log.e(TAG, "Setup timed out after ${SETUP_TIMEOUT_MS}ms -- no setupComplete or error received")
@@ -205,6 +209,25 @@ class GeminiLiveClient(
         })
     }
 
+    private fun buildRequest(): Request {
+        val access = firebase
+            ?: return Request.Builder().url("wss://$HOST/ws/$ENDPOINT?key=$apiKey").build()
+        // Same bidirectional protocol as the direct endpoint, served by Firebase's proxy; the headers are what the
+        // Firebase AI Logic SDK itself sends.
+        return Request.Builder()
+            .url("wss://$FIREBASE_HOST/ws/$FIREBASE_ENDPOINT?key=${access.apiKey}")
+            .header("x-goog-api-key", access.apiKey)
+            .header("x-goog-api-client", "gl-kotlin/${KotlinVersion.CURRENT}-ai fire/ultron")
+            .header("X-Android-Package", access.packageName)
+            .apply { access.certSha1?.let { header("X-Android-Cert", it) } }
+            .header("X-Firebase-AppId", access.appId)
+            .header("X-Firebase-AppVersion", access.appVersion)
+            .build()
+    }
+
+    private fun modelResource(): String =
+        firebase?.let { "projects/${it.projectId}/models/$model" } ?: "models/$model"
+
     /** Seeds earlier turns as role-separated client content ("user" / "model") instead of mixing
      *  them into the system instruction. turnComplete=false adds context without asking the
      *  model to respond. Sent once, before any realtime audio; no-op when there is no history. */
@@ -258,7 +281,7 @@ class GeminiLiveClient(
         }
 
         val setup = JSONObject()
-            .put("model", "models/$model")
+            .put("model", modelResource())
             .put("generationConfig", generationConfig)
             // Let server VAD own turn boundaries, including quiet one-word questions.
             // 500ms keeps natural pauses intact while reducing endpointing delay.

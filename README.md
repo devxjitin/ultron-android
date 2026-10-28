@@ -330,6 +330,8 @@ All build-time values live in `android/local.properties` and are exposed to the 
 | `GOOGLE_MCP_URL` | optional | Base URL of your Google Workspace MCP server, used by the six Google connectors. |
 | `AZURE_ENDPOINT` | optional | Azure OpenAI resource used by the *Azure API key* chat option. The key itself is entered in the app. |
 | `UPDATE_URL` | optional | Update server URL, enables in-app updates. |
+
+**Gemini through Firebase.** If `android/app/google-services.json` exists (git-ignored), chat and helper calls use the Firebase AI Logic SDK and the voice session connects through Firebase's endpoint, so no Gemini key is needed in the app. A key typed under Developer settings still wins and uses the direct Gemini API. Embeddings (knowledge base) are not offered by Firebase and keep using their own key.
 | `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | release builds | Release signing configuration. |
 
 Values that contain a secret token end up inside the APK, so do not share builds made with private URLs.

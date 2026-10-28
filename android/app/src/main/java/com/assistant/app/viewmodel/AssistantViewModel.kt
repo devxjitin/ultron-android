@@ -74,6 +74,9 @@ import org.json.JSONArray
 import com.assistant.app.network.ChatTurnMessage
 import com.assistant.app.network.GeminiEmbeddingClient
 import com.assistant.app.network.GeminiLiveClient
+import com.assistant.app.network.FirebaseChatClient
+import com.assistant.app.network.FirebaseGemini
+import com.assistant.app.network.FirebaseLiveAccess
 import com.assistant.app.network.GeminiTextClient
 import com.assistant.app.util.UserFacingError
 import com.assistant.app.util.UserInputException
@@ -390,7 +393,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             keysLoaded = true
             _uiState.update {
                 it.copy(
-                    hasApiKey = resolvedKey.isNotBlank(),
+                    hasApiKey = hasGeminiAccess(),
                     currentApiKey = resolvedKey,
                     currentEmbeddingApiKey = embeddingKey,
                     azure = azureConfig,
@@ -477,6 +480,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun resolveApiKey(): String =
         apiKeyStore.getApiKey() ?: BuildConfig.GEMINI_API_KEY
 
+    /** Gemini goes through Firebase AI Logic unless the user typed their own key in Developer settings. */
+    private fun usesFirebase(): Boolean =
+        apiKeyStore.getApiKey() == null && FirebaseGemini.isAvailable(getApplication())
+
+    private fun hasGeminiAccess(): Boolean = usesFirebase() || resolveApiKey().isNotBlank()
+
+    private fun liveFirebaseAccess(): FirebaseLiveAccess? =
+        if (usesFirebase()) FirebaseGemini.liveAccess(getApplication()) else null
+
     fun onMicTapped() {
         when (_uiState.value.voiceState) {
             VoiceState.IDLE, VoiceState.ERROR -> startSession()
@@ -522,7 +534,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val apiKey = resolveApiKey()
         val nim = _uiState.value.nim.takeIf { it.isActive }
         val azure = _uiState.value.azure.takeIf { it.isActive && nim == null }
-        if (azure == null && nim == null && apiKey.isBlank()) {
+        if (azure == null && nim == null && !hasGeminiAccess()) {
             showToast("Add a Gemini, Azure or NVIDIA API key in Developer settings first.", AppNotificationType.ERROR)
             return false
         }
@@ -616,6 +628,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     OpenAiChatClient.nvidia(nim).stream(instruction, history, tools, ::runChatTool, chatListener)
                 } else if (azure != null) {
                     OpenAiChatClient.azure(azure, BuildConfig.AZURE_ENDPOINT).stream(instruction, history, tools, ::runChatTool, chatListener)
+                } else if (usesFirebase()) {
+                    FirebaseChatClient().stream(instruction, history, tools, ::runChatTool, chatListener)
                 } else {
                     GeminiChatClient(apiKey).stream(instruction, history, tools, ::runChatTool, chatListener)
                 }
@@ -907,7 +921,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Text generation for titles, personas and formatting; the tokens it uses count in Usage, under [purpose]. */
-    private fun auxTextClient(apiKey: String, purpose: String) = GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose))
+    private fun auxTextClient(apiKey: String, purpose: String) =
+        GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose), useFirebase = usesFirebase())
 
     /** True once today's tokens reach the daily budget the user set (never when no budget is set). */
     private fun overDailyBudget(): Boolean {
@@ -925,7 +940,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             val session = chatHistoryStore.sessions.first().firstOrNull { it.id == sessionId } ?: return
             val turns = session.turns.size
             if (session.customTitle != null && turns % TITLE_REFRESH_EVERY_TURNS != 0) return
-            val apiKey = resolveApiKey().takeIf { it.isNotBlank() } ?: return
+            if (!hasGeminiAccess()) return
+            val apiKey = resolveApiKey()
             val transcript = session.turns.takeLast(12).joinToString("\n") {
                 val files = it.attachments.joinToString(" ") { file -> "[file: ${file.name}]" }
                 "User: ${"$files ${it.userText}".trim().take(300)}\nAssistant: ${it.assistantText.take(300)}"
@@ -1730,7 +1746,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         apiKeyStore.clearApiKey()
         val fallback = BuildConfig.GEMINI_API_KEY
         _uiState.update {
-            it.copy(hasApiKey = fallback.isNotBlank(), currentApiKey = fallback)
+            it.copy(hasApiKey = hasGeminiAccess(), currentApiKey = fallback)
         }
         showToast("API key removed")
         invalidateWarmSessionAndReprewarm()
@@ -1926,7 +1942,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         val apiKey = resolveApiKey()
-        if (apiKey.isBlank()) {
+        if (!hasGeminiAccess()) {
             _uiState.update { it.copy(promptGenerationError = "No Gemini API key set yet.") }
             return
         }
@@ -2216,7 +2232,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         val apiKey = resolveApiKey()
-        if (apiKey.isBlank()) {
+        if (!hasGeminiAccess()) {
             _uiState.update {
                 it.copy(
                     voiceState = VoiceState.ERROR,
@@ -2318,7 +2334,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isWarm: Boolean = false,
         resumeHandle: String? = null
     ) {
-        val client = GeminiLiveClient(apiKey, settings.liveModel)
+        val client = GeminiLiveClient(apiKey, settings.liveModel, liveFirebaseAccess())
         client.latency.event("session_origin", mapOf("mode" to when {
             isWarm -> "prewarm"
             _uiState.value.voiceState == VoiceState.RESETTING -> "reconnect"
@@ -2866,7 +2882,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (warmClient != null || prewarmInFlight) return
         if (_uiState.value.voiceState != VoiceState.IDLE) return
         val apiKey = resolveApiKey()
-        if (apiKey.isBlank()) return
+        if (!hasGeminiAccess()) return
 
         prewarmInFlight = true
         val generation = prewarmGeneration
