@@ -33,13 +33,28 @@ import java.util.concurrent.TimeUnit
  * the app can recover the key. Acceptable for an internal kiosk prototype; if this
  * ever ships beyond that, move this connection behind a small server-side proxy instead.
  */
+/** What the view model needs from a Live voice connection; [GeminiLiveClient] talks to Gemini with a key, [FirebaseLiveClient] through Firebase AI Logic. */
+interface LiveClient {
+    val latency: com.assistant.app.util.LatencySession
+    /** [resumeHandle] continues an earlier connection's conversation server-side, so [history] is not re-sent. */
+    fun connect(
+        systemInstruction: String,
+        settings: AssistantSettings,
+        history: List<KnowledgeBaseProvider.HistoryTurn>,
+        listener: GeminiLiveClient.Listener,
+        resumeHandle: String? = null
+    )
+    /** Streams a chunk of mic audio: PCM16 little-endian, mono, 16kHz. */
+    fun sendAudioChunk(pcm16: ByteArray)
+    fun sendToolResponses(results: List<GeminiLiveClient.ToolResult>): Boolean
+    fun close()
+}
+
 class GeminiLiveClient(
     private val apiKey: String,
-    private val model: String,
-    /** When set, the session goes through Firebase AI Logic and [apiKey] is not used. */
-    private val firebase: FirebaseLiveAccess? = null
-) {
-    val latency = newLatencySession()
+    private val model: String
+) : LiveClient {
+    override val latency = newLatencySession()
 
     interface Listener {
         fun onSetupComplete() {}
@@ -70,9 +85,6 @@ class GeminiLiveClient(
         private const val HOST = "generativelanguage.googleapis.com"
         private const val ENDPOINT =
             "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
-        private const val FIREBASE_HOST = "firebasevertexai.googleapis.com"
-        private const val FIREBASE_ENDPOINT =
-            "google.firebase.vertexai.v1beta.GenerativeService/BidiGenerateContent"
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
         private const val SETUP_TIMEOUT_MS = 12_000L
@@ -88,9 +100,6 @@ class GeminiLiveClient(
     private val client = HttpClients.shared.newBuilder()
         .readTimeout(0, TimeUnit.MILLISECONDS) // streaming connection stays open
         .build()
-
-    private val extendedThinking =
-        AssistantOptions.liveModels.firstOrNull { it.id == model }?.extendedThinking == true
 
     @Volatile private var quotaReported = false
 
@@ -113,12 +122,12 @@ class GeminiLiveClient(
 
     /** [resumeHandle] continues an earlier connection's conversation server-side, so [history] is
      *  not re-sent (it would duplicate what the server already holds). */
-    fun connect(
+    override fun connect(
         systemInstruction: String,
         settings: AssistantSettings,
         history: List<KnowledgeBaseProvider.HistoryTurn>,
         listener: Listener,
-        resumeHandle: String? = null
+        resumeHandle: String?
     ) {
         this.listener = listener
         pendingHistory = if (resumeHandle != null) emptyList() else history
@@ -127,8 +136,9 @@ class GeminiLiveClient(
         firstAudioChunkLogged = false
         sentAudioChunks = 0
         latency.event("connect_start", mapOf("model" to model))
-        val request = buildRequest()
-        Log.i(TAG, "connect() opening ${request.url.host} via ${if (firebase != null) "Firebase" else "direct key"} (model=$model, voice=${settings.voiceName})")
+        val url = "wss://$HOST/ws/$ENDPOINT?key=$apiKey"
+        val request = Request.Builder().url(url).build()
+        Log.i(TAG, "connect() opening wss://$HOST/ws/$ENDPOINT?key=*** (model=$model, voice=${settings.voiceName})")
 
         val timeoutRunnable = Runnable {
             Log.e(TAG, "Setup timed out after ${SETUP_TIMEOUT_MS}ms -- no setupComplete or error received")
@@ -209,25 +219,6 @@ class GeminiLiveClient(
         })
     }
 
-    private fun buildRequest(): Request {
-        val access = firebase
-            ?: return Request.Builder().url("wss://$HOST/ws/$ENDPOINT?key=$apiKey").build()
-        // Same bidirectional protocol as the direct endpoint, served by Firebase's proxy; the headers are what the
-        // Firebase AI Logic SDK itself sends.
-        return Request.Builder()
-            .url("wss://$FIREBASE_HOST/ws/$FIREBASE_ENDPOINT?key=${access.apiKey}")
-            .header("x-goog-api-key", access.apiKey)
-            .header("x-goog-api-client", "gl-kotlin/${KotlinVersion.CURRENT}-ai fire/ultron")
-            .header("X-Android-Package", access.packageName)
-            .apply { access.certSha1?.let { header("X-Android-Cert", it) } }
-            .header("X-Firebase-AppId", access.appId)
-            .header("X-Firebase-AppVersion", access.appVersion)
-            .build()
-    }
-
-    private fun modelResource(): String =
-        firebase?.let { "projects/${it.projectId}/models/$model" } ?: "models/$model"
-
     /** Seeds earlier turns as role-separated client content ("user" / "model") instead of mixing
      *  them into the system instruction. turnComplete=false adds context without asking the
      *  model to respond. Sent once, before any realtime audio; no-op when there is no history. */
@@ -273,15 +264,9 @@ class GeminiLiveClient(
             .put("responseModalities", JSONArray().put("AUDIO"))
             .put("speechConfig", speechConfig)
             .put("temperature", 1.0)
-        if (extendedThinking) {
-            generationConfig.put(
-                "thinkingConfig",
-                JSONObject().put("thinkingLevel", AssistantOptions.EXTENDED_THINKING_LEVEL)
-            )
-        }
 
         val setup = JSONObject()
-            .put("model", modelResource())
+            .put("model", "models/$model")
             .put("generationConfig", generationConfig)
             // Let server VAD own turn boundaries, including quiet one-word questions.
             // 500ms keeps natural pauses intact while reducing endpointing delay.
@@ -305,7 +290,7 @@ class GeminiLiveClient(
             // and persist turns as text, even though the exchange itself is audio.
             .put("inputAudioTranscription", JSONObject())
             .put("outputAudioTranscription", JSONObject())
-            .put("tools", JSONArray().put(buildToolsDeclaration(settings)))
+            .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", liveFunctionDeclarations(settings))))
             // Without compression the 128k-token context (audio + every knowledge-search result)
             // fills up and the server ends the session; the sliding window drops the oldest turns.
             .put("contextWindowCompression", JSONObject().put("slidingWindow", JSONObject()))
@@ -315,55 +300,8 @@ class GeminiLiveClient(
         return JSONObject().put("setup", setup)
     }
 
-    /** Knowledge search is always declared; each device tool is added only if its switch is on. */
-    private fun buildToolsDeclaration(settings: AssistantSettings): JSONObject {
-        val declarations = JSONArray()
-        searchKnowledgeBaseTool().optJSONArray("functionDeclarations")?.let { declarations.put(it.get(0)) }
-        if (settings.memoryEnabled) ToolDeclarations.memory(extendedThinking).forEach { declarations.put(it) }
-        SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { declarations.put(ToolDeclarations.skill(it, extendedThinking)) }
-        DeviceTool.entries.filter { it in settings.enabledDeviceTools }
-            .forEach { declarations.put(ToolDeclarations.device(it, extendedThinking)) }
-        if (settings.githubLogin.isNotEmpty()) {
-            settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it, extendedThinking)) }
-        }
-        settings.enabledGoogleTools().forEach { (service, tool) ->
-            declarations.put(ToolDeclarations.mcp(tool, extendedThinking, service.toolPrefix))
-        }
-        return JSONObject().put("functionDeclarations", declarations)
-    }
-
-    /** The knowledge tool: semantic search over the admin's user-managed knowledge
-     *  documents. See RagSearchEngine/RagDocumentStore for the actual retrieval. */
-    private fun searchKnowledgeBaseTool(): JSONObject {
-        val parameters = JSONObject()
-            .put("type", "OBJECT")
-            .put(
-                "properties",
-                JSONObject().put(
-                    "query",
-                    JSONObject()
-                        .put("type", "STRING")
-                        .put("description", "The user's question, in their own words.")
-                )
-            )
-            .put("required", JSONArray().put("query"))
-
-        val functionDeclaration = JSONObject()
-            .put("name", "search_knowledge_base")
-            .put(
-                "description",
-                "Searches the documents and notes the user saved in this app. Call this only " +
-                    "when the user asks about information they stored themselves, never for " +
-                    "everyday or general questions."
-            )
-            .put("parameters", parameters)
-        if (extendedThinking) functionDeclaration.put("behavior", "NON_BLOCKING")
-
-        return JSONObject().put("functionDeclarations", JSONArray().put(functionDeclaration))
-    }
-
     /** Streams a chunk of mic audio: PCM16 little-endian, mono, 16kHz. */
-    fun sendAudioChunk(pcm16: ByteArray) {
+    override fun sendAudioChunk(pcm16: ByteArray) {
         val audio = JSONObject()
             .put("mimeType", "audio/pcm;rate=$INPUT_SAMPLE_RATE_HZ")
             .put("data", Base64.encodeToString(pcm16, Base64.NO_WRAP))
@@ -382,8 +320,8 @@ class GeminiLiveClient(
     data class ToolResult(val id: String, val name: String, val resultText: String)
 
     /** Answers the [FunctionCall]s of one `toolCall` message together, in a single `toolResponse`. Sent one at a time,
-     *  a NON_BLOCKING model starts a fresh spoken reply after each answer, so three tools meant three replies. */
-    fun sendToolResponses(results: List<ToolResult>): Boolean {
+     *  the model starts a fresh spoken reply after each answer, so three tools meant three replies. */
+    override fun sendToolResponses(results: List<ToolResult>): Boolean {
         val functionResponses = JSONArray()
         results.forEach {
             functionResponses.put(
@@ -397,7 +335,7 @@ class GeminiLiveClient(
         return webSocket?.send(message.toString()) == true
     }
 
-    fun close() {
+    override fun close() {
         latency.close("closed")
         clearSetupTimeout()
         webSocket?.close(1000, "client closing")
@@ -413,12 +351,6 @@ class GeminiLiveClient(
         if (actions.isEmpty()) return
         mainHandler.post { actions.forEach { it() } }
     }
-
-    /** Extended-thinking models send `turnComplete` after a filler utterance while still working
-     *  (`interactionStatus` IN_PROGRESS, in serverContent or at the top level); that is not the
-     *  end of the visitor's turn, so it must not reach the ViewModel as one. */
-    private fun isStillWorking(node: JSONObject): Boolean =
-        node.optString("interactionStatus") == "IN_PROGRESS"
 
     private fun parseServerMessage(raw: String, receivedAtMs: Long): List<() -> Unit> {
         val actions = mutableListOf<() -> Unit>()
@@ -475,7 +407,6 @@ class GeminiLiveClient(
             // frames, a combined frame must preserve the fact that a tool continuation is still
             // pending when the ViewModel sees the boundary.
             turnComplete = serverContent.optBoolean("turnComplete")
-            if (isStillWorking(serverContent)) turnComplete = false
         }
 
         json.optJSONObject("toolCall")?.optJSONArray("functionCalls")?.let { functionCalls ->
@@ -497,7 +428,7 @@ class GeminiLiveClient(
             if (cancelled.isNotEmpty()) actions.add { listener?.onToolCallCancellation(cancelled) }
         }
 
-        if (turnComplete && !isStillWorking(json)) actions.add { listener?.onTurnComplete() }
+        if (turnComplete) actions.add { listener?.onTurnComplete() }
 
         json.optJSONObject("error")?.let {
             val errorText = it.optString("message", "Unknown error")
@@ -524,4 +455,21 @@ class GeminiLiveClient(
         }
         return actions
     }
+}
+
+/** Knowledge search is always declared; each other tool is added only if its switch is on. Shared by both Live clients. */
+internal fun liveFunctionDeclarations(settings: AssistantSettings): JSONArray {
+    val declarations = JSONArray()
+    declarations.put(ToolDeclarations.knowledgeSearch())
+    if (settings.memoryEnabled) ToolDeclarations.memory().forEach { declarations.put(it) }
+    SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { declarations.put(ToolDeclarations.skill(it)) }
+    DeviceTool.entries.filter { it in settings.enabledDeviceTools }
+        .forEach { declarations.put(ToolDeclarations.device(it)) }
+    if (settings.githubLogin.isNotEmpty()) {
+        settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it)) }
+    }
+    settings.enabledGoogleTools().forEach { (service, tool) ->
+        declarations.put(ToolDeclarations.mcp(tool, prefix = service.toolPrefix))
+    }
+    return declarations
 }

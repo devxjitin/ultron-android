@@ -92,7 +92,7 @@ The project has three parts:
 ### Voice assistant
 
 - **Real-time conversation** over the Gemini Live API: speak naturally, interrupt at any time (optional *barge-in*), and hear the reply as it is generated.
-- **Three Live models** to choose from: *Gemini 3.8 Live*, *Gemini 3.8 Live (extended thinking)* and *Gemini 3.1 Flash Live (preview)*.
+- **Two Live models** to choose from: *Gemini 3.8 Live* and *Gemini 3.1 Flash Live (preview)*.
 - **30 prebuilt voices** (for example Algieba, Kore, Puck, Sulafat). The assistant knows the gender of the chosen voice and uses matching grammar in gendered languages such as Hindi.
 - **13 spoken languages**: English (India), Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Urdu, Odia and Assamese.
 - **Fast start**: a session is pre-warmed in the background, so tapping the mic feels instant.

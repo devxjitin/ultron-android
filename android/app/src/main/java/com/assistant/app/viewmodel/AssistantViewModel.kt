@@ -76,7 +76,8 @@ import com.assistant.app.network.GeminiEmbeddingClient
 import com.assistant.app.network.GeminiLiveClient
 import com.assistant.app.network.FirebaseChatClient
 import com.assistant.app.network.FirebaseGemini
-import com.assistant.app.network.FirebaseLiveAccess
+import com.assistant.app.network.FirebaseLiveClient
+import com.assistant.app.network.LiveClient
 import com.assistant.app.network.GeminiTextClient
 import com.assistant.app.util.UserFacingError
 import com.assistant.app.util.UserInputException
@@ -237,7 +238,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
 
-    private var liveClient: GeminiLiveClient? = null
+    private var liveClient: LiveClient? = null
     private var micStreamer: MicStreamer? = null
     private var audioPlayer: AudioPlayer? = null
     @Volatile private var toolSearchScope: CoroutineScope? = null
@@ -259,7 +260,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** A session opened ahead of time (while idle, before the user taps the mic) so the model
      *  has already ingested the persona + knowledge-base system instruction by the time the
      *  first real command arrives -- that ingestion is what makes the very first turn slow. */
-    private var warmClient: GeminiLiveClient? = null
+    private var warmClient: LiveClient? = null
     private var isPrewarmReady = false
     /** Set when the user taps the mic while a warm session is still connecting (not yet ready);
      *  makes its setupComplete promote straight into a real, streaming session instead of just
@@ -485,9 +486,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         apiKeyStore.getApiKey() == null && FirebaseGemini.isAvailable(getApplication())
 
     private fun hasGeminiAccess(): Boolean = usesFirebase() || resolveApiKey().isNotBlank()
-
-    private fun liveFirebaseAccess(): FirebaseLiveAccess? =
-        if (usesFirebase()) FirebaseGemini.liveAccess(getApplication()) else null
 
     fun onMicTapped() {
         when (_uiState.value.voiceState) {
@@ -2334,7 +2332,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isWarm: Boolean = false,
         resumeHandle: String? = null
     ) {
-        val client = GeminiLiveClient(apiKey, settings.liveModel, liveFirebaseAccess())
+        val client: LiveClient =
+            if (usesFirebase()) FirebaseLiveClient(settings.liveModel) else GeminiLiveClient(apiKey, settings.liveModel)
         client.latency.event("session_origin", mapOf("mode" to when {
             isWarm -> "prewarm"
             _uiState.value.voiceState == VoiceState.RESETTING -> "reconnect"
@@ -2673,7 +2672,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }, resumeHandle)
     }
 
-    private fun beginStreaming(client: GeminiLiveClient, reusedWarm: Boolean = false) {
+    private fun beginStreaming(client: LiveClient, reusedWarm: Boolean = false) {
         if (liveClient !== client) return
         client.latency.event("stream_start", mapOf(
             "language" to _uiState.value.settings.languageCode,
@@ -2943,7 +2942,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Sends a batch's results once every call in it that is still wanted has one. Gemini waits for every response in a
      *  toolCall message, so the reply watchdog starts only after the last of them is actually sent. */
-    private fun flushToolBatch(client: GeminiLiveClient, batch: ToolBatch) {
+    private fun flushToolBatch(client: LiveClient, batch: ToolBatch) {
         val wanted = batch.ids.filter { it in pendingToolCallIds }
         if (wanted.any { it !in batch.results }) return
         toolBatches.remove(batch)

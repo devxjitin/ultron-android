@@ -1,7 +1,6 @@
 package com.assistant.app.network
 
 import android.content.Context
-import android.content.pm.PackageManager
 import com.assistant.app.util.UserMessageException
 import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.FirebaseAI
@@ -27,34 +26,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.json.JSONArray
 import org.json.JSONObject
-import java.security.MessageDigest
-
-/**
- * Connection details for Gemini through Firebase AI Logic (Gemini Developer API backend). Firebase's proxy holds the
- * real Gemini key, so the phone only carries the public Firebase config from `google-services.json`.
- */
-class FirebaseLiveAccess(
-    val projectId: String,
-    val apiKey: String,
-    val appId: String,
-    val packageName: String,
-    val appVersion: String,
-    /** SHA-1 of the app's signing certificate, sent so a key restricted to this app is accepted. */
-    val certSha1: String?
-)
 
 object FirebaseGemini {
-    /** The Firebase config, or null when the build has no `google-services.json` (the on-device Gemini key is used then). */
-    fun liveAccess(context: Context): FirebaseLiveAccess? {
-        val app = runCatching { FirebaseApp.getApps(context).firstOrNull() }.getOrNull() ?: return null
-        val options = app.options
-        val projectId = options.projectId ?: return null
-        val packageName = context.packageName
-        val version = runCatching { context.packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull().orEmpty()
-        return FirebaseLiveAccess(projectId, options.apiKey, options.applicationId, packageName, version, signingCertSha1(context))
-    }
-
-    fun isAvailable(context: Context): Boolean = liveAccess(context) != null
+    /** True when the build has a Firebase config (`google-services.json`); otherwise the on-device Gemini key is used. */
+    fun isAvailable(context: Context): Boolean =
+        runCatching { FirebaseApp.getApps(context).isNotEmpty() }.getOrDefault(false)
 
     /** The Gemini Developer API behind Firebase AI Logic, on the app's default Firebase project. */
     fun ai(): FirebaseAI = FirebaseAI.getInstance(FirebaseApp.getInstance(), GenerativeBackend.googleAI())
@@ -121,11 +97,4 @@ object FirebaseGemini {
         is ContentBlockedException, is ResponseStoppedException -> UserMessageException("The reply was stopped by the model's safety filter.")
         else -> UserMessageException("The model reported an error. Please try again.")
     }
-
-    @Suppress("DEPRECATION")
-    private fun signingCertSha1(context: Context): String? = runCatching {
-        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-        val signer = info.signingInfo?.apkContentsSigners?.firstOrNull() ?: return null
-        MessageDigest.getInstance("SHA-1").digest(signer.toByteArray()).joinToString("") { "%02X".format(it) }
-    }.getOrNull()
 }
