@@ -539,6 +539,13 @@ enum class DeviceTool(
         "Lists the visible text, buttons and fields of the app on screen, numbered, with tap positions. " +
             "Call it before clicking or typing so you know what is there. Needs the accessibility service."
     ),
+    LOOK_AT_SCREEN(
+        ToolGroup.SCREEN, "look_at_screen", "Look at the screen", "See the screen as a picture when an app gives no readable text (asks you first, sends a screenshot to Gemini).",
+        "Takes a picture of the screen and describes it, with tap positions. Use it when read_screen finds nothing readable (the app hides its text, a game, a canvas or a web view). " +
+            "The first time, Android asks him to allow screen capture; that permission lasts until the voice session ends. " +
+            "Apps that protect their window appear black, and then this cannot help.",
+        listOf(ToolParam("question", ToolParamType.STRING, "What to look for, if anything specific.", required = false))
+    ),
     CURRENT_APP(
         ToolGroup.SCREEN, "get_current_app", "Current app", "Tell which app is on screen.",
         "Returns the name of the app currently on screen. Needs the accessibility service."

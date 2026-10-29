@@ -108,6 +108,36 @@ class GeminiTextClient(
         }
     }
 
+    /** Describes a picture (for example a screenshot) following [prompt]. */
+    suspend fun describeImage(jpeg: ByteArray, prompt: String): String {
+        val contents = JSONArray().put(
+            JSONObject().put(
+                "parts",
+                JSONArray()
+                    .put(JSONObject().put("text", prompt))
+                    .put(
+                        JSONObject().put(
+                            "inline_data",
+                            JSONObject().put("mime_type", "image/jpeg").put("data", Base64.getEncoder().encodeToString(jpeg))
+                        )
+                    )
+            )
+        )
+        return try {
+            generateWithContents(contents, PRIMARY_MODEL, maxOutputTokens = 4_096)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (primaryError: Exception) {
+            try {
+                generateWithContents(contents, FALLBACK_MODEL, maxOutputTokens = 4_096)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                throw primaryError
+            }
+        }
+    }
+
     private fun contentsFor(prompt: String): JSONArray = JSONArray().put(
         JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))
     )

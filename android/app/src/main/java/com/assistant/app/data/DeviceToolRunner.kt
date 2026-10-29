@@ -98,7 +98,9 @@ class DeviceToolRunner(
     private val getBrightnessOverride: () -> Int?,
     private val setBrightnessOverride: (Int) -> Unit,
     /** Asks the on-screen activity to show Android's permission dialog for these permissions. */
-    private val requestPermissions: (List<String>) -> Unit
+    private val requestPermissions: (List<String>) -> Unit,
+    /** Describes a screenshot (JPEG bytes) following the prompt; used by look_at_screen. */
+    private val describeScreen: suspend (ByteArray, String) -> String = { _, _ -> "" }
 ) {
     private val notes = NoteStore(app)
     private val http by lazy {
@@ -322,11 +324,13 @@ class DeviceToolRunner(
                 val appName = service.currentPackage()?.let { appLabel(it) }
                 if (body.isNullOrBlank()) {
                     "status=hidden\n${appName ?: "This app"} shows nothing the assistant can read; some apps hide their screen on purpose. " +
-                        "Do not stop: try press_back, scroll, wait_for_text, click_on_text with a likely label, or tap_position if the layout is known, " +
+                        "Do not stop: call look_at_screen (it asks him to allow screen capture, then reads the screen as a picture), " +
+                        "or try press_back, scroll, wait_for_text, click_on_text with a likely label, or tap_position if the layout is known, " +
                         "or reach the same goal another way (the app's search, a different screen, another app or tool). " +
                         "If nothing works, tell him which app it is and what you could not see, and offer what you can still do."
                 } else "status=ok\nApp: ${appName ?: "unknown"}\n$body"
             }
+            DeviceTool.LOOK_AT_SCREEN -> lookAtScreen(text("question"))
             DeviceTool.CURRENT_APP -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 val pkg = service.currentPackage() ?: return "status=unavailable\nCannot tell which app is on screen."
@@ -864,6 +868,54 @@ class DeviceToolRunner(
         }
         return if (total == 0) "status=empty\nNo photos in the last $days day(s)."
         else "status=ok\n$total photo(s) in the last $days day(s). Newest: ${names.joinToString()}."
+    }
+
+    /** Reads the screen as a picture. The first call shows Android's own capture question to the user. */
+    private suspend fun lookAtScreen(question: String?): String {
+        if (!com.assistant.app.ScreenCapture.ensureAccess(app)) {
+            return "status=permission_needed\nHe did not allow screen capture. Android shows a dialog called 'Start recording or casting'; " +
+                "ask him to allow it (choose Entire screen) and then ask again. Without it you cannot see this app."
+        }
+        val bitmap = com.assistant.app.ScreenCapture.capture(app)
+            ?: return "status=failed\nNo picture of the screen could be taken right now. Try once more."
+        if (com.assistant.app.ScreenCapture.looksBlank(bitmap)) {
+            return "status=blocked\nThe picture is black: this app protects its window, so Android shows nothing even with permission. " +
+                "Do not try to get around that. Tell him which app it is, then use the buttons and positions he describes, " +
+                "or ask him to read out what he sees."
+        }
+        val appName = AssistantAccessibilityService.instance?.currentPackage()?.let { appLabel(it) }
+        val prompt = "This is a screenshot of an Android phone" + (appName?.let { " showing the app $it" } ?: "") + ". " +
+            (question?.takeIf { it.isNotBlank() }?.let { "Focus on: $it. " } ?: "") +
+            "Reply with JSON only, no code fence: {\"summary\": \"two or three sentences about what the screen shows\", " +
+            "\"items\": [{\"label\": \"visible text or icon meaning\", \"x\": 0, \"y\": 0}]}. " +
+            "List up to 40 buttons, links, fields and other things worth tapping, top to bottom. x and y are the centre of the item " +
+            "as numbers from 0 to 1000 across the picture (0,0 top left; 1000,1000 bottom right). Never include passwords or card numbers."
+        val raw = try {
+            describeScreen(com.assistant.app.ScreenCapture.toJpeg(bitmap), prompt)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return "status=failed\nThe picture could not be read (${e.javaClass.simpleName}). Try again."
+        }
+        if (raw.isBlank()) return "status=failed\nThe picture could not be read."
+        val json = runCatching {
+            JSONObject(raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+        }.getOrNull() ?: return "status=ok\nApp: ${appName ?: "unknown"}\n${raw.trim().take(3_000)}"
+        val width = bitmap.width
+        val height = bitmap.height
+        val items = json.optJSONArray("items")
+        val lines = buildString {
+            if (items != null) for (i in 0 until minOf(items.length(), 40)) {
+                val item = items.optJSONObject(i) ?: continue
+                val label = item.optString("label").takeIf { it.isNotBlank() } ?: continue
+                val x = (item.optDouble("x", -1.0) / 1000.0 * width).toInt()
+                val y = (item.optDouble("y", -1.0) / 1000.0 * height).toInt()
+                if (x < 0 || y < 0) continue
+                append("[${i + 1}] \"${label.take(80)}\" @$x,$y\n")
+            }
+        }
+        return "status=ok\nApp: ${appName ?: "unknown"}\n${json.optString("summary")}\n$lines" +
+            "(Positions are screen pixels for tap_screen_position; they are estimates from a picture, so check the result after tapping.)"
     }
 
     private fun accessibilityDenied(): String {

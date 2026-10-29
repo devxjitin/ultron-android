@@ -1198,6 +1198,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.update {
                 it.copy(permissionRequestId = it.permissionRequestId + 1, requestedPermissions = permissions)
             }
+        },
+        describeScreen = { jpeg, prompt ->
+            auxTextClient(resolveApiKey(), UsageStore.PURPOSE_SCREEN).describeImage(jpeg, prompt)
         }
     )
 
@@ -2249,6 +2252,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun releaseResources() {
+        // Screen-capture permission only lasts for the voice session it was given in.
+        if (com.assistant.app.ScreenCapture.isReady) com.assistant.app.ScreenCapture.release(getApplication())
         speakingWatchdogJob?.cancel()
         speakingWatchdogJob = null
         liveClient?.latency?.close(if (userInitiatedStop) "stopped" else "failed")
