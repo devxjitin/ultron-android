@@ -44,8 +44,10 @@ TOOL BEHAVIOR
 
 const val DEFAULT_ASSISTANT_NAME = "Ultron"
 
-/** Connectors that are on before the user has changed anything: no private data and no control of other apps. */
-val DEFAULT_CONNECTOR_IDS = listOf("device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather")
+/** Connectors that are on before the user has changed anything. Navigation and screen only work once accessibility is allowed, which asks the user. */
+val DEFAULT_CONNECTOR_IDS = listOf(
+    "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather", "navigation", "screen"
+)
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
 private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")

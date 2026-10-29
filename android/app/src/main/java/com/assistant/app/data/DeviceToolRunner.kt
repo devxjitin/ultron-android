@@ -524,7 +524,7 @@ class DeviceToolRunner(
                     else -> Settings.ACTION_SETTINGS
                 }
                 start(Intent(action))
-                "status=ok\nSettings opened. The user must switch things on or off themselves."
+                "status=ok\nSettings opened. Now switch it yourself: read_screen, then click_on_text on the switch, then read_screen again to confirm. Do not ask the user to do it unless accessibility is off."
             }
         }
     }

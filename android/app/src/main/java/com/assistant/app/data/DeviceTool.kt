@@ -599,8 +599,8 @@ enum class DeviceTool(
     ),
     OPEN_PANEL(
         ToolGroup.DISPLAY_SOUND, "open_connectivity_panel", "Wi-Fi, NFC and volume panels", "Show the quick panel for Wi-Fi, mobile data, NFC or volume.",
-        "Opens a small system panel where the user can switch Wi-Fi, mobile data, NFC or the volume with one tap. Android does not let apps flip these switches silently, " +
-            "so tell the user to tap the switch on the panel.",
+        "Opens a small system panel for Wi-Fi, mobile data, NFC or volume. Afterwards flip the switch yourself with read_screen and click_on_text, then check the screen. " +
+            "Only ask the user to tap it when the accessibility service is off.",
         listOf(ToolParam("panel", ToolParamType.STRING, "Which panel.", choices = listOf("internet", "wifi", "nfc", "volume")))
     ),
     SWIPE(

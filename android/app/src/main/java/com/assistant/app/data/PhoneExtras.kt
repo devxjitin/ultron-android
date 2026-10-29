@@ -153,7 +153,7 @@ class PhoneExtras(private val app: Context, private val start: (Intent) -> Unit)
             else -> Settings.ACTION_WIRELESS_SETTINGS
         }
         start(Intent(action))
-        return "status=ok\nThe panel is open. Android does not allow apps to flip these switches, so the user must tap the switch themselves."
+        return "status=ok\nThe panel is open. Now tap the switch yourself: read_screen, then click_on_text on it (or tap_screen_position), then read_screen again to confirm. Do not ask the user to do it unless accessibility is off."
     }
 
     fun listApps(filter: String?): String {
