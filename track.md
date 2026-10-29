@@ -396,3 +396,4 @@
 [2026-10-29 00:49] [Claude] [Update: Live voice on Firebase SDK session (resume, compression); removed 3.8 extended-thinking model]
 [2026-10-29 00:53] [Claude] [Docs: OTA build 29886921 published (Live on Firebase SDK), not tested on device]
 [2026-10-29 19:04] [Claude] [Remove: text chat, library, history UI, Azure/NIM; app is voice-only]
+[2026-10-29 19:16] [Claude] [Docs: OTA build 29888021 published (voice-only), not tested on device]
