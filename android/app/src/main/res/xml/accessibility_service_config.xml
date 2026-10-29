@@ -6,6 +6,7 @@
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
     android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
     android:canRetrieveWindowContent="true"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:notificationTimeout="100" />

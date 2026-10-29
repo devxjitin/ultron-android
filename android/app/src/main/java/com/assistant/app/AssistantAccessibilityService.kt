@@ -2,12 +2,14 @@ package com.assistant.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -38,6 +40,52 @@ class AssistantAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     // ---------------------------------------------------------------- reading
+
+    /** What came back from [takeShot]. */
+    sealed interface Shot {
+        class Ok(val bitmap: Bitmap) : Shot
+        /** The app protects its window, so Android refuses to show it. */
+        data object Protected : Shot
+        data object Unsupported : Shot
+        data object Failed : Shot
+    }
+
+    /**
+     * One screenshot through the accessibility service: no extra permission, nothing keeps recording, and Android
+     * itself refuses windows that apps mark as secure. This never tries to get around that refusal.
+     */
+    suspend fun takeShot(): Shot {
+        if (Build.VERSION.SDK_INT < 30) return Shot.Unsupported
+        repeat(2) { attempt ->
+            val outcome = suspendCancellableCoroutine<Any> { continuation ->
+                takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        val buffer = screenshot.hardwareBuffer
+                        val bitmap = try {
+                            Bitmap.wrapHardwareBuffer(buffer, screenshot.colorSpace)?.copy(Bitmap.Config.ARGB_8888, false)
+                        } finally {
+                            buffer.close()
+                        }
+                        if (continuation.isActive) continuation.resume(bitmap ?: Shot.Failed)
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        if (continuation.isActive) continuation.resume(errorCode)
+                    }
+                })
+            }
+            when (outcome) {
+                is Bitmap -> return Shot.Ok(outcome)
+                is Int -> when {
+                    outcome == ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT && attempt == 0 -> delay(1_200L)
+                    Build.VERSION.SDK_INT >= 34 && outcome == ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> return Shot.Protected
+                    else -> return Shot.Failed
+                }
+                else -> return Shot.Failed
+            }
+        }
+        return Shot.Failed
+    }
 
     /**
      * The content root of the app in front. Some apps (pop-ups, split screen, apps that switch windows) have no

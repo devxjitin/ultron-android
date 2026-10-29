@@ -309,7 +309,7 @@ class DeviceToolRunner(
                 val appName = service.currentPackage()?.let { appLabel(it) }
                 if (body.isNullOrBlank()) {
                     "status=hidden\n${appName ?: "This app"} shows nothing the assistant can read; some apps hide their screen on purpose. " +
-                        "Do not stop: call look_at_screen (it asks him to allow screen capture, then reads the screen as a picture), " +
+                        "Do not stop: call look_at_screen (it reads the screen as a picture), " +
                         "or try press_back, scroll, wait_for_text, click_on_text with a likely label, or tap_position if the layout is known, " +
                         "or reach the same goal another way (the app's search, a different screen, another app or tool). " +
                         "If nothing works, tell him which app it is and what you could not see, and offer what you can still do."
@@ -789,19 +789,20 @@ class DeviceToolRunner(
         else "status=ok\nThat slot clashes with: ${clashes.joinToString()}."
     }
 
-    /** Reads the screen as a picture. The first call shows Android's own capture question to the user. */
+    /** Reads the screen as a picture, using the accessibility service's own screenshot (no extra permission). */
     private suspend fun lookAtScreen(question: String?): String {
-        if (!com.assistant.app.ScreenCapture.ensureAccess(app)) {
-            return "status=permission_needed\nHe did not allow screen capture. Android shows a dialog called 'Start recording or casting'; " +
-                "ask him to allow it (choose Entire screen) and then ask again. Without it you cannot see this app."
+        val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+        val blocked = "status=blocked\nThis app protects its window, so Android does not let any assistant see it. " +
+            "Do not try to get around that. Tell him which app it is, then use the buttons and positions he describes, " +
+            "or ask him to read out what he sees."
+        val bitmap = when (val shot = service.takeShot()) {
+            is AssistantAccessibilityService.Shot.Ok -> shot.bitmap
+            AssistantAccessibilityService.Shot.Protected -> return blocked
+            AssistantAccessibilityService.Shot.Unsupported -> return "status=unavailable\nThis needs Android 11 or newer."
+            AssistantAccessibilityService.Shot.Failed -> return "status=failed\nNo picture of the screen could be taken right now. " +
+                "If this keeps happening, the accessibility service may need to be turned off and on again in Android settings."
         }
-        val bitmap = com.assistant.app.ScreenCapture.capture(app)
-            ?: return "status=failed\nNo picture of the screen could be taken right now. Try once more."
-        if (com.assistant.app.ScreenCapture.looksBlank(bitmap)) {
-            return "status=blocked\nThe picture is black: this app protects its window, so Android shows nothing even with permission. " +
-                "Do not try to get around that. Tell him which app it is, then use the buttons and positions he describes, " +
-                "or ask him to read out what he sees."
-        }
+        if (ScreenImage.looksBlank(bitmap)) return blocked
         val appName = AssistantAccessibilityService.instance?.currentPackage()?.let { appLabel(it) }
         val prompt = "This is a screenshot of an Android phone" + (appName?.let { " showing the app $it" } ?: "") + ". " +
             (question?.takeIf { it.isNotBlank() }?.let { "Focus on: $it. " } ?: "") +
@@ -810,7 +811,7 @@ class DeviceToolRunner(
             "List up to 40 buttons, links, fields and other things worth tapping, top to bottom. x and y are the centre of the item " +
             "as numbers from 0 to 1000 across the picture (0,0 top left; 1000,1000 bottom right). Never include passwords or card numbers."
         val raw = try {
-            describeScreen(com.assistant.app.ScreenCapture.toJpeg(bitmap), prompt)
+            describeScreen(ScreenImage.toJpeg(bitmap), prompt)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

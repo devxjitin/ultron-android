@@ -502,10 +502,9 @@ enum class DeviceTool(
             "Call it before clicking or typing so you know what is there. Needs the accessibility service."
     ),
     LOOK_AT_SCREEN(
-        ToolGroup.SCREEN, "look_at_screen", "Look at the screen", "See the screen as a picture when an app gives no readable text (asks you first, sends a screenshot to Gemini).",
-        "Takes a picture of the screen and describes it, with tap positions. Use it when read_screen finds nothing readable (the app hides its text, a game, a canvas or a web view). " +
-            "The first time, Android asks him to allow screen capture; that permission lasts until the voice session ends. " +
-            "Apps that protect their window appear black, and then this cannot help.",
+        ToolGroup.SCREEN, "look_at_screen", "Look at the screen", "See the screen as a picture when an app gives no readable text (sends a screenshot to Gemini).",
+        "Takes a screenshot and describes it, with tap positions. Use it when read_screen finds nothing readable (a game, a canvas or a web view). " +
+            "Needs the accessibility service and Android 11 or newer. Apps that protect their window cannot be seen, and then this cannot help.",
         listOf(ToolParam("question", ToolParamType.STRING, "What to look for, if anything specific.", required = false))
     ),
     CURRENT_APP(

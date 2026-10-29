@@ -7,13 +7,6 @@
         <item name="android:windowLightStatusBar">true</item>
     </style>
 
-    <!-- Invisible host for Android's screen-capture question. -->
-    <style name="Theme.Assistant.Transparent" parent="Theme.Material3.Light.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowAnimationStyle">@null</item>
-    </style>
-
     <!-- Shown for the cold-start window before Compose's first frame, via
          androidx.core.splashscreen (installSplashScreen() in MainActivity). Set as the
          activity's launch theme in the manifest, then MainActivity switches to Theme.Assistant. -->
