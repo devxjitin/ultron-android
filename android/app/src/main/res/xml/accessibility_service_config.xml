@@ -8,5 +8,6 @@
     android:canPerformGestures="true"
     android:canTakeScreenshot="true"
     android:canRetrieveWindowContent="true"
+    android:isAccessibilityTool="true"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:notificationTimeout="100" />

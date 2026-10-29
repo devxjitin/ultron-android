@@ -1050,7 +1050,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val deviceToolRunner = DeviceToolRunner(
         application, audioManager,
         getBrightnessOverride = { _uiState.value.appBrightnessPercent },
-        setBrightnessOverride = { percent -> _uiState.update { it.copy(appBrightnessPercent = percent) } },
+        setBrightnessOverride = { percent -> _uiState.update { it.copy(appBrightnessPercent = percent.takeIf { it >= 0 }) } },
         requestPermissions = { permissions ->
             _uiState.update {
                 it.copy(permissionRequestId = it.permissionRequestId + 1, requestedPermissions = permissions)

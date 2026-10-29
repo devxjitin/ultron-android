@@ -1,7 +1,6 @@
 package com.assistant.app.ui.components
 
 import android.Manifest
-import android.app.AppOpsManager
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -98,11 +97,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.assistant.app.AssistantAccessibilityService
+import com.assistant.app.data.AccessChecks
+import com.assistant.app.data.AccessState
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.McpToolSpec
@@ -150,9 +149,17 @@ private fun phone(
     id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id)
 )
 
+/** Permissions the device-info tools need; Bluetooth and activity recognition only exist on newer Android. */
+private fun deviceInfoPermissions(): List<String> = buildList {
+    add(Manifest.permission.ACCESS_FINE_LOCATION)
+    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
+    if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
+}
+
 private val PhoneCatalog = listOf(
     phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps and light level.",
-        Icons.Outlined.PhoneAndroid),
+        Icons.Outlined.PhoneAndroid, Kind.Local(deviceInfoPermissions())),
     phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
         Icons.Outlined.Tune),
     phone("alarms_notes", "Alarms & reminders", "Set alarms, timers and reminders.",
@@ -176,7 +183,7 @@ private val PhoneCatalog = listOf(
     phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
         Icons.Outlined.PlayCircle),
     phone("calls", "Calls", "Dial a number, call a contact by name and save new contacts.",
-        Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
+        Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE))),
     phone("messages", "Messages", "Send a text message to a number or to a contact by name right away, without opening any screen.",
         Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS))),
     phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, use the clipboard and show notifications.",
@@ -392,22 +399,15 @@ fun ConnectorsPage(
 }
 
 private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UNUSED_PARAMETER") tick: Int): Boolean = when (kind.access) {
-    Access.NOTIFICATION_ACCESS -> NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-    Access.ACCESSIBILITY -> AssistantAccessibilityService.instance != null
-    Access.USAGE_ACCESS -> {
-        val ops = context.getSystemService(AppOpsManager::class.java)
-        val mode = if (Build.VERSION.SDK_INT >= 29) {
-            ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-        } else {
-            @Suppress("DEPRECATION") ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-        }
-        mode == AppOpsManager.MODE_ALLOWED
-    }
-    // Approximate location is enough: either of the two location permissions counts.
-    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions) {
-        kind.permissions.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
-    } else {
-        kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+    Access.NOTIFICATION_ACCESS -> AccessChecks.notificationListener(context) != AccessState.OFF
+    Access.ACCESSIBILITY -> AccessChecks.accessibility(context) != AccessState.OFF
+    Access.USAGE_ACCESS -> AccessChecks.usageAccess(context)
+    // Approximate location is enough: either of the two location permissions counts. Every other one is required.
+    Access.NONE -> {
+        val locations = setOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        fun granted(p: String) = ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED
+        val (loc, others) = kind.permissions.partition { it in locations }
+        others.all { granted(it) } && (loc.isEmpty() || loc.any { granted(it) })
     }
 }
 

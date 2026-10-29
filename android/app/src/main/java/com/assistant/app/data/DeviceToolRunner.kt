@@ -128,7 +128,7 @@ class DeviceToolRunner(
             DeviceTool.BRIGHTNESS -> {
                 val target = DeviceToolLevels.next(currentBrightness(), text("action"), number("percent"), min = 5)
                     ?: return INVALID_LEVEL
-                setBrightnessOverride(target)
+                setBrightness(target)
                 "status=ok\nBrightness is now $target%."
             }
             DeviceTool.GET_BRIGHTNESS -> "status=ok\nBrightness is ${currentBrightness()}%."
@@ -186,6 +186,7 @@ class DeviceToolRunner(
                 else "status=ok\n" + found.joinToString("\n") { "${it.first}: ${it.second}" }
             }
             DeviceTool.CALL_CONTACT -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val found = findContacts(name, 5)
@@ -203,6 +204,7 @@ class DeviceToolRunner(
             }
             DeviceTool.SEND_SMS -> sendSms(text("number") ?: return MISSING, text("message") ?: return MISSING, null)
             DeviceTool.SEND_SMS_CONTACT -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val message = text("message") ?: return MISSING
@@ -442,6 +444,7 @@ class DeviceToolRunner(
                 "status=ok\nTimer started for $seconds seconds."
             }
             DeviceTool.DIAL -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
                 missingPermission(Manifest.permission.CALL_PHONE)?.let { return it }
                 val phone = text("number")?.filter { it.isDigit() || it == '+' }?.takeIf { it.isNotEmpty() } ?: return MISSING
                 placeCall(phone)
@@ -469,10 +472,19 @@ class DeviceToolRunner(
             ContextCompat.checkSelfPermission(app, it) != PackageManager.PERMISSION_GRANTED
         }
         if (absent.isEmpty()) return null
+        // Asked before and still missing: Android shows no second dialog after "don't allow", so send them to the app's settings page.
+        if (absent.all { it in askedPermissions }) {
+            start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + app.packageName)))
+            return "status=permission_needed\nThe permission was denied earlier, so Android will not ask again. Ultron's App info page " +
+                "was opened; the user must open Permissions there and allow it, then ask again."
+        }
+        askedPermissions.addAll(absent)
         requestPermissions(absent)
         return "status=permission_needed\nAndroid is asking the user for permission on the phone screen. " +
             "Tell them to allow it, then try again."
     }
+
+    private val askedPermissions = mutableSetOf<String>()
 
     /** Name and number pairs for contacts whose name matches [name]. */
     private fun findContacts(name: String, limit: Int): List<Pair<String, String>> {
@@ -597,6 +609,7 @@ class DeviceToolRunner(
      * sent, failed with a reason, or handed over but not confirmed in time. [recipient] is the contact name when known.
      */
     private suspend fun sendSms(number: String, message: String, recipient: String?): String {
+        if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
         missingPermission(Manifest.permission.SEND_SMS)?.let { return it }
         val clean = SmsRules.cleanNumber(number)
             ?: return "status=invalid\nThat is not a normal phone number (7 to 15 digits). No message was sent."
@@ -839,9 +852,17 @@ class DeviceToolRunner(
     }
 
     private fun accessibilityDenied(): String {
+        if (AccessChecks.accessibility(app) == AccessState.ENABLED_NOT_CONNECTED) {
+            // Switched on but Android has not (re)started the service, common right after an update or an OEM kill.
+            return "status=permission_needed\nThe Ultron accessibility service is switched on but not running yet. " +
+                "Ask the user to switch it off and on again in Accessibility settings, then try again."
+        }
         start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        val restricted = if (Build.VERSION.SDK_INT >= 33) {
+            " If the switch is greyed out, open Ultron's App info, tap the three dots and choose Allow restricted settings first."
+        } else ""
         return "status=permission_needed\nThe accessibility service is not enabled. The Accessibility settings were opened; " +
-            "the user must turn on Assistant there, then ask again."
+            "the user must turn on Ultron there, then ask again.$restricted"
     }
 
     private fun globalAction(action: Int, label: String): String {
@@ -916,7 +937,12 @@ class DeviceToolRunner(
     }
 
     private fun wifiInfo(): String {
-        missingPermission(Manifest.permission.ACCESS_FINE_LOCATION)?.let { return it }
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Ask for both together: on Android 12+ a request for only the precise one shows no dialog.
+            requestPermissions(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            return "status=permission_needed\nAndroid is asking the user for location permission on the phone screen, which it needs to read the Wi-Fi name. " +
+                "Tell them to allow it, then try again."
+        }
         @Suppress("DEPRECATION")
         val info = app.applicationContext.getSystemService(WifiManager::class.java).connectionInfo
         val ssid = info?.ssid?.trim('"')
@@ -926,12 +952,7 @@ class DeviceToolRunner(
         return "status=ok\nConnected to $ssid, signal ${info.rssi} dBm, speed ${info.linkSpeed} Mbps."
     }
 
-    private fun usageAccessGranted(): Boolean {
-        val ops = app.getSystemService(AppOpsManager::class.java)
-        @Suppress("DEPRECATION")
-        val mode = ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), app.packageName)
-        return mode == AppOpsManager.MODE_ALLOWED
-    }
+    private fun usageAccessGranted(): Boolean = AccessChecks.usageAccess(app)
 
     private fun usageTotals(days: Int): Map<String, Long>? {
         if (!usageAccessGranted()) return null
@@ -1040,6 +1061,15 @@ class DeviceToolRunner(
     private fun readNotifications(limit: Int): String {
         val listener = AssistantNotificationListener.instance
         if (listener == null) {
+            if (AccessChecks.notificationListener(app) == AccessState.ENABLED_NOT_CONNECTED) {
+                // Access is on but Android dropped the connection; ask it to reconnect instead of opening Settings.
+                runCatching {
+                    android.service.notification.NotificationListenerService.requestRebind(
+                        android.content.ComponentName(app, AssistantNotificationListener::class.java)
+                    )
+                }
+                return "status=retry\nNotification access is on but was disconnected. Android is reconnecting it; try again in a few seconds."
+            }
             start(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             return "status=permission_needed\nNotification access is not granted. The access screen was opened; " +
                 "the user must allow this app there, then ask again."
@@ -1069,8 +1099,22 @@ class DeviceToolRunner(
             }.joinToString("\n")
     }
 
+    /** Sets screen brightness for the whole phone when Modify system settings is allowed, otherwise only inside Ultron. */
+    private fun setBrightness(percent: Int) {
+        if (Settings.System.canWrite(app)) {
+            val ok = runCatching {
+                Settings.System.putInt(app.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+                Settings.System.putInt(app.contentResolver, Settings.System.SCREEN_BRIGHTNESS, (percent * 255 / 100).coerceIn(1, 255))
+            }.isSuccess
+            if (ok) { setBrightnessOverride(-1); return }
+        }
+        setBrightnessOverride(percent)
+    }
+
     private fun start(intent: Intent) {
-        app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        // The accessibility service is allowed to start screens from the background; a plain app context is not, and Android drops that silently.
+        val context: android.content.Context = AssistantAccessibilityService.instance ?: app
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /**
@@ -1078,6 +1122,7 @@ class DeviceToolRunner(
      * while Ultron is in the background (a voice session running behind another app), and the call then never started.
      */
     private fun placeCall(number: String) {
+
         val telecom = app.getSystemService(TelecomManager::class.java)
         if (telecom == null) start(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)))
         else telecom.placeCall(Uri.fromParts("tel", number, null), Bundle())
@@ -1213,6 +1258,7 @@ class DeviceToolRunner(
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
+        const val NO_TELEPHONY = "status=unavailable\nThis phone has no calling or SMS hardware, so that action is not possible."
         /** Tools that query contacts, calendar, usage stats, notifications or apps. */
         val BLOCKING_TOOLS = setOf(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,

@@ -67,7 +67,11 @@ class AppForegroundService : Service() {
             ACTION_TOGGLE_MUTE -> { onMuteRequested?.invoke(); return START_STICKY }
         }
         createNotificationChannel()
-        applyMode(intent?.action == ACTION_LISTENING)
+        // Android can refuse a microphone-type start (for example from the background); drop to the idle type instead of crashing.
+        val wantListening = intent?.action == ACTION_LISTENING
+        runCatching { applyMode(wantListening) }.onFailure {
+            if (wantListening) runCatching { applyMode(false) }.onFailure { stopSelf() } else stopSelf()
+        }
         return START_STICKY
     }
 
@@ -90,6 +94,9 @@ class AppForegroundService : Service() {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             if (listening) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             startForeground(NOTIFICATION_ID, notification, type)
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            // Before Android 14 there is no special-use type, and an untyped start would claim every manifest type, microphone included.
+            startForeground(NOTIFICATION_ID, notification, if (listening) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
