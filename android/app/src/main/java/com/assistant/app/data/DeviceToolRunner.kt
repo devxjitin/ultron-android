@@ -6,7 +6,6 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.app.AlarmManager
 import android.app.AppOpsManager
-import android.app.WallpaperManager
 import android.app.usage.UsageStatsManager
 import android.app.PendingIntent
 import android.app.Application
@@ -102,7 +101,6 @@ class DeviceToolRunner(
     /** Describes a screenshot (JPEG bytes) following the prompt; used by look_at_screen. */
     private val describeScreen: suspend (ByteArray, String) -> String = { _, _ -> "" }
 ) {
-    private val notes = NoteStore(app)
     private val http by lazy {
         HttpClients.shared.newBuilder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -257,19 +255,6 @@ class DeviceToolRunner(
                 }
                 "status=ok\nNavigation opened for $destination."
             }
-            DeviceTool.CREATE_NOTE -> {
-                val id = notes.add(text("text") ?: return MISSING)
-                "status=ok\nNote saved with id $id."
-            }
-            DeviceTool.SEARCH_NOTES -> {
-                val found = notes.search(text("query"))
-                if (found.isEmpty()) "status=empty\nNo notes found."
-                else "status=ok\n" + found.joinToString("\n") { "#${it.id}: ${it.text}" }
-            }
-            DeviceTool.DELETE_NOTE -> {
-                val id = number("id") ?: return MISSING
-                if (notes.delete(id)) "status=ok\nNote $id deleted." else "status=not_found\nNo note with id $id."
-            }
             DeviceTool.WEB_SEARCH -> webSearch(text("query") ?: return MISSING, text("time"))
             DeviceTool.YOUTUBE_SEARCH -> YouTubeLookup.search(text("query") ?: return MISSING, number("limit") ?: 10)
             DeviceTool.YOUTUBE_INFO -> YouTubeLookup.videoInfo(text("video") ?: return MISSING)
@@ -395,7 +380,6 @@ class DeviceToolRunner(
                 start(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
                 "status=ok\nShowing the home screen."
             }
-            DeviceTool.SPEED_TEST -> speedTest()
             DeviceTool.CONTACT_BIRTHDAY -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
@@ -424,22 +408,6 @@ class DeviceToolRunner(
                 val begin = start.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 calendarConflicts(begin, begin + (number("duration_minutes") ?: 60).coerceIn(5, 1440) * 60_000L)
             }
-            DeviceTool.RECENT_PHOTOS -> {
-                fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
-                var onlySelected = false
-                if (Build.VERSION.SDK_INT >= 34) {
-                    onlySelected = !allowed(Manifest.permission.READ_MEDIA_IMAGES) && allowed(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-                    if (!onlySelected) {
-                        missingPermission(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)?.let { return it }
-                    }
-                } else {
-                    val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
-                    else Manifest.permission.READ_EXTERNAL_STORAGE
-                    missingPermission(permission)?.let { return it }
-                }
-                val photos = recentPhotos((number("days") ?: 7).coerceIn(1, 90), (number("limit") ?: 5).coerceIn(1, 10))
-                if (onlySelected) "$photos\nNote: the user shared only some photos with the app, so this may not be everything." else photos
-            }
             DeviceTool.SCREEN_TIMEOUT -> {
                 val seconds = number("seconds")?.takeIf { it in 15..1800 } ?: return "status=invalid\nSeconds must be 15-1800."
                 needWriteSettings()?.let { return it }
@@ -452,7 +420,6 @@ class DeviceToolRunner(
                 Settings.System.putInt(app.contentResolver, Settings.System.ACCELEROMETER_ROTATION, on)
                 "status=ok\nAuto-rotate is ${if (on == 1) "on" else "off"}."
             }
-            DeviceTool.SET_WALLPAPER -> setWallpaper(text("url") ?: return MISSING, text("screen"))
             DeviceTool.MOST_USED_APPS -> mostUsedApps((number("days") ?: 1).coerceIn(1, 7), (number("limit") ?: 5).coerceIn(1, 10))
             DeviceTool.APP_USAGE -> appUsage(text("name") ?: return MISSING, (number("days") ?: 1).coerceIn(1, 7))
             DeviceTool.SET_ALARM -> {
@@ -695,34 +662,6 @@ class DeviceToolRunner(
             ?: apps.firstOrNull { it.second.contains(name, ignoreCase = true) }
     }
 
-    private suspend fun speedTest(): String {
-        val result = withTimeoutOrNull(25_000L) {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    val startedAt = System.nanoTime()
-                    var bytes = 0L
-                    http.newCall(Request.Builder().url("https://speed.cloudflare.com/__down?bytes=5000000").build())
-                        .execute().use { response ->
-                            if (!response.isSuccessful) return@use
-                            val source = response.body?.source() ?: return@use
-                            val buffer = ByteArray(65_536)
-                            while (true) {
-                                val read = source.read(buffer)
-                                if (read < 0) break
-                                bytes += read
-                            }
-                        }
-                    bytes to (System.nanoTime() - startedAt) / 1e9
-                }.getOrNull()
-            }
-        }
-        if (result == null || result.first < 100_000) return "status=failed\nThe speed test could not finish. The connection may be offline or very slow."
-        val mbps = result.first * 8 / result.second / 1_000_000
-        return "status=ok\nDownload speed is about %.1f Mbps (%.1f MB in %.1f s).".format(
-            Locale.ENGLISH, mbps, result.first / 1_000_000.0, result.second
-        )
-    }
-
     /** Saves the event into the first calendar the user can write to (their own account's before read-only or local ones). */
     private fun addCalendarEvent(title: String, begin: Long, end: Long, place: String?): String {
         val resolver = app.contentResolver
@@ -848,26 +787,6 @@ class DeviceToolRunner(
         }
         return if (clashes.isEmpty()) "status=ok\nThat slot is free."
         else "status=ok\nThat slot clashes with: ${clashes.joinToString()}."
-    }
-
-    private fun recentPhotos(days: Int, limit: Int): String {
-        val since = System.currentTimeMillis() / 1000 - days * 86_400L
-        val dateFormat = DateTimeFormatter.ofPattern("d MMM, hh:mm a", Locale.ENGLISH)
-        val names = mutableListOf<String>()
-        var total = 0
-        app.contentResolver.query(
-            Images.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(Images.Media.DISPLAY_NAME, Images.Media.DATE_ADDED),
-            "${Images.Media.DATE_ADDED} >= ?", arrayOf(since.toString()), "${Images.Media.DATE_ADDED} DESC"
-        )?.use { cursor ->
-            total = cursor.count
-            while (cursor.moveToNext() && names.size < limit) {
-                val whenText = java.time.Instant.ofEpochSecond(cursor.getLong(1)).atZone(ZoneId.systemDefault()).format(dateFormat)
-                names.add("${cursor.getString(0)} ($whenText)")
-            }
-        }
-        return if (total == 0) "status=empty\nNo photos in the last $days day(s)."
-        else "status=ok\n$total photo(s) in the last $days day(s). Newest: ${names.joinToString()}."
     }
 
     /** Reads the screen as a picture. The first call shows Android's own capture question to the user. */
@@ -1004,31 +923,6 @@ class DeviceToolRunner(
             return "status=unavailable\nNot connected to Wi-Fi, or Android is hiding the name because location is switched off."
         }
         return "status=ok\nConnected to $ssid, signal ${info.rssi} dBm, speed ${info.linkSpeed} Mbps."
-    }
-
-    private suspend fun setWallpaper(url: String, screen: String?): String {
-        val scheme = Uri.parse(url).scheme
-        if (scheme != "http" && scheme != "https") return "status=invalid\nOnly http and https links are supported."
-        val bytes = withContext(Dispatchers.IO) {
-            runCatching {
-                http.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                    if (response.isSuccessful) response.peekBody(MAX_IMAGE_BYTES).bytes() else null
-                }
-            }.getOrNull()
-        } ?: return "status=failed\nCould not download that image."
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        var sample = 1
-        while (bounds.outWidth / sample > 2048 || bounds.outHeight / sample > 2048) sample *= 2
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-            ?: return "status=failed\nThat link is not an image Android can read."
-        val flags = when (screen) {
-            "home" -> WallpaperManager.FLAG_SYSTEM
-            "lock" -> WallpaperManager.FLAG_LOCK
-            else -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-        }
-        withContext(Dispatchers.IO) { WallpaperManager.getInstance(app).setBitmap(bitmap, null, true, flags) }
-        return "status=ok\nWallpaper updated."
     }
 
     private fun usageAccessGranted(): Boolean {
@@ -1318,13 +1212,12 @@ class DeviceToolRunner(
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
-        /** Tools that query contacts, calendar, photos, usage stats, notifications, apps or local notes. */
+        /** Tools that query contacts, calendar, usage stats, notifications or apps. */
         val BLOCKING_TOOLS = setOf(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
-            DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
-            DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
+            DeviceTool.CALENDAR_CONFLICTS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
-            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT
+            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L

@@ -188,10 +188,6 @@ class MainActivity : ComponentActivity() {
                 notificationPermissionHandled = true
             }
 
-            val googleConsentLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartIntentSenderForResult()
-            ) { result -> viewModel.onGoogleConsentResult(result.data) }
-
             val toolPermissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { }
@@ -277,12 +273,6 @@ class MainActivity : ComponentActivity() {
                     contentColor = com.assistant.app.ui.theme.AssistantTextPrimary
                 ) {
                     val uiState by viewModel.uiState.collectAsState()
-                    LaunchedEffect(uiState.googleConsent) {
-                        uiState.googleConsent?.let { pending ->
-                            runCatching { googleConsentLauncher.launch(IntentSenderRequest.Builder(pending).build()) }
-                                .onFailure { viewModel.onGoogleConsentResult(null) }
-                        }
-                    }
                     LaunchedEffect(uiState.permissionRequestId) {
                         if (uiState.permissionRequestId > 0 && uiState.requestedPermissions.isNotEmpty()) {
                             runCatching { toolPermissionLauncher.launch(uiState.requestedPermissions.toTypedArray()) }
@@ -342,8 +332,6 @@ class MainActivity : ComponentActivity() {
                         onStartGithubSignIn = { viewModel.onStartGithubSignIn() },
                         onCancelGithubSignIn = { viewModel.onCancelGithubSignIn() },
                         onDisconnectGithub = { viewModel.onDisconnectGithub() },
-                        onConnectGoogle = { service -> viewModel.onConnectGoogle(service) },
-                        onDisconnectGoogle = { service -> viewModel.onDisconnectGoogle(service) },
                         onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
                         onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
                         onRequestPermission = {

@@ -49,7 +49,7 @@ The project has three parts:
 | Part | Where | What it is |
 |---|---|---|
 | **Android app** | [`android/`](android) | The assistant itself, written in Kotlin with Jetpack Compose. |
-| **Cloud connectors** | [`mcp/`](mcp) | Small stateless AWS Lambda servers (Google Workspace, web extract, update service). |
+| **Cloud connectors** | [`mcp/`](mcp) | Small stateless AWS Lambda servers (web extract, update service). |
 | **Release tooling** | [`scripts/`](scripts) | A PowerShell script that builds a small release and publishes it for over-the-air updates, plus a latency-log summary script. |
 
 ---
@@ -107,25 +107,23 @@ Every connector is defined in code with its fixed set of tools and a **surface**
 
 | Connector | Tools | Surface |
 |---|---|---|
-| Device info | time, battery, device info, storage and memory, network, Wi-Fi, Bluetooth, step count, light level, internet speed test | Voice |
+| Device info | time, battery, device info, storage and memory, network, Wi-Fi, Bluetooth, step count, light level | Voice |
 | Device controls | flashlight, brightness, volume, ringer mode, vibrate, do not disturb, media keys, screen timeout, auto-rotate | Voice |
-| Alarms and notes | set an alarm, set a timer, schedule, list and cancel reminders, create, search and delete notes | Voice |
+| Alarms and reminders | set an alarm, set a timer, schedule, list and cancel reminders | Voice |
 | Calendar | upcoming events, conflict check, create an event | Voice |
 | Contacts | search a contact, birthdays | Voice |
 | Location | current location, directions | Voice |
-| Photos | recent photos | Voice |
 | Notifications | read current notifications | Voice |
 | App usage | most-used apps, app usage time | Voice |
 | DuckDuckGo | web search with sources | Voice |
 | YouTube | search videos, video details, transcripts, channel or playlist videos, and download audio only or video in any quality the video offers (144p up to 4K and 8K), after asking you which one, to Downloads/Ultron. Runs on the phone with NewPipe Extractor, no sign-in | Voice |
 | GitHub | repositories, issues, pull requests (sign in with GitHub, OAuth device flow) | Voice |
-| Google Calendar, Gmail, Drive, Docs, Sheets, Slides | read and edit your Google data, Gmail drafts are never sent automatically (per-service Google sign-in plus a stateless Google Workspace MCP server on AWS Lambda) | Voice |
 | Calls | dial, call a contact, create a contact | Voice only |
-| Apps and settings | open an app, the camera and settings, wallpaper, clipboard, show a notification | Voice only |
+| Apps and settings | open an app, the camera and settings, clipboard, show a notification | Voice only |
 | Phone navigation | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot (accessibility service) | Voice only |
 | Screen control | read and tap what is on screen, type, wait for text (accessibility service) | Voice only |
 
-Tap any connector card to open its own page: what it does, where it runs, what it needs, where your data goes and every tool it has (for GitHub and Google, the live tool list after sign-in).
+Tap any connector card to open its own page: what it does, where it runs, what it needs, where your data goes and every tool it has (for GitHub, the live tool list after sign-in).
 
 A connector whose sign-in expires shows *Reconnect* and *Remove* instead of failing silently.
 
@@ -162,7 +160,6 @@ flowchart LR
 
     Voice -- "WebSocket, audio" --> GL["Gemini Live API"]
     Tools -- "HTTPS, on the phone" --> YT["YouTube<br/>NewPipe Extractor"]
-    Tools -- "MCP over HTTPS" --> GW["Google Workspace MCP<br/>AWS Lambda"]
     Tools -- "MCP over HTTPS" --> GH["GitHub MCP"]
     VM -- "update check" --> UP["Update Lambda"]
     UP --> S3[("Private S3 bucket<br/>Transfer Acceleration")]
@@ -183,7 +180,7 @@ memory, knowledge search and connectors.
 | Retrieval | `gemini-embedding-2` vectors, BM25, reciprocal rank fusion, ObjectBox |
 | Storage | Jetpack DataStore, ObjectBox, `EncryptedSharedPreferences` (AES-256) |
 | Networking | OkHttp 4, Kotlin coroutines and Flow |
-| Auth | Google Sign-In (Play services), GitHub OAuth device flow |
+| Auth | GitHub OAuth device flow |
 | Connectors | Model Context Protocol over HTTPS (streamable HTTP, JSON responses) |
 | Backend | AWS Lambda (Python 3.12, arm64, Function URLs), S3 with Transfer Acceleration |
 | Build | Gradle (AGP 8.5.2), Android CLI for SDK, install and run, R8 shrinking for release and OTA builds |
@@ -287,7 +284,6 @@ All build-time values live in `android/local.properties` and are exposed to the 
 | `sdk.dir` | if `ANDROID_HOME` is unset | Path to the Android SDK. |
 | `GEMINI_API_KEY` | recommended | Default Gemini key. Can also be entered in the app under Developer. |
 | `GITHUB_CLIENT_ID` | optional | Public client id of a GitHub OAuth App (device flow) for *Sign in with GitHub*. |
-| `GOOGLE_MCP_URL` | optional | Base URL of your Google Workspace MCP server, used by the six Google connectors. |
 | `UPDATE_URL` | optional | Update server URL, enables in-app updates. |
 
 **Gemini through Firebase.** If `android/app/google-services.json` exists (git-ignored), helper calls use the Firebase AI Logic SDK and the voice session connects through Firebase's endpoint, so no Gemini key is needed in the app. A key typed under Developer settings still wins and uses the direct Gemini API. Embeddings (knowledge base) are not offered by Firebase and keep using their own key.
@@ -305,7 +301,6 @@ every other request.
 
 | Server | Folder | Tools | Notes |
 |---|---|---|---|
-| **Google Workspace** | [`mcp/google-workspace`](mcp/google-workspace) | Calendar, Gmail, Drive, Docs, Sheets, Slides | Pure standard library. The phone sends its own Google OAuth token as a Bearer header; the server only forwards it to Google and keeps nothing. Gmail can only create drafts, never send. |
 | **Updates** | [`mcp/ultron-updates`](mcp/ultron-updates) | `GET /<token>/latest` | Returns the newest build's metadata and a short-lived download link. |
 
 Suggested runtime settings: Python 3.12, **arm64**, 128 to 512 MB depending on the server. Deploy by zipping the folder's
@@ -354,9 +349,9 @@ UI changes are checked by installing a build on a phone and walking through the 
 - **Your data stays on the phone.** Memory, knowledge documents and usage counters are stored locally. Usage counters are never sent anywhere.
 - **API keys are encrypted at rest** (AES-256 through Android's keystore-backed `EncryptedSharedPreferences`). Private keys, tokens and signing files are git-ignored.
 - **What leaves the phone:** your voice goes to the AI provider you configured (Gemini) to produce replies, and tool calls go to the connectors you added.
-- **Connector servers hold nothing.** They are stateless; Google tokens travel per request and are never stored.
+- **Connector servers hold nothing.** They are stateless; tokens travel per request and are never stored.
 - **Sensitive abilities are opt-in.** Screen reading and tapping, and notification access, are off until you turn them on and grant the Android permission yourself.
-- **Prompt-injection aware.** Web pages and tool output are treated as data, never as instructions. Gmail drafts are never sent automatically.
+- **Prompt-injection aware.** Web pages and tool output are treated as data, never as instructions.
 - **Updates are verified** by checksum and by Android's signature check.
 
 ---

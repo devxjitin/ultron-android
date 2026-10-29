@@ -105,7 +105,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.GoogleService
 import com.assistant.app.data.McpToolSpec
 import com.assistant.app.data.PhoneConnectors
 import com.assistant.app.network.GithubDeviceCode
@@ -127,8 +126,6 @@ private sealed interface Kind {
     /** Tools that run on this phone; [permissions] and [access] are what Android must allow. */
     data class Local(val permissions: List<String> = emptyList(), val access: Access = Access.NONE) : Kind
     data object GitHub : Kind
-    /** A Google Workspace service: adding it opens Google's account picker and permission screen. */
-    data class Google(val service: GoogleService) : Kind
     /** An online service that needs no sign-in: connecting just switches its tools on. */
     data object Online : Kind
 }
@@ -143,13 +140,6 @@ private class Connector(
     val tools: List<DeviceTool> = emptyList()
 )
 
-private fun photosPermissions(): List<String> = when {
-    // Android 14 lets the user share only selected photos, which is the separate "visual user selected" permission.
-    Build.VERSION.SDK_INT >= 34 -> listOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-    Build.VERSION.SDK_INT >= 33 -> listOf(Manifest.permission.READ_MEDIA_IMAGES)
-    else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-}
-
 private const val PHONE = "On your phone"
 
 /** A phone-side connector: its tools come from [PhoneConnectors]. */
@@ -161,11 +151,11 @@ private fun phone(
 )
 
 private val PhoneCatalog = listOf(
-    phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps, light level and an internet speed test.",
+    phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps and light level.",
         Icons.Outlined.PhoneAndroid),
     phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
         Icons.Outlined.Tune),
-    phone("alarms_notes", "Alarms & notes", "Set alarms, timers and reminders, and keep quick notes on this device.",
+    phone("alarms_notes", "Alarms & reminders", "Set alarms, timers and reminders.",
         Icons.Outlined.Alarm),
     phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
         Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
@@ -173,8 +163,6 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.Contacts, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
     phone("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
         Icons.Outlined.Notifications, Kind.Local(access = Access.NOTIFICATION_ACCESS)),
-    phone("photos", "Photos", "Count and list your recent photos.",
-        Icons.Outlined.PhotoLibrary, Kind.Local(photosPermissions())),
     phone("location", "Location", "Know where you are and get directions.",
         Icons.Outlined.LocationOn, Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
     phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
@@ -191,7 +179,7 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
     phone("messages", "Messages", "Send a text message to a number or to a contact by name right away, without opening any screen.",
         Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS))),
-    phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, change the wallpaper, use the clipboard and show notifications.",
+    phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, use the clipboard and show notifications.",
         Icons.Outlined.Apps),
     phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
         Icons.Outlined.Explore, Kind.Local(access = Access.ACCESSIBILITY)),
@@ -204,25 +192,7 @@ private val GitHubConnector = Connector(
     "Sign in with GitHub", Icons.Outlined.Code, Kind.GitHub
 )
 
-private fun googleConnector(service: GoogleService, description: String, icon: ImageVector) =
-    Connector(service.id, service.label, description, "Sign in with Google", icon, Kind.Google(service))
-
-private val GoogleConnectors = listOf(
-    googleConnector(GoogleService.CALENDAR, "See your schedule, find a free slot, create and answer events in Google Calendar.",
-        Icons.Outlined.CalendarMonth),
-    googleConnector(GoogleService.GMAIL, "Search your inbox, read and summarize threads, and draft replies.",
-        Icons.Outlined.Mail),
-    googleConnector(GoogleService.DRIVE, "Find, read and upload files in Google Drive.",
-        Icons.Outlined.Folder),
-    googleConnector(GoogleService.DOCS, "Read, summarize and edit your Google Docs.",
-        Icons.Outlined.Description),
-    googleConnector(GoogleService.SHEETS, "Read, analyze and update your Google Sheets.",
-        Icons.Outlined.TableChart),
-    googleConnector(GoogleService.SLIDES, "Read and edit slides in your Google Slides presentations.",
-        Icons.Outlined.Slideshow)
-)
-
-private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector + GoogleConnectors
+private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector
 
 @Composable
 fun ConnectorsPage(
@@ -235,10 +205,6 @@ fun ConnectorsPage(
     onCancelGithubSignIn: () -> Unit,
     onDisconnectGithub: () -> Unit,
     githubTools: List<McpToolSpec>,
-    googleAccounts: Map<String, String>,
-    googleTools: Map<String, List<McpToolSpec>>,
-    onConnectGoogle: (GoogleService) -> Unit,
-    onDisconnectGoogle: (GoogleService) -> Unit,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
     modifier: Modifier = Modifier
@@ -262,14 +228,13 @@ fun ConnectorsPage(
 
     fun isConnected(c: Connector): Boolean = when (val kind = c.kind) {
         is Kind.GitHub -> githubLogin.isNotEmpty()
-        is Kind.Google -> kind.service.id in googleAccounts
         // Added means its tools are on; a revoked permission leaves it listed so it can be repaired.
         is Kind.Local -> c.tools.any { it in enabledTools }
         is Kind.Online -> c.tools.any { it in enabledTools }
     }
 
     // Evaluated once per change of its inputs: accessGranted() queries the system, and the page lists the whole catalog.
-    val connectedIds = remember(resumeTick, enabledTools, githubLogin, googleAccounts) {
+    val connectedIds = remember(resumeTick, enabledTools, githubLogin) {
         Catalog.filter { isConnected(it) }.map { it.id }.toSet()
     }
     fun connected(c: Connector): Boolean = c.id in connectedIds
@@ -289,7 +254,6 @@ fun ConnectorsPage(
     fun connect(c: Connector) {
         when (val kind = c.kind) {
             is Kind.GitHub -> if (BuildConfig.GITHUB_CLIENT_ID.isNotBlank()) onStartGithubSignIn() else setupNeeded = true
-            is Kind.Google -> onConnectGoogle(kind.service)
             is Kind.Online -> onToolsEnabled(c.tools, true, c.name)
             is Kind.Local -> {
                 onToolsEnabled(c.tools, true, c.name)
@@ -321,7 +285,6 @@ fun ConnectorsPage(
 
     fun toolLines(c: Connector): List<ToolLine> = when (val kind = c.kind) {
         is Kind.GitHub -> githubTools.map { mcpLine(it) }
-        is Kind.Google -> googleTools[kind.service.id].orEmpty().map { mcpLine(it) }
         else -> c.tools.map { ToolLine(it.label, it.hint, false) }
     }
 
@@ -336,7 +299,6 @@ fun ConnectorsPage(
                 broken && c.kind is Kind.Local -> "Permission needed"
                 broken -> "Sign-in stopped working"
                 c.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
-                c.kind is Kind.Google && c.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[c.kind.service.id]}"
                 else -> c.subtitle
             },
             connectLabel = "Connect",
@@ -358,7 +320,6 @@ fun ConnectorsPage(
             subtitle = when {
                 broken && detail.kind is Kind.Local -> "Permission needed"
                 detail.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
-                detail.kind is Kind.Google && detail.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[detail.kind.service.id]}"
                 else -> detail.subtitle
             },
             tools = toolLines(detail),
@@ -411,7 +372,6 @@ fun ConnectorsPage(
                 Text(
                     when (c.kind) {
                         is Kind.GitHub -> "The saved sign-in is removed from this device. You can connect again any time."
-                        is Kind.Google -> "The account is removed from this app. You can connect it again from this page. To fully revoke access, remove the app in your Google account's security settings."
                         is Kind.Online -> "The assistant stops using this service."
                         is Kind.Local -> "The assistant stops using these tools. Android's own permission or access stays until you remove it in the phone's settings."
                     }
@@ -421,7 +381,6 @@ fun ConnectorsPage(
                 TextButton(onClick = {
                     when (c.kind) {
                         is Kind.GitHub -> onDisconnectGithub()
-                        is Kind.Google -> onDisconnectGoogle(c.kind.service)
                         is Kind.Local, is Kind.Online -> onToolsEnabled(c.tools, false, c.name)
                                 }
                     disconnecting = null
@@ -444,10 +403,8 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
         }
         mode == AppOpsManager.MODE_ALLOWED
     }
-    // Approximate location, or only the photos the user picked, is enough: any one of such a pair counts.
-    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions ||
-        (Build.VERSION.SDK_INT >= 34 && Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED in kind.permissions)
-    ) {
+    // Approximate location is enough: either of the two location permissions counts.
+    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions) {
         kind.permissions.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
     } else {
         kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
@@ -522,11 +479,6 @@ private fun mcpLine(tool: McpToolSpec) = ToolLine(
 /** The long-form facts shown on a connector's own page. */
 private class Info(val about: String, val needs: String, val privacy: String, val runsOn: String = "Your phone")
 
-private const val GOOGLE_NEEDS = "Sign in with a Google account and approve Google's permission screen."
-private const val GOOGLE_PRIVACY = "Your Google sign-in stays on this phone. The assistant's requests pass through your own Google Workspace server " +
-    "on AWS Lambda, which only forwards them to Google and stores nothing. It includes tools that change your data."
-private const val GOOGLE_RUNS = "Your Google Workspace server on AWS Lambda, then Google's own APIs"
-
 private val InfoById: Map<String, Info> = mapOf(
     "device_info" to Info(
         "Lets the assistant tell you things about your phone: the date and time, battery, free storage and memory, network and Wi-Fi, Bluetooth, step count and room light. It only reads and never changes anything. The internet speed test downloads about 5 MB.",
@@ -539,9 +491,9 @@ private val InfoById: Map<String, Info> = mapOf(
         "Nothing leaves the phone except the words of the conversation."
     ),
     "alarms_notes" to Info(
-        "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose, and keeps quick notes. Notes are saved only on this phone.",
+        "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose.",
         "No permission. Reminders appear as notifications, so keep notifications on for Ultron.",
-        "Notes never leave the phone unless you ask the assistant to read them out."
+        "Nothing leaves the phone except the words of the conversation."
     ),
     "calendar" to Info(
         "Reads your upcoming events from every calendar on the phone (Google Calendar included), checks whether a time slot is free, adds events and cancels them, all by itself with no screen opening. Repeating events are never deleted.",
@@ -557,11 +509,6 @@ private val InfoById: Map<String, Info> = mapOf(
         "Tells you where the phone is right now and starts navigation to a place in your maps app.",
         "Location permission.",
         "Your coordinates and address are sent to the model when you ask where you are."
-    ),
-    "photos" to Info(
-        "Counts your recent photos and lists their file names. It does not open or send the pictures.",
-        "Photos permission.",
-        "Only file names and counts are shared with the model."
     ),
     "notifications" to Info(
         "Reads the notifications currently on your phone so the assistant can tell you what you missed.",
@@ -603,12 +550,6 @@ private val InfoById: Map<String, Info> = mapOf(
         "Requests go to GitHub's own MCP server with your sign-in token, which is kept encrypted on this phone. Repository text is untrusted and never treated as instructions.",
         "GitHub's MCP server"
     ),
-    "google_calendar" to Info("See your calendars and events, find a free slot, and create, answer and delete events.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "gmail" to Info("Search your inbox, read messages, list labels and create drafts. Drafts are never sent automatically.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_drive" to Info("Search files, list recent files, read file contents and create new files.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_docs" to Info("Read your Google Docs, add text to them and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_sheets" to Info("Read cell values, and update or append rows in your Google Sheets.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_slides" to Info("Read your Google Slides presentations and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
     "calls" to Info(
         "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save.",
         "Contacts permission. Android asks for the Phone permission the first time a call is placed.",
@@ -620,8 +561,8 @@ private val InfoById: Map<String, Info> = mapOf(
         "Your carrier may charge for SMS as usual. The recipient and the text are part of the conversation with the model."
     ),
     "apps_settings" to Info(
-        "Opens apps by name, the camera, Android settings and an app's info page, changes the wallpaper from an image link, reads or writes the clipboard and posts a notification.",
-        "No special permission. The wallpaper tool needs an internet link to an image.",
+        "Opens apps by name, the camera, Android settings and an app's info page, reads or writes the clipboard and posts a notification.",
+        "No special permission.",
         "Clipboard text you ask the assistant to read is sent to the model."
     ),
     "navigation" to Info(

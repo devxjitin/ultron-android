@@ -52,8 +52,6 @@ data class AssistantUiState(
     val usageDays: List<com.assistant.app.data.UsageDay> = emptyList(),
     /** Bytes of temporary files (downloaded updates, previews) the app can clear. */
     val cacheBytes: Long = 0L,
-    /** Set while a Google service waits for the user to pick an account and allow access; the activity shows it. */
-    val googleConsent: android.app.PendingIntent? = null,
     val showMemory: Boolean = false,
     /** Facts the assistant remembers about the user, newest last. */
     val memories: List<MemoryItem> = emptyList(),

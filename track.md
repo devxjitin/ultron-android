@@ -403,3 +403,4 @@
 [2026-10-29 19:30] [Claude] [Docs: OTA build 29888038 published, not tested on device]
 [2026-10-29 19:41] [Claude] [Add: look_at_screen tool asks live screen-capture permission when an app hides its text]
 [2026-10-29 19:44] [Claude] [Docs: OTA build 29888052 published, not tested on device]
+[2026-10-29 19:51] [Claude] [Remove: Photos, speed test, wallpaper, notes tools and all Google connectors]

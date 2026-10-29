@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.assistant.app.data.GoogleService
 import com.assistant.app.data.MicSensitivity
 import kotlinx.coroutines.delay
 import com.assistant.app.ui.components.VoiceRibbon
@@ -128,8 +127,6 @@ fun AssistantScreen(
     onStartGithubSignIn: () -> Unit = {},
     onCancelGithubSignIn: () -> Unit = {},
     onDisconnectGithub: () -> Unit = {},
-    onConnectGoogle: (GoogleService) -> Unit = {},
-    onDisconnectGoogle: (GoogleService) -> Unit = {},
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
     onRequestConnectorPermissions: (List<String>) -> Unit = {},
     onDismissSettings: () -> Unit,
@@ -338,10 +335,6 @@ fun AssistantScreen(
                 onCancelGithubSignIn = onCancelGithubSignIn,
                 onDisconnectGithub = onDisconnectGithub,
                 githubTools = uiState.settings.githubTools,
-                googleAccounts = uiState.settings.googleAccounts,
-                googleTools = uiState.settings.googleTools,
-                onConnectGoogle = onConnectGoogle,
-                onDisconnectGoogle = onDisconnectGoogle,
                 onToolsEnabled = onConnectorToolsEnabled,
                 onRequestPermissions = onRequestConnectorPermissions,
                 modifier = Modifier.padding(top = topReserve)

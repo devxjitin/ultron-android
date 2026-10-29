@@ -7,7 +7,7 @@ object PhoneConnectors {
     val all: List<PhoneConnector> = listOf(
         PhoneConnector("device_info", listOf(
             DeviceTool.TIME, DeviceTool.BATTERY, DeviceTool.DEVICE_INFO, DeviceTool.STORAGE_MEMORY, DeviceTool.NETWORK,
-            DeviceTool.WIFI_INFO, DeviceTool.BLUETOOTH, DeviceTool.STEPS, DeviceTool.LIGHT, DeviceTool.SPEED_TEST
+            DeviceTool.WIFI_INFO, DeviceTool.BLUETOOTH, DeviceTool.STEPS, DeviceTool.LIGHT
         )),
         PhoneConnector("device_controls", listOf(
             DeviceTool.FLASHLIGHT, DeviceTool.BRIGHTNESS, DeviceTool.GET_BRIGHTNESS, DeviceTool.VOLUME, DeviceTool.GET_VOLUME,
@@ -15,13 +15,11 @@ object PhoneConnectors {
             DeviceTool.SCREEN_TIMEOUT, DeviceTool.AUTO_ROTATE
         )),
         PhoneConnector("alarms_notes", listOf(
-            DeviceTool.SET_ALARM, DeviceTool.CANCEL_ALARM, DeviceTool.SET_TIMER, DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER,
-            DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE
+            DeviceTool.SET_ALARM, DeviceTool.CANCEL_ALARM, DeviceTool.SET_TIMER, DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER
         )),
         PhoneConnector("calendar", listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT)),
         PhoneConnector("contacts", listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY)),
         PhoneConnector("location", listOf(DeviceTool.LOCATION, DeviceTool.DIRECTIONS)),
-        PhoneConnector("photos", listOf(DeviceTool.RECENT_PHOTOS)),
         PhoneConnector("notifications", listOf(DeviceTool.READ_NOTIFICATIONS)),
         PhoneConnector("app_usage", listOf(DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE)),
         PhoneConnector("duckduckgo", listOf(DeviceTool.WEB_SEARCH)),
@@ -35,7 +33,7 @@ object PhoneConnectors {
         PhoneConnector("messages", listOf(DeviceTool.SEND_SMS, DeviceTool.SEND_SMS_CONTACT)),
         PhoneConnector("apps_settings", listOf(
             DeviceTool.OPEN_APP, DeviceTool.OPEN_CAMERA, DeviceTool.OPEN_APP_SETTINGS, DeviceTool.OPEN_SETTINGS,
-            DeviceTool.SET_WALLPAPER, DeviceTool.GET_CLIPBOARD, DeviceTool.SET_CLIPBOARD, DeviceTool.SHOW_NOTIFICATION
+            DeviceTool.GET_CLIPBOARD, DeviceTool.SET_CLIPBOARD, DeviceTool.SHOW_NOTIFICATION
         )),
         PhoneConnector("navigation", listOf(
             DeviceTool.PRESS_BACK, DeviceTool.RECENT_APPS, DeviceTool.PREVIOUS_APP, DeviceTool.NOTIFICATION_SHADE,

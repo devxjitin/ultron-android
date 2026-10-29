@@ -24,9 +24,6 @@ val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
-// Base URL (with its access token) of the Google Workspace MCP server on AWS that the Google connectors talk to.
-// Add: GOOGLE_MCP_URL=https://...  to android/local.properties.
-val googleMcpUrl: String = localProperties.getProperty("GOOGLE_MCP_URL", "")
 // URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
@@ -66,7 +63,6 @@ android {
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
-        buildConfigField("String", "GOOGLE_MCP_URL", "\"$googleMcpUrl\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
     }
@@ -173,8 +169,6 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("androidx.security:security-crypto:1.1.0")
-    // Google's own sign-in/consent screen for the Google Workspace connectors (Calendar, Gmail, Drive...).
-    implementation("com.google.android.gms:play-services-auth:22.0.0")
 
     // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))

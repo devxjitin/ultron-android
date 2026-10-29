@@ -20,14 +20,12 @@ enum class ToolGroup(val label: String) {
     CALLS("Calls and messages"),
     CONTACTS_CALENDAR("Contacts and calendar"),
     LOCATION("Location and maps"),
-    NOTES("Notes"),
     SEARCH("Web search"),
     WEATHER("Weather"),
     WEB("Internet"),
     YOUTUBE("YouTube"),
     NAVIGATION("Navigation and screen control"),
     SCREEN("Screen reading and tapping (off by default)"),
-    MEDIA("Photos"),
     HEALTH("Sensors and health"),
     NOTIFICATIONS("Private data (off by default)")
 }
@@ -35,7 +33,7 @@ enum class ToolGroup(val label: String) {
 /** Tools that never need a screen, so they can run from an alarm or a phone event. */
 val AUTOMATABLE_TOOL_NAMES = listOf(
     "set_volume", "set_ringer_mode", "vibrate_device", "set_flashlight", "media_control", "set_do_not_disturb",
-    "set_clipboard_text", "show_notification", "set_wallpaper", "set_screen_timeout", "set_auto_rotate",
+    "set_clipboard_text", "show_notification", "set_screen_timeout", "set_auto_rotate",
     "schedule_reminder", "create_note", "lock_screen", "take_screenshot", "get_battery_status",
     "get_network_status", "get_current_time", "get_storage_and_memory"
 )
@@ -211,15 +209,6 @@ enum class DeviceTool(
         ToolGroup.DISPLAY_SOUND, "set_auto_rotate", "Auto-rotate", "Turn screen auto-rotate on or off.",
         "Turns automatic screen rotation on or off. Needs the Modify system settings permission; if missing, its screen opens.",
         listOf(ToolParam("state", ToolParamType.STRING, "Desired state.", choices = listOf("on", "off")))
-    ),
-    SET_WALLPAPER(
-        ToolGroup.DISPLAY_SOUND, "set_wallpaper", "Wallpaper", "Set the wallpaper from an image link.",
-        "Downloads an image from an http or https link and sets it as the wallpaper.",
-        listOf(
-            ToolParam("url", ToolParamType.STRING, "Direct link to an image."),
-            ToolParam("screen", ToolParamType.STRING, "Which screen. Default both.", required = false,
-                choices = listOf("home", "lock", "both"))
-        )
     ),
     OPEN_SETTINGS(
         ToolGroup.PHONE_INFO, "open_settings", "Open settings", "Open a system settings screen.",
@@ -398,26 +387,7 @@ enum class DeviceTool(
         listOf(ToolParam("destination", ToolParamType.STRING, "Destination name or address."))
     ),
 
-    CREATE_NOTE(
-        ToolGroup.NOTES, "create_note", "Save note", "Save a note on the phone.",
-        "Saves a short note for the user and returns its id.",
-        listOf(ToolParam("text", ToolParamType.STRING, "Note text."))
-    ),
-    SEARCH_NOTES(
-        ToolGroup.NOTES, "search_notes", "Read notes", "Read or search saved notes.",
-        "Lists the newest saved notes, or the ones containing the query.",
-        listOf(ToolParam("query", ToolParamType.STRING, "Optional word to search for.", required = false))
-    ),
-    DELETE_NOTE(
-        ToolGroup.NOTES, "delete_note", "Delete note", "Delete a saved note.",
-        "Deletes the note with the given id. Find the id with search_notes first.",
-        listOf(ToolParam("id", ToolParamType.INTEGER, "Note id."))
-    ),
 
-    SPEED_TEST(
-        ToolGroup.WEB, "test_internet_speed", "Internet speed test", "Measure download speed (uses about 5 MB of data).",
-        "Downloads a 5 MB test file and reports the download speed in Mbps."
-    ),
     WEB_SEARCH(
         ToolGroup.SEARCH, "web_search", "Search the web", "Look up the latest information with DuckDuckGo.",
         "Searches the web with DuckDuckGo and returns the top results with title, address and excerpt. " +
@@ -500,14 +470,6 @@ enum class DeviceTool(
         )
     ),
 
-    RECENT_PHOTOS(
-        ToolGroup.MEDIA, "get_recent_photos", "Recent photos", "Count recent photos and list their file names.",
-        "Counts the photos taken recently and lists the newest file names with their dates. It cannot see the picture content.",
-        listOf(
-            ToolParam("days", ToolParamType.INTEGER, "Days to look back, 1-90. Default 7.", required = false),
-            ToolParam("limit", ToolParamType.INTEGER, "How many names to list, 1-10. Default 5.", required = false)
-        )
-    ),
 
     STEPS(
         ToolGroup.HEALTH, "get_step_count", "Step counter", "Tell the steps counted by the phone.",
