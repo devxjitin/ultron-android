@@ -413,3 +413,4 @@
 [2026-10-29 20:43] [Claude] [Remove: unused ReminderReceiver and stale GOOGLE_MCP_URL setting]
 [2026-10-29 20:48] [Claude] [Docs: OTA build 29888116 published, not tested on device]
 [2026-10-29 20:57] [Claude] [Update: Ultron acts on switches itself, asks when unsure, navigation and screen on by default]
+[2026-10-29 21:00] [Claude] [Docs: OTA build 29888127 published, not tested on device]
