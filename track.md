@@ -416,3 +416,4 @@
 [2026-10-29 21:00] [Claude] [Docs: OTA build 29888127 published, not tested on device]
 [2026-10-29 21:09] [Claude] [Add: locked read-only skills, ultron-features skill; remove skill add/edit/delete]
 [2026-10-29 21:12] [Claude] [Docs: OTA build 29888139 published, not tested on device]
+[2026-10-29 21:16] [Claude] [Remove: write-message skill]
