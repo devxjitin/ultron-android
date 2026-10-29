@@ -138,7 +138,7 @@ class FirebaseLiveClient(private val model: String) : LiveClient {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "receive ended: ${e.javaClass.simpleName}: ${e.message}")
-                notifyClosed()
+                if (closing) notifyClosed() else failConnect(e) // quota and 403 stop the session instead of looping through reconnects
             }
         }
     }
@@ -187,8 +187,9 @@ class FirebaseLiveClient(private val model: String) : LiveClient {
                 if (message.turnComplete) post { listener?.onTurnComplete() }
             }
             is LiveServerToolCall -> {
-                val calls = message.functionCalls.map {
-                    GeminiLiveClient.FunctionCall(it.id.orEmpty(), it.name, FirebaseGemini.argsObject(it.args))
+                val calls = message.functionCalls.mapIndexed { index, it ->
+                    // Without an id every call would collapse into one in the view model, so make a unique one.
+                    GeminiLiveClient.FunctionCall(it.id.orEmpty().ifEmpty { "call-${System.nanoTime()}-$index" }, it.name, FirebaseGemini.argsObject(it.args))
                 }
                 if (calls.isNotEmpty()) post { listener?.onToolCall(calls) }
             }
@@ -221,14 +222,17 @@ class FirebaseLiveClient(private val model: String) : LiveClient {
             when {
                 closing -> {}
                 quota -> l.onError(QUOTA_MESSAGE)
-                e is FirebaseAIException && FirebaseGemini.asAppFailure(e) is GeminiEmbeddingClient.HttpFailure &&
-                    (FirebaseGemini.asAppFailure(e) as GeminiEmbeddingClient.HttpFailure).statusCode == 403 ->
+                e is FirebaseAIException && forbidden(e) ->
                     l.onError(UserFacingError.forHttpFailure("Firebase Live connect", 403, e.message))
                 // Dropped Wi-Fi, a busy server and the like: the view model's bounded reconnect handles it.
                 else -> l.onClosed()
             }
         }
     }
+
+    /** True when the failure maps to an HTTP 403, which retrying cannot fix. */
+    private fun forbidden(e: FirebaseAIException): Boolean =
+        (FirebaseGemini.asAppFailure(e) as? GeminiEmbeddingClient.HttpFailure)?.statusCode == 403
 
     private fun notifyClosed() {
         post {

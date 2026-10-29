@@ -1692,6 +1692,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             SkillRegistry.use(call.args.optString("name"))
                         } else if (call.name.startsWith(GITHUB_TOOL_PREFIX)) {
                             runToolSafely(call.name) { runGithubTool(call.name.removePrefix(GITHUB_TOOL_PREFIX), call.args) }
+                        } else if (call.name != "search_knowledge_base") {
+                            "status=unknown_tool\nThere is no tool named ${call.name}. Do not call it again; tell the user you cannot do that with the tools you have."
                         } else try {
                             val query = call.args.optString("query").trim().take(MAX_SEARCH_QUERY_CHARS)
                             if (query.isEmpty()) {

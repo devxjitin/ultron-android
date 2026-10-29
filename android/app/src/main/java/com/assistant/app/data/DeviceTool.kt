@@ -34,7 +34,7 @@ enum class ToolGroup(val label: String) {
 val AUTOMATABLE_TOOL_NAMES = listOf(
     "set_volume", "set_ringer_mode", "vibrate_device", "set_flashlight", "media_control", "set_do_not_disturb",
     "set_clipboard_text", "show_notification", "set_screen_timeout", "set_auto_rotate",
-    "schedule_reminder", "create_note", "lock_screen", "take_screenshot", "get_battery_status",
+    "schedule_reminder", "lock_screen", "take_screenshot", "get_battery_status",
     "get_network_status", "get_current_time", "get_storage_and_memory"
 )
 

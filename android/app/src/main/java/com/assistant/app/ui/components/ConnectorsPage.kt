@@ -162,7 +162,7 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.PhoneAndroid, Kind.Local(deviceInfoPermissions())),
     phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
         Icons.Outlined.Tune),
-    phone("alarms_notes", "Alarms & reminders", "Set alarms, timers and reminders.",
+    phone("alarms", "Alarms & reminders", "Set alarms, timers and reminders.",
         Icons.Outlined.Alarm),
     phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
         Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
@@ -490,7 +490,7 @@ private val InfoById: Map<String, Info> = mapOf(
         "Screen timeout and auto-rotate need Android's Modify system settings permission, and Do Not Disturb needs Do Not Disturb access. Android asks the first time you use them.",
         "Nothing leaves the phone except the words of the conversation."
     ),
-    "alarms_notes" to Info(
+    "alarms" to Info(
         "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose.",
         "No permission. Reminders appear as notifications, so keep notifications on for Ultron.",
         "Nothing leaves the phone except the words of the conversation."

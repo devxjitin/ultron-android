@@ -37,7 +37,7 @@ object ToolDeclarations {
         .put("name", "search_knowledge_base")
         .put(
             "description",
-            "Searches the documents and notes the user saved in this app. Call this only " +
+            "Searches the documents the user saved in this app. Call this only " +
                 "when the user asks about information they stored themselves, never for " +
                 "everyday or general questions."
         )

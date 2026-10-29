@@ -211,14 +211,15 @@ private fun splitWords(text: String): List<String> =
     text.lowercase().split(Regex("[^\\p{L}\\p{M}\\p{N}]+")).filter { it.isNotEmpty() }
 private val FILLER_WORDS = setOf("the", "and", "with", "for", "that", "this", "his", "her", "has", "have", "are", "was")
 
-/** The facts that fit the prompt budget, newest kept first, returned oldest to newest. */
+/** The facts that fit the prompt budget, returned oldest to newest. Tone rules always go in first, then the newest of the rest. */
 fun memoriesForPrompt(items: List<MemoryItem>): List<String> {
     var used = 0
-    val kept = ArrayList<String>()
-    for (item in items.asReversed()) {
-        if (used + item.text.length > MEMORY_PROMPT_BUDGET_CHARS) break
+    val kept = HashSet<MemoryItem>()
+    val (rules, others) = items.partition { it.text.startsWith("Tone rule", ignoreCase = true) }
+    for (item in rules.asReversed() + others.asReversed()) {
+        if (used + item.text.length > MEMORY_PROMPT_BUDGET_CHARS) continue
         used += item.text.length
-        kept += item.text
+        kept += item
     }
-    return kept.asReversed()
+    return items.filter { it in kept }.map { it.text }
 }

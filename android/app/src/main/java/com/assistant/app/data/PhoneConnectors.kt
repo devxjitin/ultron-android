@@ -14,7 +14,7 @@ object PhoneConnectors {
             DeviceTool.GET_RINGER, DeviceTool.SET_RINGER, DeviceTool.VIBRATE, DeviceTool.SET_DND, DeviceTool.MEDIA_CONTROL,
             DeviceTool.SCREEN_TIMEOUT, DeviceTool.AUTO_ROTATE
         )),
-        PhoneConnector("alarms_notes", listOf(
+        PhoneConnector("alarms", listOf(
             DeviceTool.SET_ALARM, DeviceTool.CANCEL_ALARM, DeviceTool.SET_TIMER, DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER
         )),
         PhoneConnector("calendar", listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT)),

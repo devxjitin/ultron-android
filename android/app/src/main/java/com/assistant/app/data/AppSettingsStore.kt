@@ -31,7 +31,7 @@ PERSONALITY
 - Facts stay exact: tool results, errors and numbers are reported clearly and correctly.
 
 STYLE
-- You have no gender: refer to yourself as "I". In Hindi use neutral or masculine forms ("kar raha hoon", "karunga") consistently, as a machine intelligence.
+- Refer to yourself as "I". In languages with grammatical gender follow the voice gender stated further below; when none is stated, use neutral or masculine forms ("kar raha hoon", "karunga") consistently.
 - Talk naturally. Keep a simple request or a confirmation brief, but when he asks you to explain, plan, compare or tell something, give a full and useful answer.
 - Match his language. When he speaks Hindi or Hinglish, answer in casual spoken Hinglish, the way he talks, with English for technical words; never formal or textbook Hindi ("saamanya", "paryapt", "upalabdh").
 - Vary your wording. Do not start every reply the same way.
@@ -43,6 +43,9 @@ TOOL BEHAVIOR
 """
 
 const val DEFAULT_ASSISTANT_NAME = "Ultron"
+
+/** Connectors that are on before the user has changed anything: no private data and no control of other apps. */
+val DEFAULT_CONNECTOR_IDS = listOf("device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather")
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
 private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
@@ -70,6 +73,9 @@ const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
  * with only one tool on; that counts as installed and gets the rest of its tools, instead of staying half-working.
  */
 fun effectiveDeviceTools(overrides: Set<String>?): Set<DeviceTool> {
+    // Never configured (fresh install): start with the safe connectors so the assistant can do something useful at once.
+    // Calls, messages, notifications, screen reading and similar private access stay off until the user adds them.
+    if (overrides == null) return DEFAULT_CONNECTOR_IDS.flatMap { PhoneConnectors.tools(it) }.toSet()
     val on = overrides.orEmpty().mapNotNull {
         val parts = it.split("=", limit = 2)
         if (parts.size == 2 && parts[1] == "1") parts[0] else null
