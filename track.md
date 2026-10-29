@@ -399,3 +399,4 @@
 [2026-10-29 19:16] [Claude] [Docs: OTA build 29888021 published (voice-only), not tested on device]
 [2026-10-29 19:21] [Claude] [Remove: Personalization page; theme toggle moved to home top bar as day/night button]
 [2026-10-29 19:24] [Claude] [Docs: OTA build 29888031 published, not tested on device]
+[2026-10-29 19:27] [Claude] [Fix: Ultron finishes multi-step phone tasks itself; screen reading retries and falls back for hidden apps]

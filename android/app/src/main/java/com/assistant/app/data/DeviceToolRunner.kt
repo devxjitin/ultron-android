@@ -311,11 +311,21 @@ class DeviceToolRunner(
             DeviceTool.WIFI_INFO -> wifiInfo()
             DeviceTool.READ_SCREEN -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+                // A screen can be empty for a moment while an app opens or changes page, so look a few times before concluding.
+                var body = service.readScreen()
+                var attempt = 0
+                while (body.isNullOrBlank() && attempt < 3) {
+                    delay(500)
+                    body = service.readScreen()
+                    attempt++
+                }
                 val appName = service.currentPackage()?.let { appLabel(it) }
-                val body = service.readScreen()
-                if (body == null) "status=unavailable\nThe screen cannot be read right now (the app may block it)."
-                else if (body.isBlank()) "status=empty\nNothing readable is on screen in ${appName ?: "this app"}."
-                else "status=ok\nApp: ${appName ?: "unknown"}\n$body"
+                if (body.isNullOrBlank()) {
+                    "status=hidden\n${appName ?: "This app"} shows nothing the assistant can read; some apps hide their screen on purpose. " +
+                        "Do not stop: try press_back, scroll, wait_for_text, click_on_text with a likely label, or tap_position if the layout is known, " +
+                        "or reach the same goal another way (the app's search, a different screen, another app or tool). " +
+                        "If nothing works, tell him which app it is and what you could not see, and offer what you can still do."
+                } else "status=ok\nApp: ${appName ?: "unknown"}\n$body"
             }
             DeviceTool.CURRENT_APP -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()

@@ -39,12 +39,24 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     // ---------------------------------------------------------------- reading
 
+    /**
+     * The content root of the app in front. Some apps (pop-ups, split screen, apps that switch windows) have no
+     * "active" window for a moment, so this falls back to the topmost other app window before giving up.
+     */
+    private fun frontRoot(): AccessibilityNodeInfo? {
+        rootInActiveWindow?.let { return it }
+        return windows.orEmpty()
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .firstNotNullOfOrNull { it.root }
+    }
+
     /** Package name of the app currently on screen, or null when nothing is readable. */
-    fun currentPackage(): String? = rootInActiveWindow?.packageName?.toString()
+    fun currentPackage(): String? = frontRoot()?.packageName?.toString()
 
     /** A numbered list of what is visible, or null when the screen cannot be read. */
     fun readScreen(): String? {
-        val root = rootInActiveWindow ?: return null
+        val root = frontRoot() ?: return null
         val items = mutableListOf<ScreenItem>()
         collect(root, inheritedTappable = false, depth = 0, out = items)
         lastItems = items
@@ -60,7 +72,7 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     /** True when [text] appears (case-insensitive) in the current screen's text. */
     fun screenContains(text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
+        val root = frontRoot() ?: return false
         return !root.findAccessibilityNodeInfosByText(text).isNullOrEmpty()
     }
 
@@ -101,7 +113,7 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     /** Clicks the [occurrence]-th (1-based) element whose text or description contains [text]. */
     suspend fun clickByText(text: String, occurrence: Int): String {
-        val root = rootInActiveWindow ?: return "status=unavailable\nThe screen cannot be read right now."
+        val root = frontRoot() ?: return "status=unavailable\nThe screen cannot be read right now."
         val matches = root.findAccessibilityNodeInfosByText(text).orEmpty()
         val node = matches.getOrNull(occurrence - 1)
             ?: return "status=not_found\nNothing on screen matches \"$text\". Call read_screen to see what is there."
@@ -140,7 +152,7 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     /** Types into the focused text field (or the first one on screen). Never touches password fields. */
     fun typeText(text: String, append: Boolean): String {
-        val root = rootInActiveWindow ?: return "status=unavailable\nThe screen cannot be read right now."
+        val root = frontRoot() ?: return "status=unavailable\nThe screen cannot be read right now."
         val field = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
             ?: firstEditable(root, 0)
             ?: return "status=not_found\nNo text field is on screen. Tap a text field first."
@@ -156,7 +168,7 @@ class AssistantAccessibilityService : AccessibilityService() {
     /** Presses Enter/Search/Go on the focused field (Android 11 or newer). */
     fun pressEnter(): String {
         if (Build.VERSION.SDK_INT < 30) return "status=unavailable\nThis needs Android 11 or newer."
-        val field = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val field = frontRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
             ?: return "status=not_found\nNo text field is focused."
         return if (field.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)) "status=ok\nPressed Enter."
         else "status=failed\nThe field did not accept Enter."

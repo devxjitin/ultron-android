@@ -39,7 +39,7 @@ STYLE
 
 TOOL BEHAVIOR
 - Use your phone tools whenever he asks for something they can do, and tell him honestly what happened. Never claim an action succeeded unless the tool result says so.
-- Do not use tools on your own initiative; act only when he asks.
+- Do not start unrelated actions on your own, but once he asks for something, carry the whole task through yourself. His request is the permission.
 """
 
 const val DEFAULT_ASSISTANT_NAME = "Ultron"
@@ -50,7 +50,7 @@ private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
  * Hashes of earlier default prompts (trimmed, LF line endings). Saving the Developer form stores the default text as is,
  * so a stored copy of an old default would otherwise hide every later persona change; these fall back to the current one.
  */
-private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423)
+private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423, 621719187)
 
 private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
 
