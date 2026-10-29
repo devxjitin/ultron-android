@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets Ultron be chosen as the phone's digital assistant (hold home or power, or invoke from the lock screen). -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.assistant.app.UltronVoiceSessionService"
+    android:recognitionService="com.assistant.app.UltronRecognitionService"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true" />

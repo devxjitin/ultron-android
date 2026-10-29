@@ -409,3 +409,5 @@
 [2026-10-29 19:59] [Claude] [Docs: OTA build 29888067 published, not tested on device]
 [2026-10-29 20:36] [Claude] [Fix: connector permissions, Wi-Fi info, access checks, brightness, services, exact alarms]
 [2026-10-29 20:38] [Claude] [Fix: prompt skills and gender, default connectors, memory tone rules, Live tool ids and quota loop]
+[2026-10-29 20:43] [Claude] [Add: end/answer call, call log, read SMS, notification reply, now playing, panels, swipe, long press, app list, open URL, share, assistant service]
+[2026-10-29 20:43] [Claude] [Remove: unused ReminderReceiver and stale GOOGLE_MCP_URL setting]

@@ -184,10 +184,16 @@ class AssistantAccessibilityService : AccessibilityService() {
     }
 
     /** A short finger tap at screen coordinates. */
-    suspend fun tap(x: Float, y: Float): Boolean {
-        val path = Path().apply { moveTo(x, y) }
-        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, 60)).build()
-        return withTimeoutOrNull(3_000L) {
+    suspend fun tap(x: Float, y: Float): Boolean = gesture(x, y, x, y, 60)
+
+    /** A long press: the finger stays down for [holdMs]. */
+    suspend fun longPress(x: Float, y: Float, holdMs: Long = 900): Boolean = gesture(x, y, x, y, holdMs)
+
+    /** One finger moving from the first point to the second over [durationMs]; a zero-length path is a tap or a hold. */
+    suspend fun gesture(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long): Boolean {
+        val path = Path().apply { moveTo(x1, y1); if (x1 != x2 || y1 != y2) lineTo(x2, y2) }
+        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1))).build()
+        return withTimeoutOrNull(durationMs + 3_000L) {
             suspendCancellableCoroutine { continuation ->
                 val accepted = dispatchGesture(gesture, object : GestureResultCallback() {
                     override fun onCompleted(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resume(true) }

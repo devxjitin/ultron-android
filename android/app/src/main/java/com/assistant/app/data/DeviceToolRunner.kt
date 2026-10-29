@@ -60,7 +60,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.AssistantNotificationListener
-import com.assistant.app.ReminderReceiver
 import androidx.core.location.LocationManagerCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -331,6 +330,70 @@ class DeviceToolRunner(
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 service.clickItem(number("number") ?: return MISSING)
             }
+            DeviceTool.END_CALL -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.ANSWER_PHONE_CALLS)?.let { return it }
+                extras.endCall()
+            }
+            DeviceTool.ANSWER_CALL -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.ANSWER_PHONE_CALLS)?.let { return it }
+                extras.answerCall()
+            }
+            DeviceTool.READ_CALL_LOG -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.READ_CALL_LOG)?.let { return it }
+                extras.callLog(number("limit") ?: 5, text("kind"))
+            }
+            DeviceTool.READ_SMS -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.READ_SMS)?.let { return it }
+                extras.readSms(number("limit") ?: 5)
+            }
+            DeviceTool.REPLY_NOTIFICATION -> {
+                val listener = AssistantNotificationListener.instance ?: return listenerDenied()
+                extras.replyToNotification(listener, text("app") ?: return MISSING, text("message") ?: return MISSING)
+            }
+            DeviceTool.DISMISS_NOTIFICATION -> {
+                val listener = AssistantNotificationListener.instance ?: return listenerDenied()
+                extras.dismissNotifications(listener, text("app") ?: return MISSING)
+            }
+            DeviceTool.NOW_PLAYING -> {
+                if (AssistantNotificationListener.instance == null) return listenerDenied()
+                extras.nowPlaying()
+            }
+            DeviceTool.OPEN_PANEL -> extras.openPanel(text("panel"))
+            DeviceTool.LIST_APPS -> extras.listApps(text("filter"))
+            DeviceTool.OPEN_URL -> extras.openUrl(text("url") ?: return MISSING)
+            DeviceTool.SHARE_TEXT -> extras.shareText(text("text") ?: return MISSING)
+            DeviceTool.POWER_MENU -> globalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, "Power menu")
+            DeviceTool.SPLIT_SCREEN ->
+                if (Build.VERSION.SDK_INT < 24) "status=unavailable\nThis needs Android 7 or newer."
+                else globalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, "Split screen")
+            DeviceTool.SWIPE -> {
+                val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+                val x1 = number("from_x") ?: return MISSING
+                val y1 = number("from_y") ?: return MISSING
+                val x2 = number("to_x") ?: return MISSING
+                val y2 = number("to_y") ?: return MISSING
+                val metrics = app.resources.displayMetrics
+                if (listOf(x1, x2).any { it !in 0..metrics.widthPixels } || listOf(y1, y2).any { it !in 0..metrics.heightPixels }) {
+                    return "status=invalid\nThe screen is ${metrics.widthPixels}x${metrics.heightPixels} pixels."
+                }
+                val ms = (number("milliseconds") ?: 400).coerceIn(100, 3_000).toLong()
+                if (service.gesture(x1.toFloat(), y1.toFloat(), x2.toFloat(), y2.toFloat(), ms)) "status=ok\nSwiped from $x1,$y1 to $x2,$y2."
+                else "status=failed\nThe swipe did not go through."
+            }
+            DeviceTool.LONG_PRESS -> {
+                val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+                val x = number("x") ?: return MISSING
+                val y = number("y") ?: return MISSING
+                val metrics = app.resources.displayMetrics
+                if (x !in 0..metrics.widthPixels || y !in 0..metrics.heightPixels) {
+                    return "status=invalid\nThe screen is ${metrics.widthPixels}x${metrics.heightPixels} pixels."
+                }
+                if (service.longPress(x.toFloat(), y.toFloat())) "status=ok\nLong pressed $x,$y." else "status=failed\nThe long press did not go through."
+            }
             DeviceTool.TAP_POSITION -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 val x = number("x") ?: return MISSING
@@ -485,6 +548,8 @@ class DeviceToolRunner(
     }
 
     private val askedPermissions = mutableSetOf<String>()
+
+    private val extras by lazy { PhoneExtras(app) { intent -> start(intent) } }
 
     /** Name and number pairs for contacts whose name matches [name]. */
     private fun findContacts(name: String, limit: Int): List<Pair<String, String>> {
@@ -1058,22 +1123,27 @@ class DeviceToolRunner(
         return "status=ok\nAmbient light is ${lux.toInt()} lux ($word)."
     }
 
-    private fun readNotifications(limit: Int): String {
-        val listener = AssistantNotificationListener.instance
-        if (listener == null) {
-            if (AccessChecks.notificationListener(app) == AccessState.ENABLED_NOT_CONNECTED) {
-                // Access is on but Android dropped the connection; ask it to reconnect instead of opening Settings.
-                runCatching {
-                    android.service.notification.NotificationListenerService.requestRebind(
-                        android.content.ComponentName(app, AssistantNotificationListener::class.java)
-                    )
-                }
-                return "status=retry\nNotification access is on but was disconnected. Android is reconnecting it; try again in a few seconds."
+    /** Result for a tool that needs the notification listener when it is off or has lost its connection. */
+    private fun listenerDenied(): String {
+        if (AccessChecks.notificationListener(app) == AccessState.ENABLED_NOT_CONNECTED) {
+            // Access is on but Android dropped the connection; ask it to reconnect instead of opening Settings.
+            runCatching {
+                android.service.notification.NotificationListenerService.requestRebind(
+                    android.content.ComponentName(app, AssistantNotificationListener::class.java)
+                )
             }
-            start(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            return "status=permission_needed\nNotification access is not granted. The access screen was opened; " +
-                "the user must allow this app there, then ask again."
+            return "status=retry\nNotification access is on but was disconnected. Android is reconnecting it; try again in a few seconds."
         }
+        start(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        val restricted = if (Build.VERSION.SDK_INT >= 33) {
+            " If the switch is greyed out, open Ultron's App info, tap the three dots and choose Allow restricted settings first."
+        } else ""
+        return "status=permission_needed\nNotification access is not granted. The access screen was opened; " +
+            "the user must allow Ultron there, then ask again.$restricted"
+    }
+
+    private fun readNotifications(limit: Int): String {
+        val listener = AssistantNotificationListener.instance ?: return listenerDenied()
         val pm = app.packageManager
         val items = listener.activeNotifications
             .filter { it.isClearable && it.packageName != app.packageName }
@@ -1264,7 +1334,8 @@ class DeviceToolRunner(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
-            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT
+            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
+            DeviceTool.READ_CALL_LOG, DeviceTool.READ_SMS, DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L
