@@ -121,8 +121,6 @@ data class AssistantSettings(
     val bargeInEnabled: Boolean = false,
     /** When on, the assistant saves lasting facts about the user and recalls them in later sessions. */
     val memoryEnabled: Boolean = true,
-    /** Style, tone and "about you" choices from the Personalization page. */
-    val personalization: Personalization = Personalization(),
     /** The agent's persona/instructions, editable from Settings so an admin can customize
      *  the assistant per deployment without a rebuild. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
@@ -155,15 +153,6 @@ class AppSettingsStore(private val context: Context) {
     private val languageCodeKey = stringPreferencesKey("language_code")
     private val bargeInKey = booleanPreferencesKey("barge_in_enabled")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
-    private val baseStyleKey = stringPreferencesKey("p_base_style")
-    private val warmthKey = stringPreferencesKey("p_warmth")
-    private val enthusiasmKey = stringPreferencesKey("p_enthusiasm")
-    private val headersKey = stringPreferencesKey("p_headers")
-    private val emojiKey = stringPreferencesKey("p_emoji")
-    private val customInstructionsKey = stringPreferencesKey("p_custom")
-    private val nicknameKey = stringPreferencesKey("p_nickname")
-    private val occupationKey = stringPreferencesKey("p_occupation")
-    private val aboutMoreKey = stringPreferencesKey("p_about")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
     private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
@@ -196,17 +185,6 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: false,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            personalization = Personalization(
-                baseStyle = BaseStyle.fromStored(prefs[baseStyleKey]),
-                warmth = TraitLevel.fromStored(prefs[warmthKey]),
-                enthusiasm = TraitLevel.fromStored(prefs[enthusiasmKey]),
-                headersAndLists = TraitLevel.fromStored(prefs[headersKey]),
-                emoji = TraitLevel.fromStored(prefs[emojiKey]),
-                customInstructions = prefs[customInstructionsKey].orEmpty(),
-                nickname = prefs[nicknameKey].orEmpty(),
-                occupation = prefs[occupationKey].orEmpty(),
-                aboutMore = prefs[aboutMoreKey].orEmpty()
-            ),
             systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
             greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_GREETING,
@@ -259,20 +237,6 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setLanguageCode(code: String) {
         if (!AssistantOptions.isApprovedLanguage(code)) throw UserInputException("Choose a supported language.")
         context.settingsDataStore.edit { it[languageCodeKey] = code }
-    }
-
-    suspend fun setPersonalization(p: Personalization) {
-        context.settingsDataStore.edit {
-            it[baseStyleKey] = p.baseStyle.name
-            it[warmthKey] = p.warmth.name
-            it[enthusiasmKey] = p.enthusiasm.name
-            it[headersKey] = p.headersAndLists.name
-            it[emojiKey] = p.emoji.name
-            it[customInstructionsKey] = p.customInstructions.take(MAX_CUSTOM_INSTRUCTIONS_CHARS)
-            it[nicknameKey] = p.nickname.take(MAX_ABOUT_FIELD_CHARS)
-            it[occupationKey] = p.occupation.take(MAX_ABOUT_FIELD_CHARS)
-            it[aboutMoreKey] = p.aboutMore.take(MAX_ABOUT_FIELD_CHARS)
-        }
     }
 
     suspend fun setMemoryEnabled(enabled: Boolean) {

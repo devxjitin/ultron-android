@@ -53,12 +53,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.components.AboutPage
-import com.assistant.app.ui.components.PersonalizationPage
 import com.assistant.app.ui.components.StoragePage
 import com.assistant.app.ui.components.SkillsPage
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.ui.components.UsagePage
-import com.assistant.app.data.Personalization
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
@@ -110,14 +108,12 @@ fun AssistantScreen(
     onDismissUpdate: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
     onUpdateNow: () -> Unit = {},
-    onPersonalizationTapped: () -> Unit = {},
     onUsageTapped: () -> Unit = {},
     onStorageTapped: () -> Unit = {},
     onSkillsTapped: () -> Unit = {},
     onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
     onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
     onSkillDeleted: (String) -> Unit = {},
-    onPersonalizationChanged: (Personalization) -> Unit = {},
     onClearCache: () -> Unit = {},
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
@@ -158,6 +154,7 @@ fun AssistantScreen(
     BoxWithConstraints(Modifier.fillMaxSize().background(com.assistant.app.ui.theme.AssistantBackground)) {
         val availableHeight = maxHeight
         val strings = visitorStrings()
+        val isDarkTheme = themeMode == ThemeMode.DARK || (themeMode == ThemeMode.SYSTEM && androidx.compose.foundation.isSystemInDarkTheme())
         val compact = availableHeight < 480.dp
         val currentTab = when {
             uiState.showSettings ->
@@ -166,7 +163,6 @@ fun AssistantScreen(
                     AdminPage.DEVELOPER -> NavTab.DEVELOPER
                     AdminPage.ABOUT -> NavTab.ABOUT
                     AdminPage.SETTINGS -> NavTab.SETTINGS
-                    AdminPage.PERSONALIZATION -> NavTab.PERSONALIZATION
                     AdminPage.USAGE -> NavTab.USAGE
                     AdminPage.STORAGE -> NavTab.STORAGE
                     AdminPage.SKILLS -> NavTab.SKILLS
@@ -186,14 +182,9 @@ fun AssistantScreen(
         // Settings <-> Knowledge keeps the same page (and draft), so it isn't guarded.
         var settingsDirty by remember { mutableStateOf(false) }
         var pendingNav by remember { mutableStateOf<(() -> Unit)?>(null) }
-        // Typed but unsaved Personalization text gets the same protection, with a simple keep-or-discard question.
-        var personalizationDirty by remember { mutableStateOf(false) }
-        var pendingPersonalizationNav by remember { mutableStateOf<(() -> Unit)?>(null) }
         val guardedNav: (() -> Unit) -> Unit = { action ->
             when {
                 uiState.showSettings && settingsDirty -> pendingNav = action
-                uiState.showSettings && uiState.adminPage == AdminPage.PERSONALIZATION && personalizationDirty ->
-                    pendingPersonalizationNav = action
                 else -> action()
             }
         }
@@ -209,13 +200,10 @@ fun AssistantScreen(
             AppDrawerContent(
                 selected = currentTab,
                 assistantName = uiState.settings.assistantName,
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
                         NavTab.HOME -> guardedNav(onHomeTapped)
-                        NavTab.PERSONALIZATION -> guardedNav(onPersonalizationTapped)
                         NavTab.USAGE -> guardedNav(onUsageTapped)
                         NavTab.STORAGE -> guardedNav(onStorageTapped)
                         NavTab.SKILLS -> guardedNav(onSkillsTapped)
@@ -298,6 +286,10 @@ fun AssistantScreen(
             title = if (currentTab == NavTab.HOME) "" else currentTab.label,
             showMenuButton = !wide,
             onMenuClick = { scope.launch { drawerState.open() } },
+            onToggleTheme = if (currentTab == NavTab.HOME) {
+                { onThemeModeChange(if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK) }
+            } else null,
+            isDarkTheme = isDarkTheme,
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
@@ -359,10 +351,6 @@ fun AssistantScreen(
         if (uiState.showSettings) {
             val pageModifier = Modifier.padding(top = topReserve)
             when (uiState.adminPage) {
-                AdminPage.PERSONALIZATION -> PersonalizationPage(
-                    uiState.settings.personalization, uiState.settings.assistantName, onPersonalizationChanged, pageModifier,
-                    onDirtyChanged = { personalizationDirty = it }
-                )
                 AdminPage.SKILLS -> {
                     val skills by SkillRegistry.entries.collectAsState()
                     SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
@@ -448,18 +436,6 @@ fun AssistantScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 116.dp)
         )
-
-        pendingPersonalizationNav?.let { leave ->
-            AlertDialog(
-                onDismissRequest = { pendingPersonalizationNav = null },
-                title = { Text("Discard unsaved changes?") },
-                text = { Text("You typed in Personalization but did not press Save.") },
-                confirmButton = {
-                    TextButton(onClick = { pendingPersonalizationNav = null; personalizationDirty = false; leave() }) { Text("Discard") }
-                },
-                dismissButton = { TextButton(onClick = { pendingPersonalizationNav = null }) { Text("Keep editing") } }
-            )
-        }
 
         if (uiState.restartRequestId > 0) {
             AlertDialog(

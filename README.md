@@ -13,7 +13,7 @@ Real-time voice conversations with Gemini Live · 80+ phone-control tools · clo
 ![MCP](https://img.shields.io/badge/MCP-connectors-C8102E)
 ![AWS Lambda](https://img.shields.io/badge/AWS-Lambda%20%7C%20S3-FF9900?logo=amazonaws&logoColor=white)
 
-<img src="docs/screenshots/hero.png" alt="Ultron app screens: home, voice and personalization" width="100%">
+<img src="docs/screenshots/hero.png" alt="Ultron app screens: home and voice" width="100%">
 
 </div>
 
@@ -62,7 +62,6 @@ The project has three parts:
     <td align="center" width="25%"><img src="docs/screenshots/voice.png" alt="Voice conversation" width="200"><br><sub><b>Voice</b><br>Live, interruptible conversation</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/personalization.png" alt="Personalization" width="200"><br><sub><b>Personalization</b><br>Style, tone and custom instructions</sub></td>
     <td align="center"><img src="docs/screenshots/connectors.png" alt="Connectors" width="200"><br><sub><b>Connectors</b><br>Add cloud and phone tools in one tap</sub></td>
   </tr>
   <tr>
@@ -97,7 +96,7 @@ The project has three parts:
 
 ### Light and dark theme
 
-The menu ends with an **Appearance** picker: System (follows the phone), Light or Dark. The choice is saved and applied before the first frame. Both palettes are contrast-checked so text stays readable on every surface.
+The home screen has a day/night button at the top right that switches between the light and dark theme (the first launch follows the phone). The choice is saved and applied before the first frame. Both palettes are contrast-checked so text stays readable on every surface.
 
 ### Connectors
 
@@ -142,16 +141,6 @@ Add your own documents (typed text or PDF) and ask about them by voice.
 ### Memory
 
 The assistant saves lasting facts you tell it (up to 150 short notes) and recalls them in later conversations. You can add, edit, delete or switch memory off, and a changed fact replaces the old one instead of sitting next to its opposite. When a replacement matches several notes equally well, nothing is deleted and the assistant is asked to pick the exact one. Saved notes are treated as facts about you, never as instructions.
-
-### Personalization
-
-Fine-tune how the assistant talks, similar to the controls in popular assistant apps:
-
-- **Base style and tone**: Default, Professional, Friendly, Candid, Quirky, Efficient, Nerdy, Cynical.
-- **Characteristics**: Warmth, Enthusiasm, Headers and lists, Emoji, each Less / Default / More.
-- **Custom instructions** and an **About you** card (nickname, occupation, anything else).
-
-Choices apply to the voice assistant.
 
 ### Usage and storage
 
@@ -210,7 +199,7 @@ Minimum Android version is 8.0 (API 26); the app targets API 35 and compiles aga
 ├── android/                         Android application (Gradle project)
 │   ├── app/src/main/java/com/assistant/app/
 │   │   ├── audio/                   Microphone streaming, playback, amplitude
-│   │   ├── data/                    Settings, stores, device tools, RAG, personalization, usage
+│   │   ├── data/                    Settings, stores, device tools, RAG, usage
 │   │   ├── network/                 Gemini Live client, MCP client, updater
 │   │   ├── ui/                      Compose screens, pages and theme
 │   │   ├── util/                    Latency tracing, user-facing errors

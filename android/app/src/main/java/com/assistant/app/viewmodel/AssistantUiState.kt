@@ -6,7 +6,7 @@ import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
 
 /** Which admin page [AssistantUiState.showSettings] opens. */
-enum class AdminPage { SETTINGS, DEVELOPER, ABOUT, KNOWLEDGE, PERSONALIZATION, USAGE, STORAGE, SKILLS }
+enum class AdminPage { SETTINGS, DEVELOPER, ABOUT, KNOWLEDGE, USAGE, STORAGE, SKILLS }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }

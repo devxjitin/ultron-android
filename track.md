@@ -397,3 +397,4 @@
 [2026-10-29 00:53] [Claude] [Docs: OTA build 29886921 published (Live on Firebase SDK), not tested on device]
 [2026-10-29 19:04] [Claude] [Remove: text chat, library, history UI, Azure/NIM; app is voice-only]
 [2026-10-29 19:16] [Claude] [Docs: OTA build 29888021 published (voice-only), not tested on device]
+[2026-10-29 19:21] [Claude] [Remove: Personalization page; theme toggle moved to home top bar as day/night button]

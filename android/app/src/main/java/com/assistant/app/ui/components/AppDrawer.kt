@@ -92,7 +92,6 @@ enum class NavTab(val label: String, val icon: ImageVector) {
     MEMORY("Memory", Icons.Outlined.Psychology),
     SKILLS("Skills", Icons.Outlined.Bolt),
     CONNECTORS("Connectors", Icons.Outlined.Extension),
-    PERSONALIZATION("Personalization", Icons.Outlined.AutoAwesome),
     SETTINGS("Settings", AssistantIcons.Settings),
     USAGE("Usage", Icons.Outlined.BarChart),
     STORAGE("Storage", Icons.Outlined.Storage),
@@ -111,8 +110,6 @@ fun AppDrawerContent(
     assistantName: String,
     onSelect: (NavTab) -> Unit,
     modifier: Modifier = Modifier,
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeModeChange: (ThemeMode) -> Unit = {}
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 18.dp)) {
         DrawerHeader(assistantName)
@@ -122,42 +119,11 @@ fun AppDrawerContent(
             when (tab) {
                 NavTab.HOME -> return@forEach // Home has no row: back from any page returns to it.
                 NavTab.KNOWLEDGE -> NavSection("Workspace")
-                NavTab.PERSONALIZATION -> NavSection("Preferences")
+                NavTab.SETTINGS -> NavSection("Preferences")
                 NavTab.DEVELOPER -> NavSection("App")
                 else -> Unit
             }
             NavRow(tab, tab == selected) { onSelect(tab) }
-        }
-        NavSection("Appearance")
-        ThemePicker(themeMode, onThemeModeChange)
-    }
-}
-
-/** System, Light and Dark side by side as icons; the chosen one is outlined and filled. */
-@Composable
-private fun ThemePicker(selected: ThemeMode, onChange: (ThemeMode) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ThemeMode.entries.forEach { mode ->
-            val shape = RoundedCornerShape(12.dp)
-            val on = mode == selected
-            Box(
-                Modifier.weight(1f).height(40.dp).clip(shape)
-                    .background(if (on) AssistantSelectedBg else AssistantFieldBackground, shape)
-                    .border(BorderStroke(if (on) 1.5.dp else 1.dp, if (on) AssistantAccent else AssistantOutline), shape)
-                    .selectable(selected = on, role = Role.RadioButton, onClick = { onChange(mode) }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    when (mode) {
-                        ThemeMode.SYSTEM -> Icons.Outlined.SettingsBrightness
-                        ThemeMode.LIGHT -> Icons.Outlined.LightMode
-                        ThemeMode.DARK -> Icons.Outlined.DarkMode
-                    },
-                    contentDescription = mode.label,
-                    tint = if (on) AssistantAccent else AssistantTextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
         }
     }
 }
@@ -223,7 +189,10 @@ fun AppTopBar(
     showMenuButton: Boolean,
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = AppTopBarHeight
+    height: Dp = AppTopBarHeight,
+    /** When set, a day/night button is shown at the right end of the bar. */
+    onToggleTheme: (() -> Unit)? = null,
+    isDarkTheme: Boolean = false
 ) {
     Row(
         modifier.fillMaxWidth().height(height).padding(horizontal = 8.dp),
@@ -250,6 +219,15 @@ fun AppTopBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (onToggleTheme != null) {
+            IconButton(onClick = onToggleTheme) {
+                Icon(
+                    if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                    contentDescription = if (isDarkTheme) "Switch to day theme" else "Switch to night theme",
+                    tint = AssistantTextPrimary
+                )
+            }
+        }
         Spacer(Modifier.size(8.dp))
     }
 }

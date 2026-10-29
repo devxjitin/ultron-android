@@ -17,7 +17,6 @@ import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
-import com.assistant.app.data.Personalization
 import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
 import com.assistant.app.data.KnowledgeBaseProvider
@@ -485,8 +484,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onAboutTapped() = openAdminPage(AdminPage.ABOUT)
 
     fun onKnowledgeTapped() = openAdminPage(AdminPage.KNOWLEDGE)
-
-    fun onPersonalizationTapped() = openAdminPage(AdminPage.PERSONALIZATION)
 
     fun onUsageTapped() = openAdminPage(AdminPage.USAGE)
 
@@ -1075,15 +1072,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch { runCatching { usageStore.clear() } }
     }
 
-    /** Saves the Personalization choices; the next reply (typed or spoken) follows them. */
-    fun onPersonalizationChanged(personalization: Personalization) {
-        viewModelScope.launch {
-            runCatching { settingsStore.setPersonalization(personalization) }
-                .onFailure { showToast("Could not save your choices. Try again.", AppNotificationType.ERROR) }
-            invalidateWarmSessionAndReprewarm()
-        }
-    }
-
     /** Measures the temporary files (downloaded updates, previews) the app keeps in its cache. */
     private fun refreshCacheSize() {
         viewModelScope.launch {
@@ -1655,8 +1643,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 AssistantOptions.languageLabel(settings.languageCode),
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
-                if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                settings.personalization.instruction(forVoice = true)
+                if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList()
             )
             connectLiveSession(
                 apiKey, systemInstruction, settings, KnowledgeBaseProvider.liveHistoryTurns(history),
@@ -2246,8 +2233,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     AssistantOptions.languageLabel(settings.languageCode),
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
-                    if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                    settings.personalization.instruction(forVoice = true)
+                    if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList()
                 )
 
                 if (generation != prewarmGeneration) return@launch
