@@ -70,18 +70,11 @@ class McpSchemaTest {
         assertTrue(analysis.issues.any { it.contains("free-form") })
     }
 
-    @Test fun `a declaration says when argument types were simplified and carries the original schema for chat`() {
+    @Test fun `a declaration says when argument types were simplified`() {
         val spec = com.assistant.app.data.McpToolSpec(
             "t", "Does things", """{"type":"object","properties":{"v":{"anyOf":[{"type":"integer"},{"type":"string"}]}}}""", false
         )
-        val plain = ToolDeclarations.mcp(spec)
-        assertTrue(plain.getString("description").contains("simplified"))
-        assertTrue(!plain.has(ToolDeclarations.ORIGINAL_SCHEMA_KEY))
-        val forChat = ToolDeclarations.mcp(spec, withOriginalSchema = true)
-        assertTrue(forChat.getJSONObject(ToolDeclarations.ORIGINAL_SCHEMA_KEY).getJSONObject("properties").getJSONObject("v").has("anyOf"))
-        val stripped = ToolDeclarations.withoutPrivateFields(org.json.JSONArray().put(forChat)).getJSONObject(0)
-        assertTrue(!stripped.has(ToolDeclarations.ORIGINAL_SCHEMA_KEY))
-        assertEquals("t", stripped.getString("name").removePrefix(com.assistant.app.data.GITHUB_TOOL_PREFIX))
+        assertTrue(ToolDeclarations.mcp(spec).getString("description").contains("simplified"))
     }
 
     @Test fun `required fields and arrays survive`() {

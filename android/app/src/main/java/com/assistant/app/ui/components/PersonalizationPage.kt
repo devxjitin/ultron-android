@@ -81,14 +81,6 @@ fun PersonalizationPage(
             TraitRow("Enthusiasm", "How much energy replies have", personalization.enthusiasm) {
                 onChange(personalization.copy(enthusiasm = it))
             }
-            Divider()
-            TraitRow("Headers and lists", "Structure in typed chat answers", personalization.headersAndLists) {
-                onChange(personalization.copy(headersAndLists = it))
-            }
-            Divider()
-            TraitRow("Emoji", "How often typed chat uses emoji", personalization.emoji) {
-                onChange(personalization.copy(emoji = it))
-            }
         }
 
         PageLabel("Custom instructions")
@@ -138,7 +130,7 @@ fun PersonalizationPage(
             }
         }
         Text(
-            "Your choices apply to typed chat and voice. Headers, lists and emoji only apply to typed chat.",
+            "Your choices apply to the voice assistant.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp, start = 4.dp)
         )
     }

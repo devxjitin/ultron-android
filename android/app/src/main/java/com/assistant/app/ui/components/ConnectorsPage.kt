@@ -108,7 +108,6 @@ import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.GoogleService
 import com.assistant.app.data.McpToolSpec
 import com.assistant.app.data.PhoneConnectors
-import com.assistant.app.data.Surface
 import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
@@ -141,9 +140,7 @@ private class Connector(
     val subtitle: String,
     val icon: ImageVector,
     val kind: Kind,
-    val tools: List<DeviceTool> = emptyList(),
-    /** Automation connectors act on the phone itself and work in voice only; every other connector works in voice and chat. */
-    val automation: Boolean = false
+    val tools: List<DeviceTool> = emptyList()
 )
 
 private fun photosPermissions(): List<String> = when {
@@ -155,13 +152,12 @@ private fun photosPermissions(): List<String> = when {
 
 private const val PHONE = "On your phone"
 
-/** A phone-side connector: its tools and whether it reaches the chat come from [PhoneConnectors]. */
+/** A phone-side connector: its tools come from [PhoneConnectors]. */
 private fun phone(
     id: String, name: String, description: String, icon: ImageVector,
     kind: Kind = Kind.Local(), subtitle: String = PHONE
 ) = Connector(
-    id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id),
-    automation = PhoneConnectors.surface(id) == Surface.VOICE
+    id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id)
 )
 
 private val PhoneCatalog = listOf(
@@ -191,7 +187,6 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
     phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
         Icons.Outlined.PlayCircle),
-    // Automation connectors (voice only).
     phone("calls", "Calls", "Dial a number, call a contact by name and save new contacts.",
         Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
     phone("messages", "Messages", "Send a text message to a number or to a contact by name right away, without opening any screen.",
@@ -259,7 +254,6 @@ fun ConnectorsPage(
     }
 
     var query by remember { mutableStateOf("") }
-    var automationTab by rememberSaveable { mutableStateOf(false) }
     var setupNeeded by remember { mutableStateOf(false) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -317,9 +311,8 @@ fun ConnectorsPage(
         }
     }
 
-    // Every connector, connected or not, A-Z. Installed holds the voice and chat ones; Automation the voice-only ones.
+    // Every connector, connected or not, A-Z.
     val shown = Catalog
-        .filter { it.automation == automationTab }
         .filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
         .sortedBy { it.name.lowercase() }
 
@@ -398,15 +391,8 @@ fun ConnectorsPage(
             ),
             modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
         )
-        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TabChip("Installed", !automationTab) { automationTab = false }
-            TabChip("Automation", automationTab) { automationTab = true }
-        }
+        Spacer(Modifier.height(14.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            if (automationTab) {
-                Text("These act on the phone itself, so they work in voice only.", color = AssistantTextMuted, fontSize = 13.sp,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
-            }
             if (shown.isEmpty()) {
                 Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
             }
@@ -474,36 +460,6 @@ private fun SectionHeading(text: String) {
         letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 10.dp))
 }
 
-/** One of the two buttons above the connector list (Installed / Automation). */
-@Composable
-private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Box(
-        Modifier.clip(shape)
-            .background(if (selected) AssistantAccent.copy(alpha = 0.18f) else AssistantFieldBackground)
-            .border(BorderStroke(1.dp, if (selected) AssistantAccent else AssistantOutline), shape)
-            .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 9.dp)
-    ) {
-        Text(label, color = if (selected) AssistantAccent else AssistantTextSecondary, fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
-    }
-}
-
-/** Says where a connector works: Voice + Chat, or Voice only (automation). */
-@Composable
-private fun SurfaceChip(voiceOnly: Boolean) {
-    val shape = RoundedCornerShape(8.dp)
-    val textColor = if (voiceOnly) AssistantTextSecondary else AssistantAccent
-    Text(
-        if (voiceOnly) "Voice only" else "Voice + Chat",
-        color = textColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(shape)
-            .background(if (voiceOnly) AssistantFieldBackground else AssistantAccent.copy(alpha = 0.14f))
-            .border(BorderStroke(1.dp, textColor.copy(alpha = 0.35f)), shape)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
-    )
-}
-
 @Composable
 private fun ConnectorCard(
     connector: Connector,
@@ -534,8 +490,6 @@ private fun ConnectorCard(
                 Text(connector.name, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                     maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 21.sp)
                 Text(subtitle, color = AssistantTextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(6.dp))
-                SurfaceChip(voiceOnly = connector.automation)
             }
             Spacer(Modifier.size(8.dp))
             when {
@@ -577,7 +531,7 @@ private val InfoById: Map<String, Info> = mapOf(
     "device_info" to Info(
         "Lets the assistant tell you things about your phone: the date and time, battery, free storage and memory, network and Wi-Fi, Bluetooth, step count and room light. It only reads and never changes anything. The internet speed test downloads about 5 MB.",
         "No Android permission.",
-        "Readings stay on the phone. They reach Gemini (or Azure OpenAI in the chat) only as part of the conversation when you ask."
+        "Readings stay on the phone. They reach Gemini only as part of the conversation when you ask."
     ),
     "device_controls" to Info(
         "Changes simple phone settings when you ask: the flashlight, screen brightness inside Ultron, volume, ringer mode, vibration, Do Not Disturb, music play, pause and skip, how long the screen stays on, and auto-rotate.",
@@ -656,27 +610,27 @@ private val InfoById: Map<String, Info> = mapOf(
     "google_sheets" to Info("Read cell values, and update or append rows in your Google Sheets.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
     "google_slides" to Info("Read your Google Slides presentations and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
     "calls" to Info(
-        "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save. It works in voice and in the chat.",
+        "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save.",
         "Contacts permission. Android asks for the Phone permission the first time a call is placed.",
         "A call is placed only when you ask. The number or name is part of the conversation."
     ),
     "messages" to Info(
-        "Sends a text message (SMS) to a number or to a contact by name as soon as you ask, with no screen to confirm on. It sends only what you said, one message per request, up to 480 characters, and at most 10 messages an hour. It refuses very short numbers, which can be paid services, and if several contacts match it asks you which one. It works in voice and in the chat.",
+        "Sends a text message (SMS) to a number or to a contact by name as soon as you ask, with no screen to confirm on. It sends only what you said, one message per request, up to 480 characters, and at most 10 messages an hour. It refuses very short numbers, which can be paid services, and if several contacts match it asks you which one.",
         "SMS permission and Contacts permission. Android asks the first time a message is sent.",
         "Your carrier may charge for SMS as usual. The recipient and the text are part of the conversation with the model."
     ),
     "apps_settings" to Info(
-        "Opens apps by name, the camera, Android settings and an app's info page, changes the wallpaper from an image link, reads or writes the clipboard and posts a notification. It works by voice only.",
+        "Opens apps by name, the camera, Android settings and an app's info page, changes the wallpaper from an image link, reads or writes the clipboard and posts a notification.",
         "No special permission. The wallpaper tool needs an internet link to an image.",
         "Clipboard text you ask the assistant to read is sent to the model."
     ),
     "navigation" to Info(
-        "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone. It works by voice only.",
+        "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone.",
         "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
         "It sends taps and gestures to your phone only. It does not read what is on the screen."
     ),
     "screen" to Info(
-        "Reads the buttons and text on the screen, taps them, types and waits for text, so the assistant can use other apps for you. It works by voice only.",
+        "Reads the buttons and text on the screen, taps them, types and waits for text, so the assistant can use other apps for you.",
         "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
         "Screen text is sent to Gemini whenever the assistant reads the screen, and it may include private information. Use it with care."
     )
@@ -720,7 +674,6 @@ private fun ConnectorDetail(
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SurfaceChip(voiceOnly = connector.automation)
                 Spacer(Modifier.weight(1f))
                 when {
                     reconnect -> Pill(if (connector.kind is Kind.Local) "Repair" else "Reconnect", filled = true, onClick = onConnect)
@@ -729,11 +682,6 @@ private fun ConnectorDetail(
                 }
             }
             DetailSection("About", info?.about ?: connector.description)
-            DetailSection(
-                "Works in",
-                if (connector.automation) "Voice only. Automation connectors act on your phone, so they never run from the typed chat."
-                else "Voice and the typed chat."
-            )
             DetailSection("Runs on", info?.runsOn ?: "Your phone")
             info?.let {
                 DetailSection("What it needs", it.needs)

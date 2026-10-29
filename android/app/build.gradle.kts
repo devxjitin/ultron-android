@@ -27,9 +27,6 @@ val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
 // Base URL (with its access token) of the Google Workspace MCP server on AWS that the Google connectors talk to.
 // Add: GOOGLE_MCP_URL=https://...  to android/local.properties.
 val googleMcpUrl: String = localProperties.getProperty("GOOGLE_MCP_URL", "")
-// Azure OpenAI resource used by the "Azure API key" chat option (the key itself is entered in-app).
-// Add: AZURE_ENDPOINT=https://<resource>.openai.azure.com  to android/local.properties.
-val azureEndpoint: String = localProperties.getProperty("AZURE_ENDPOINT", "")
 // URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
@@ -70,7 +67,6 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
         buildConfigField("String", "GOOGLE_MCP_URL", "\"$googleMcpUrl\"")
-        buildConfigField("String", "AZURE_ENDPOINT", "\"$azureEndpoint\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
     }

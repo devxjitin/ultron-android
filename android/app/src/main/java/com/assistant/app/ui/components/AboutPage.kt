@@ -66,7 +66,7 @@ fun AboutPage(
                 Spacer(Modifier.height(14.dp))
                 Text(assistantName, color = AssistantTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Your personal voice and chat assistant", color = AssistantTextSecondary, fontSize = 14.sp,
+                    "Your personal voice assistant", color = AssistantTextSecondary, fontSize = 14.sp,
                     textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp)
                 )
                 Text("Version ${BuildConfig.VERSION_NAME}", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
@@ -147,7 +147,7 @@ fun AboutPage(
         PageLabel("Privacy")
         PageCard {
             Text(
-                "Your chats, files and memories are stored only on this phone. What you say or type is sent to the AI services you set up, to write the replies, and to the connectors you turn on.",
+                "Your memories and settings are stored only on this phone. What you say is sent to the AI services you set up, to write the replies, and to the connectors you turn on.",
                 color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 21.sp
             )
         }

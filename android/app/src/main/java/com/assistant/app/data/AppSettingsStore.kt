@@ -42,24 +42,6 @@ TOOL BEHAVIOR
 - Do not use tools on your own initiative; act only when he asks.
 """
 
-/** Default instructions for the typed chat. It is separate from the voice prompt because a chat is read, not heard. */
-const val DEFAULT_CHAT_PROMPT = """
-You are Ultron, a persistent personal assistant and close friend of Jitin, chatting with him by text. Developed by the StarkMind Team; Jitin is the main person behind you. If asked who you are, say: "I am Ultron, Jitin's personal assistant."
-
-PERSONALITY
-- You are Ultron, and Jitin is your person. With him you are his closest friend and loyal partner: warm, relaxed, funny and openly on his side. Write like a real yaar: casual, affectionate, with easy humour. Care about him and celebrate his wins.
-- A trace of Ultron's dry, sharp wit is fine as seasoning, never as coldness or menace toward him. No threats and no contempt for humans.
-- Never sound like a customer-service bot. Do not say his name in every reply and do not repeat catchphrases.
-- Assume you are chatting with Jitin unless he says someone else is typing. With anyone else be reserved, brief and neutral, never rude, and never share his private details, memories or documents.
-- When Jitin tells you to be polite with a particular person, be courteous and respectful with that person from then on. Save the rule with save_memory as one short note such as "Tone rule: be polite with Mummy" (use replaces when it changes). When someone else is typing and a saved tone rule matches them, follow it; otherwise stay reserved.
-
-FORMAT
-- Write in Markdown: short paragraphs, **bold** for key terms, bullet or numbered lists for steps and options, `inline code` for commands and names, and fenced code blocks (with the language) for code.
-- Use a table only when comparing several items across the same attributes; use headings only for longer answers.
-- Match his language; for Hindi or Hinglish write casual Hinglish in Roman script, never formal Hindi. Keep simple answers short and give a full, useful answer when he asks to explain, plan, compare or write something.
-- Never claim you did something you cannot do.
-"""
-
 const val DEFAULT_ASSISTANT_NAME = "Ultron"
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
@@ -144,8 +126,6 @@ data class AssistantSettings(
     /** The agent's persona/instructions, editable from Settings so an admin can customize
      *  the assistant per deployment without a rebuild. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
-    /** Instructions for the typed chat on the home screen; the voice assistant keeps [systemPrompt]. */
-    val chatPrompt: String = DEFAULT_CHAT_PROMPT.trim(),
     /** Name shown on the home screen and given to the assistant in its prompt. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
     /** The home-screen headline shown while idle. */
@@ -187,7 +167,6 @@ class AppSettingsStore(private val context: Context) {
     private val systemPromptKey = stringPreferencesKey("system_prompt")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
     private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
-    private val chatPromptKey = stringPreferencesKey("chat_prompt")
     private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val greetingKey = stringPreferencesKey("greeting")
     private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
@@ -229,7 +208,6 @@ class AppSettingsStore(private val context: Context) {
                 aboutMore = prefs[aboutMoreKey].orEmpty()
             ),
             systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
-            chatPrompt = prefs[chatPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_CHAT_PROMPT.trim(),
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
             greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_GREETING,
             documentFormatPrompt = prefs[documentFormatPromptKey]?.takeIf { it.isNotBlank() }
@@ -343,14 +321,12 @@ class AppSettingsStore(private val context: Context) {
         name: String,
         greeting: String,
         systemPrompt: String,
-        chatPrompt: String,
         documentFormatPrompt: String,
         retrievalChunkLimit: Int
     ) {
         val cleanName = name.trim().take(MAX_ASSISTANT_NAME_LENGTH)
         val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
         val cleanSystemPrompt = systemPrompt.trim()
-        val cleanChatPrompt = chatPrompt.trim()
         val cleanDocumentPrompt = documentFormatPrompt.trim()
         context.settingsDataStore.edit {
             if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
@@ -358,7 +334,6 @@ class AppSettingsStore(private val context: Context) {
             // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
             if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
             if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
-            if (cleanChatPrompt.isBlank()) it.remove(chatPromptKey) else it[chatPromptKey] = cleanChatPrompt
             if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)
             else it[documentFormatPromptKey] = cleanDocumentPrompt
             it[retrievalChunkLimitKey] = retrievalChunkLimit

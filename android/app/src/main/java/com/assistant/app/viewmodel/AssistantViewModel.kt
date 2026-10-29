@@ -14,18 +14,9 @@ import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
 import com.assistant.app.audio.MicStreamer
 import com.assistant.app.data.ApiKeyStore
-import com.assistant.app.data.AzureConfig
-import com.assistant.app.data.AzureMode
-import com.assistant.app.data.NimConfig
-import com.assistant.app.data.nimChatModels
 import com.assistant.app.data.AppSettingsStore
-import com.assistant.app.data.ChatAttachmentStore
-import com.assistant.app.data.ChatHistoryStore
 import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
-import com.assistant.app.data.AttachmentRef
-import com.assistant.app.data.LibraryItem
-import com.assistant.app.data.libraryCopies
 import com.assistant.app.data.Personalization
 import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
@@ -44,7 +35,6 @@ import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
-import com.assistant.app.data.formatChatsAsText
 import com.assistant.app.data.memoriesForPrompt
 import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.GoogleService
@@ -64,17 +54,11 @@ import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.data.RagDocumentStore
 import com.assistant.app.data.RagSearchEngine
-import com.assistant.app.network.ChatAttachment
-import com.assistant.app.network.ChatStreamListener
-import com.assistant.app.network.OpenAiChatClient
-import com.assistant.app.network.GeminiChatClient
 import com.assistant.app.network.ToolDeclarations
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
-import com.assistant.app.network.ChatTurnMessage
 import com.assistant.app.network.GeminiEmbeddingClient
 import com.assistant.app.network.GeminiLiveClient
-import com.assistant.app.network.FirebaseChatClient
 import com.assistant.app.network.FirebaseGemini
 import com.assistant.app.network.FirebaseLiveClient
 import com.assistant.app.network.LiveClient
@@ -114,14 +98,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
         val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
-        /** Most recent chat messages sent to the model as context for a typed reply. */
-        private const val MAX_CHAT_CONTEXT_MESSAGES = 24
-        /** About 15k tokens of conversation text per request; older messages beyond it are left out. */
-        private const val MAX_CHAT_CONTEXT_CHARS = 60_000
-        /** Attached files sent with one request stay under this many bytes (the API limit is about 20 MB with encoding). */
-        private const val MAX_CHAT_ATTACHMENT_BYTES = 12 * 1024 * 1024
-        private const val TITLE_REFRESH_EVERY_TURNS = 3
-        private const val MAX_CHAT_TITLE_CHARS = 40
         /** One quick retry for transient knowledge-search failures; keeps worst case well under the 15 s model watchdog. */
         private const val SEARCH_RETRY_LIMIT = 1
         private const val SEARCH_RETRY_DELAY_MS = 500L
@@ -165,13 +141,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private val conversationStore = ConversationStore(application)
-    private val chatHistoryStore = ChatHistoryStore(application)
-    private val chatAttachmentStore = ChatAttachmentStore(application)
-    private var chatAttachmentsPruned = false
-    /** Identifies the saved chat the current session's turns are appended to; set once per
-     *  session (not on auto-reconnect) so a reconnect continues the same chat. */
-    private var currentChatSessionId: String? = null
-    private var currentChatStartedAtMillis = 0L
     private val apiKeyStore = ApiKeyStore(application)
     private val settingsStore = AppSettingsStore(application)
     private val memoryStore = MemoryStore(application)
@@ -346,26 +315,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // .catch on each -- a DataStore read failure (corrupted file, storage unavailable) would
         // otherwise escape this collector uncaught and crash the app; logging and letting that
         // one piece of state go stale is far better than taking the whole session down with it.
-        viewModelScope.launch {
-            chatHistoryStore.sessions
-                .catch { e -> Log.e("AssistantError", "Failed to read chat history", e) }
-                .collect { sessions ->
-                    _uiState.update { it.copy(chatSessions = sessions) }
-                    // Once per launch, drop saved files of chats that no longer exist.
-                    if (!chatAttachmentsPruned) {
-                        chatAttachmentsPruned = true
-                        launch(Dispatchers.IO) {
-                            // An unreadable history looks empty; never delete files on that basis.
-                            if (chatHistoryStore.isReadable()) {
-                                chatAttachmentStore.prune(sessions.map { it.id }.toSet())
-                                chatAttachmentStore.pruneUnreferenced(
-                                    sessions.flatMap { s -> s.turns.flatMap { t -> t.attachments.map { it.path } } }.toSet()
-                                )
-                            }
-                        }
-                    }
-                }
-        }
         // A session that ends in an error never reaches stopSession, so its time is counted when the error appears.
         viewModelScope.launch {
             _uiState.map { it.voiceState }.distinctUntilChanged().collect { if (it == VoiceState.ERROR) recordVoiceUsage() }
@@ -389,16 +338,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             val (resolvedKey, embeddingKey) = withContext(Dispatchers.IO) {
                 resolveApiKey() to apiKeyStore.getEmbeddingApiKey().orEmpty()
             }
-            val azureConfig = withContext(Dispatchers.IO) { apiKeyStore.getAzureConfig() }
-            val nimConfig = withContext(Dispatchers.IO) { apiKeyStore.getNimConfig() }
             keysLoaded = true
             _uiState.update {
                 it.copy(
                     hasApiKey = hasGeminiAccess(),
                     currentApiKey = resolvedKey,
-                    currentEmbeddingApiKey = embeddingKey,
-                    azure = azureConfig,
-                    nim = nimConfig
+                    currentEmbeddingApiKey = embeddingKey
                 )
             }
             prewarmIfPossible()
@@ -516,408 +461,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             knowledgeDocumentError = null, promptGenerationError = null) }
     }
 
-    // ---------------------------------------------------------------- typed chat (home screen)
-
-    private var chatJob: Job? = null
-    /** Identifies the live chat request; New chat / Open chat bump it so an old request cannot touch newer state. */
-    private var chatRequestSeq = 0L
-    private var chatMessageId = 0L
-    private var textChatSessionId: String? = null
-    private var textChatStartedAtMillis = 0L
-
-    /** Sends a typed message (with any attached files) and streams the reply. The chat can use cloud connectors only. */
-    fun onChatSend(text: String, attachments: List<ChatAttachment> = emptyList()): Boolean {
-        val message = text.trim()
-        if ((message.isEmpty() && attachments.isEmpty()) || _uiState.value.isChatSending) return false
-        val apiKey = resolveApiKey()
-        val nim = _uiState.value.nim.takeIf { it.isActive }
-        val azure = _uiState.value.azure.takeIf { it.isActive && nim == null }
-        if (azure == null && nim == null && !hasGeminiAccess()) {
-            showToast("Add a Gemini, Azure or NVIDIA API key in Developer settings first.", AppNotificationType.ERROR)
-            return false
-        }
-        if (overDailyBudget()) {
-            showToast("Today's token budget is used up. Raise or remove it on the Usage page to keep chatting.", AppNotificationType.ERROR)
-            return false
-        }
-        val userMessage = ChatMessage(++chatMessageId, fromUser = true, text = message, attachments = attachments)
-        val replyId = ++chatMessageId
-        val history = chatContext(_uiState.value.chatMessages + userMessage)
-        // Messages that no longer fit are not dropped without a trace: a short reminder of them goes into the instruction.
-        val earlier = earlierDigest(_uiState.value.chatMessages, history.size - 1)
-        _uiState.update {
-            it.copy(
-                chatMessages = it.chatMessages + userMessage + ChatMessage(replyId, fromUser = false, text = ""),
-                isChatSending = true
-            )
-        }
-        fun updateReply(change: (ChatMessage) -> ChatMessage) = _uiState.update { state ->
-            state.copy(chatMessages = state.chatMessages.map { if (it.id == replyId) change(it) else it })
-        }
-        val requestId = ++chatRequestSeq
-        chatJob = viewModelScope.launch {
-            // What the reader sees while the first words are still on their way.
-            val statusJob = launch {
-                for ((delayMs, label) in chatWaitingStatuses(attachments)) {
-                    delay(delayMs)
-                    updateReply { if (it.text.isEmpty() && it.toolCalls.isEmpty()) it.copy(status = label) else it }
-                }
-            }
-            val incoming = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.UNLIMITED)
-            // The model sends text in bursts; this hands it to the screen in small batches instead of one update per fragment.
-            val revealer = launch {
-                val pending = StringBuilder()
-                val shown = StringBuilder()
-                while (true) {
-                    while (true) {
-                        val next = incoming.tryReceive().getOrNull() ?: break
-                        pending.append(next)
-                    }
-                    if (pending.isEmpty()) {
-                        val next = incoming.receiveCatching()
-                        if (next.isClosed) break
-                        pending.append(next.getOrNull().orEmpty())
-                        continue
-                    }
-                    // Whatever has arrived is shown at once, at most every 40 ms, so a long reply never lags behind the model.
-                    shown.append(pending)
-                    pending.setLength(0)
-                    val visible = shown.toString()
-                    updateReply { it.copy(text = visible, status = null) }
-                    delay(40)
-                }
-            }
-            var usedInput = 0L
-            var usedOutput = 0L
-            try {
-                val settings = settingsStore.settings.first()
-                val tools = chatToolDeclarations(settings)
-                val hasTools = tools.length() > 1 // the first is the knowledge search, not an online tool
-                if (settings.memoryEnabled) ToolDeclarations.memory().forEach { tools.put(it) }
-                SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { tools.put(ToolDeclarations.skill(it)) }
-                val instruction = KnowledgeBaseProvider.buildChatInstruction(
-                    settings.chatPrompt,
-                    if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                    hasTools = hasTools,
-                    canRemember = settings.memoryEnabled,
-                    style = settings.personalization.instruction(forVoice = false)
-                ) + earlier
-                val chatListener = object : ChatStreamListener {
-                    override suspend fun onText(delta: String) {
-                        incoming.send(delta)
-                    }
-
-                    override suspend fun onUsage(inputTokens: Int, outputTokens: Int) {
-                        usedInput += inputTokens
-                        usedOutput += outputTokens
-                    }
-
-                    override suspend fun onToolStart(index: Int, name: String) {
-                        recordUsage(UsageDay("", toolCalls = 1))
-                        updateReply { it.copy(status = null, toolCalls = it.toolCalls + ChatToolCall(index, toolDisplayName(name), ChatToolState.RUNNING)) }
-                    }
-
-                    override suspend fun onToolEnd(index: Int, ok: Boolean) {
-                        val state = if (ok) ChatToolState.DONE else ChatToolState.FAILED
-                        updateReply { it.copy(toolCalls = it.toolCalls.map { call -> if (call.index == index) call.copy(state = state) else call }) }
-                    }
-                }
-                val reply = if (nim != null) {
-                    OpenAiChatClient.nvidia(nim).stream(instruction, history, tools, ::runChatTool, chatListener)
-                } else if (azure != null) {
-                    OpenAiChatClient.azure(azure, BuildConfig.AZURE_ENDPOINT).stream(instruction, history, tools, ::runChatTool, chatListener)
-                } else if (usesFirebase()) {
-                    FirebaseChatClient().stream(instruction, history, tools, ::runChatTool, chatListener)
-                } else {
-                    GeminiChatClient(apiKey).stream(instruction, history, tools, ::runChatTool, chatListener)
-                }
-                incoming.close()
-                revealer.join()
-                statusJob.cancel()
-                if (requestId != chatRequestSeq) {
-                    // The chat was replaced while this request ran: keep the usage, drop the reply.
-                    recordUsage(chatTokens(usedInput, usedOutput))
-                } else if (reply.isBlank()) {
-                    updateReply { it.copy(text = "I have nothing to say to that. Try asking another way.", status = null, isError = true) }
-                } else {
-                    saveChatTurn(message, reply.trim(), attachments)
-                    recordUsage(chatTokens(usedInput, usedOutput, messages = 1))
-                }
-            } catch (e: CancellationException) {
-                // Tokens already billed for a cancelled reply still count.
-                if (usedInput + usedOutput > 0) recordUsage(chatTokens(usedInput, usedOutput))
-                throw e
-            } catch (e: Exception) {
-                if (usedInput + usedOutput > 0) recordUsage(chatTokens(usedInput, usedOutput))
-                incoming.close()
-                revealer.cancel()
-                statusJob.cancel()
-                val shownText = _uiState.value.chatMessages.firstOrNull { it.id == replyId }?.text.orEmpty()
-                val problem = UserFacingError.forThrowable("Chat", e)
-                // Keep what already arrived and say what went wrong after it.
-                updateReply { it.copy(text = if (shownText.isBlank()) problem else shownText + "\n\n" + problem, status = null, isError = true) }
-            } finally {
-                if (requestId == chatRequestSeq) _uiState.update { it.copy(isChatSending = false) }
-            }
-        }
-        return true
-    }
-
-    /** Status lines shown, with the delay before each, while a reply has not started: files get a longer, Claude-style progression. */
-    private fun chatWaitingStatuses(attachments: List<ChatAttachment>): List<Pair<Long, String>> {
-        if (attachments.isEmpty()) return listOf(0L to "Thinking…")
-        val kind = when {
-            attachments.all { it.isImage } -> if (attachments.size == 1) "image" else "images"
-            attachments.all { it.isPdf } -> if (attachments.size == 1) "PDF" else "PDFs"
-            attachments.size == 1 -> "file"
-            else -> "files"
-        }
-        return listOf(
-            0L to "Uploading $kind…",
-            1_200L to "Analysing $kind…",
-            3_500L to "Reading through the details…",
-            6_000L to "Thinking…"
-        )
-    }
-
-    /** The chat gets the cloud connectors and the phone connectors that are not voice-only (automation stays in voice). */
-    private fun chatToolDeclarations(settings: AssistantSettings): JSONArray {
-        val declarations = JSONArray()
-        declarations.put(ToolDeclarations.knowledgeSearch())
-        DeviceTool.entries.filter { it in PhoneConnectors.chatTools && it in settings.enabledDeviceTools }
-            .forEach { declarations.put(ToolDeclarations.device(it)) }
-        if (settings.githubLogin.isNotEmpty()) {
-            settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it, withOriginalSchema = true)) }
-        }
-        settings.enabledGoogleTools()
-            .forEach { (service, tool) -> declarations.put(ToolDeclarations.mcp(tool, prefix = service.toolPrefix, withOriginalSchema = true)) }
-        return declarations
-    }
-
-    /** Searches the saved knowledge documents for the typed chat; one retry on a transient failure. */
-    private suspend fun runChatKnowledgeSearch(args: JSONObject): String {
-        val query = args.optString("query").trim().take(MAX_SEARCH_QUERY_CHARS)
-        if (query.isEmpty()) return KnowledgeToolResponse.invalidQuery()
-        if (resolveEmbeddingApiKey().isBlank()) return KnowledgeToolResponse.notConfigured()
-        var attempt = 0
-        while (true) {
-            try {
-                return KnowledgeToolResponse.results(searchEngine().search(query, null))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val category = classifySearchFailure(e)
-                if (category == SearchFailureCategory.REINDEX_REQUIRED) startEmbeddingMigrationIfNeeded()
-                Log.w("AssistantSearch", "chat search failed category=$category error=${e.javaClass.simpleName}")
-                if (!category.transient || attempt >= SEARCH_RETRY_LIMIT) return KnowledgeToolResponse.failed(category)
-                attempt++
-                delay(SEARCH_RETRY_DELAY_MS)
-            }
-        }
-    }
-
-    private suspend fun runChatTool(name: String, args: JSONObject): String = when {
-        name == "search_knowledge_base" -> runChatKnowledgeSearch(args)
-        DeviceTool.fromFunctionName(name)?.let { it in PhoneConnectors.chatTools } == true -> runDeviceTool(DeviceTool.fromFunctionName(name)!!, args)
-        name == MEMORY_SAVE_TOOL || name == MEMORY_FORGET_TOOL -> runMemoryTool(name, args)
-        name == USE_SKILL_TOOL -> SkillRegistry.use(args.optString("name"))
-        name.startsWith(GITHUB_TOOL_PREFIX) -> runGithubTool(name.removePrefix(GITHUB_TOOL_PREFIX), args)
-        GoogleService.fromToolName(name) != null -> GoogleService.fromToolName(name)!!.let { runGoogleTool(it, name.removePrefix(it.toolPrefix), args) }
-        else -> "status=unavailable\nThat tool is not available in the text chat."
-    }
-
-    /** The recent messages as model context; attached files are kept only while they fit the request size. */
-    private fun chatContext(messages: List<ChatMessage>): List<ChatTurnMessage> {
-        var budget = MAX_CHAT_ATTACHMENT_BYTES
-        var textBudget = MAX_CHAT_CONTEXT_CHARS
-        val candidates = messages.filter { !it.isError && (it.text.isNotBlank() || it.attachments.isNotEmpty()) }
-            .takeLast(MAX_CHAT_CONTEXT_MESSAGES)
-        // Newest messages first within a text budget (the latest one always stays, cut if it alone is too long).
-        val withinBudget = ArrayList<ChatMessage>()
-        for (message in candidates.asReversed()) {
-            if (withinBudget.isNotEmpty() && message.text.length > textBudget) break
-            textBudget -= message.text.length
-            withinBudget += if (withinBudget.isEmpty() && message.text.length > MAX_CHAT_CONTEXT_CHARS)
-                message.copy(text = message.text.take(MAX_CHAT_CONTEXT_CHARS)) else message
-        }
-        // Start on a user message, so an answer is never kept without the question it answers.
-        val recent = withinBudget.asReversed().dropWhile { !it.fromUser }
-        // Newest first, so the files of the latest messages are the ones that survive the budget.
-        return recent.asReversed().map { message ->
-            val kept = message.attachments.filter { file ->
-                (file.size <= budget).also { fits -> if (fits) budget -= file.size }
-            }
-            val dropped = message.attachments.size - kept.size
-            val note = if (dropped > 0) "\n[$dropped earlier attached file(s) are no longer available]" else ""
-            ChatTurnMessage(message.fromUser, message.text + note, kept)
-        }.asReversed()
-    }
-
-    /**
-     * Replaces the user message [messageId] with [newText] and asks again: that message and every
-     * message after it are dropped (also from the saved chat), then the edited text is sent with the same files.
-     */
-    fun onChatEdit(messageId: Long, newText: String) {
-        val state = _uiState.value
-        if (state.isChatSending) return
-        val index = state.chatMessages.indexOfFirst { it.id == messageId && it.fromUser }
-        if (index < 0) return
-        val original = state.chatMessages[index]
-        val text = newText.trim()
-        if (text.isEmpty() && original.attachments.isEmpty()) return
-        val before = state.chatMessages.subList(0, index)
-        // Each saved turn is one user message with a reply that did not fail.
-        val keptTurns = before.count { !it.fromUser && !it.isError && it.text.isNotBlank() }
-        val sessionId = textChatSessionId
-        viewModelScope.launch {
-            if (sessionId != null) {
-                runCatching { chatHistoryStore.truncateTurns(sessionId, keptTurns) }
-                    .onFailure { Log.e("AssistantError", "Failed to trim chat for edit", it) }
-            }
-            _uiState.update { it.copy(chatMessages = before.toList()) }
-            onChatSend(text, original.attachments)
-        }
-    }
-
-    /** Called when the chat screen is left: keeps what was typed and attached so it is still there on return. */
-    fun onChatDraftSaved(text: String, files: List<ChatAttachment>) {
-        _uiState.update { it.copy(chatDraftText = text, chatDraftFiles = files) }
-    }
-
-    /** Shows a short message from the chat screen, for example "file too large". */
-    fun onChatNotice(message: String) = showToast(message, AppNotificationType.ERROR)
-
-    /**
-     * Another app shared a link or files to Ultron. A YouTube link opens a new chat with just the link in the message box
-     * (the YouTube app also shares the title, which is dropped); anything else goes into the current chat. Nothing is sent:
-     * the user adds whatever they want and presses send.
-     */
-    fun onShareReceived(text: String?, uris: List<android.net.Uri>) {
-        val cleanText = text?.trim()?.takeIf { it.isNotEmpty() }
-        if (cleanText == null && uris.isEmpty()) return
-        val current = _uiState.value
-        val youtubeLink = cleanText?.let { com.assistant.app.data.YouTubeLookup.findLink(it) }.takeIf { uris.isEmpty() }
-        if (youtubeLink != null) {
-            onChatNew()
-            if (DeviceTool.YOUTUBE_INFO !in current.settings.enabledDeviceTools) {
-                showToast("Connect the YouTube connector in Connectors so Ultron can read and download videos.", AppNotificationType.ERROR)
-            }
-        } else {
-            if (current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) stopSession()
-            clearAdminDrafts()
-        }
-        _uiState.update {
-            it.copy(
-                showSettings = false, showConnectors = false, showMemory = false,
-                incomingShare = IncomingShare(System.nanoTime(), youtubeLink ?: cleanText, uris)
-            )
-        }
-    }
-
-    fun onShareConsumed(id: Long) {
-        _uiState.update { if (it.incomingShare?.id == id) it.copy(incomingShare = null) else it }
-    }
-
-    /** Starts a fresh typed chat; the old one stays in History. */
-    fun onChatNew() {
-        chatRequestSeq++
-        chatJob?.cancel()
-        chatJob = null
-        textChatSessionId = null
-        val state = _uiState.value
-        if (state.voiceState != VoiceState.IDLE && state.voiceState != VoiceState.ERROR) stopSession()
-        clearAdminDrafts()
-        _uiState.update {
-            it.copy(
-                chatMessages = emptyList(), isChatSending = false, activeChatId = null,
-                showSettings = false, showConnectors = false, showMemory = false
-            )
-        }
-    }
-
-    /** Opens a saved chat on the home screen; new messages continue it. */
-    fun onOpenChat(sessionId: String, turnIndex: Int? = null) {
-        val session = _uiState.value.chatSessions.firstOrNull { it.id == sessionId } ?: return
-        chatRequestSeq++
-        chatJob?.cancel()
-        chatJob = null
-        val state = _uiState.value
-        if (state.voiceState != VoiceState.IDLE && state.voiceState != VoiceState.ERROR) stopSession()
-        textChatSessionId = session.id
-        textChatStartedAtMillis = session.startedAtMillis
-        val perTurn = sessionMessagesByTurn(session)
-        val messages = perTurn.flatten()
-        // A search result opens the chat at the exchange that matched.
-        val focus = turnIndex?.takeIf { it in perTurn.indices }?.let { perTurn.take(it).sumOf { turn -> turn.size } }
-        clearAdminDrafts()
-        _uiState.update {
-            it.copy(
-                chatMessages = messages, chatFocusIndex = focus, isChatSending = false, activeChatId = session.id,
-                showSettings = false, showConnectors = false, showMemory = false
-            )
-        }
-    }
-
-    /** The messages of a saved chat as the home screen shows them; files that are gone are left out. */
-    private fun sessionMessages(session: com.assistant.app.data.ChatSession): List<ChatMessage> = sessionMessagesByTurn(session).flatten()
-
-    fun onChatFocusConsumed() {
-        _uiState.update { it.copy(chatFocusIndex = null) }
-    }
-
-    private fun sessionMessagesByTurn(session: com.assistant.app.data.ChatSession): List<List<ChatMessage>> = session.turns.map { turn ->
-        val files = turn.attachments.mapNotNull { chatAttachmentStore.load(it) }
-        listOfNotNull(
-            (turn.userText.isNotBlank() || files.isNotEmpty()).takeIf { it }
-                ?.let { ChatMessage(++chatMessageId, fromUser = true, text = turn.userText, attachments = files) },
-            turn.assistantText.takeIf { it.isNotBlank() }?.let { ChatMessage(++chatMessageId, fromUser = false, text = it) }
-        )
-    }
-
-    /** Re-reads the open saved chat after its files changed, so the screen never holds a file that was deleted. */
-    private suspend fun reloadOpenChat() {
-        val id = textChatSessionId ?: return
-        if (_uiState.value.isChatSending) return
-        val session = chatHistoryStore.sessions.first().firstOrNull { it.id == id } ?: return
-        val messages = withContext(Dispatchers.IO) { sessionMessages(session) }
-        _uiState.update { it.copy(chatMessages = messages) }
-    }
-
-    /** Keeps each finished exchange in History, in one saved chat per typed conversation. */
-    private suspend fun saveChatTurn(userText: String, assistantText: String, attachments: List<ChatAttachment> = emptyList()) {
-        val id = textChatSessionId ?: java.util.UUID.randomUUID().toString().also {
-            textChatSessionId = it
-            textChatStartedAtMillis = System.currentTimeMillis()
-        }
-        _uiState.update { it.copy(activeChatId = id) }
-        val refs = withContext(Dispatchers.IO) { attachments.mapNotNull { chatAttachmentStore.save(id, it) } }
-        val saved = runCatching {
-            chatHistoryStore.appendTurn(id, textChatStartedAtMillis, ConversationTurn(userText, assistantText, attachments = refs))
-        }
-            .onFailure { Log.e("AssistantError", "Failed to save chat turn", it) }
-            .isSuccess
-        if (saved) viewModelScope.launch { updateChatTitle(id) }
-    }
-
-    /**
-     * Has the model name a saved chat after what the whole conversation was about, not its first
-     * question: after the first exchange, then again every third one as the topic develops.
-     */
     private fun auxiliaryUsage(purpose: String): (Int, Int) -> Unit = { inputTokens, outputTokens ->
         recordUsage(UsageDay("", inputTokens = inputTokens.toLong(), outputTokens = outputTokens.toLong(),
             purposes = mapOf(purpose to inputTokens.toLong() + outputTokens),
             modelInput = mapOf(GeminiTextClient.PRIMARY_MODEL to inputTokens.toLong()),
             modelOutput = mapOf(GeminiTextClient.PRIMARY_MODEL to outputTokens.toLong())))
     }
-
-    private fun chatTokens(input: Long, output: Long, messages: Int = 0): UsageDay {
-        val nim = _uiState.value.nim.takeIf { it.isActive }
-        val model = nim?.model ?: _uiState.value.azure.takeIf { it.isActive }?.model ?: GeminiChatClient.CHAT_MODEL
-        return UsageDay("", chatMessages = messages, inputTokens = input, outputTokens = output,
-            purposes = mapOf(UsageStore.PURPOSE_CHAT to input + output),
-            modelInput = mapOf(model to input), modelOutput = mapOf(model to output))
-    }
-
     /** Text generation for titles, personas and formatting; the tokens it uses count in Usage, under [purpose]. */
     private fun auxTextClient(apiKey: String, purpose: String) =
         GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose), useFirebase = usesFirebase())
@@ -929,36 +478,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val today = java.time.LocalDate.now().toString()
         return (_uiState.value.usageDays.firstOrNull { it.day == today }?.tokens ?: 0L) >= budget
     }
-
-    private suspend fun updateChatTitle(sessionId: String) {
-        try {
-            // Titles are written by Gemini; a chat that runs on Azure must not send its text to another provider.
-            if (_uiState.value.azure.isActive || _uiState.value.nim.isActive) return
-            if (overDailyBudget()) return
-            val session = chatHistoryStore.sessions.first().firstOrNull { it.id == sessionId } ?: return
-            val turns = session.turns.size
-            if (session.customTitle != null && turns % TITLE_REFRESH_EVERY_TURNS != 0) return
-            if (!hasGeminiAccess()) return
-            val apiKey = resolveApiKey()
-            val transcript = session.turns.takeLast(12).joinToString("\n") {
-                val files = it.attachments.joinToString(" ") { file -> "[file: ${file.name}]" }
-                "User: ${"$files ${it.userText}".trim().take(300)}\nAssistant: ${it.assistantText.take(300)}"
-            }
-            val raw = auxTextClient(apiKey, UsageStore.PURPOSE_TITLE).generateText(
-                "Write a short title (2 to 5 words) for this conversation, based on what it was about overall, " +
-                    "not just the first message. Use the language of the conversation. Reply with the title only, " +
-                    "no quotes or punctuation at the end.\n\n$transcript"
-            )
-            val title = raw.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
-                .trim().trim('"', '\'', '*', '#', '.').take(MAX_CHAT_TITLE_CHARS).trim()
-            if (title.isNotEmpty()) chatHistoryStore.setTitle(sessionId, title)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w("AssistantError", "Chat title not updated: ${e.javaClass.simpleName}")
-        }
-    }
-
     fun onSettingsTapped() = openAdminPage(AdminPage.SETTINGS)
 
     fun onDeveloperTapped() = openAdminPage(AdminPage.DEVELOPER)
@@ -966,10 +485,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onAboutTapped() = openAdminPage(AdminPage.ABOUT)
 
     fun onKnowledgeTapped() = openAdminPage(AdminPage.KNOWLEDGE)
-
-    fun onSearchTapped() = openAdminPage(AdminPage.SEARCH)
-
-    fun onLibraryTapped() = openAdminPage(AdminPage.LIBRARY)
 
     fun onPersonalizationTapped() = openAdminPage(AdminPage.PERSONALIZATION)
 
@@ -1002,7 +517,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun openAdminPage(page: AdminPage) {
         if (page == AdminPage.STORAGE) {
             refreshCacheSize()
-            refreshUnreadableChats()
         }
         val current = _uiState.value
         // Already on an admin page (Settings, Knowledge or History): switch pages directly.
@@ -1541,15 +1055,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(updateInfo = null) }
     }
 
-    /** Deletes a saved chat; if it is the one open on the home screen, that chat is cleared too. */
-    fun onDeleteChatSession(id: String) {
-        if (id == textChatSessionId || id == _uiState.value.activeChatId) onChatNew()
-        launchPersist("Chat deleted") {
-            chatHistoryStore.delete(id)
-            withContext(Dispatchers.IO) { chatAttachmentStore.deleteSession(id) }
-        }
-    }
-
     private var voiceUsageStartMs = 0L
 
     private fun recordUsage(delta: UsageDay) {
@@ -1579,28 +1084,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** A saved file of the Library, read from storage; null if it is gone. */
-    fun loadAttachment(file: AttachmentRef): ChatAttachment? = chatAttachmentStore.load(file)
-
-    /** Deletes one Library file for good (the chat keeps its text). */
-    fun onLibraryDelete(item: LibraryItem) {
-        val copies = libraryCopies(_uiState.value.chatSessions, item).ifEmpty { listOf(item.sessionId to item.file.path) }
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { copies.forEach { (_, path) -> chatAttachmentStore.delete(path) } }
-            copies.forEach { (sessionId, path) -> runCatching { chatHistoryStore.removeAttachment(sessionId, path) } }
-            if (copies.any { it.first == textChatSessionId }) reloadOpenChat()
-        }
-    }
-
-    /** Deletes every Library file; chats keep their text. */
-    fun onClearLibraryFiles() {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { chatAttachmentStore.clearAll() }
-            runCatching { chatHistoryStore.clearAllAttachments() }
-            reloadOpenChat()
-        }
-    }
-
     /** Measures the temporary files (downloaded updates, previews) the app keeps in its cache. */
     private fun refreshCacheSize() {
         viewModelScope.launch {
@@ -1609,94 +1092,21 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun refreshUnreadableChats() {
-        viewModelScope.launch {
-            val count = runCatching { chatHistoryStore.unreadableCount() }.getOrDefault(0)
-            _uiState.update { it.copy(unreadableChats = count) }
-        }
-    }
-
-    /** Shares every saved chat as a text file, so the history can be kept outside the app. */
-    fun onExportChats() {
-        viewModelScope.launch {
-            val text = withContext(Dispatchers.IO) { formatChatsAsText(chatHistoryStore.sessions.first()) }
-            shareExport("ultron-chats.txt", "text/plain", text)
-        }
-    }
-
-    /** Shares the chats that could not be read, exactly as they were stored, so they can be kept or sent for repair. */
-    fun onExportUnreadableChats() {
-        viewModelScope.launch {
-            val json = chatHistoryStore.unreadableAsJson() ?: return@launch
-            shareExport("ultron-unreadable-chats.json", "application/json", json)
-        }
-    }
-
-    fun onDiscardUnreadableChats() {
-        viewModelScope.launch {
-            runCatching { chatHistoryStore.discardUnreadable() }
-            refreshUnreadableChats()
-        }
-    }
-
-    private suspend fun shareExport(fileName: String, mime: String, content: String) {
-        val app = getApplication<Application>()
-        val uri = withContext(Dispatchers.IO) {
-            runCatching {
-                val file = java.io.File(java.io.File(app.cacheDir, "exports").apply { mkdirs() }, fileName)
-                file.writeText(content)
-                androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.updates", file)
-            }.getOrNull()
-        }
-        if (uri == null) {
-            showToast("Couldn't prepare the file.", AppNotificationType.ERROR)
-            return
-        }
-        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType(mime)
-            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
-            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        app.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-
     /** Deletes the temporary files; a finished update download is simply fetched again when needed. */
     fun onClearCache() {
         if (_uiState.value.updateDownloadProgress != null) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val updateBusy = prefetchJob?.isActive == true
-                // A just-shared export may still be read by the app it was sent to.
-                val exportCutoff = System.currentTimeMillis() - 10 * 60_000L
                 getApplication<Application>().cacheDir.listFiles()?.forEach { entry ->
                     // Leave alone what is in use: downloads and open previews hold a lease on their files.
-                    val inUse = (updateBusy && entry.name == "updates") || com.assistant.app.data.CacheLeases.isLeased(entry.name) ||
-                        (entry.name == "exports" && entry.lastModified() > exportCutoff)
+                    val inUse = (updateBusy && entry.name == "updates") || com.assistant.app.data.CacheLeases.isLeased(entry.name)
                     if (!inUse) runCatching { entry.deleteRecursively() }
                 }
             }
             downloadedUpdate = null
             refreshCacheSize()
         }
-    }
-
-    /** Deletes every saved chat and its attachments, and starts a fresh home chat. */
-    fun onClearAllChats() {
-        onChatNew()
-        launchPersist("All chats cleared") { deleteAllChats() }
-    }
-
-    /** Deletes all chats and everything the assistant remembers about the user. */
-    fun onClearChatsAndMemory() {
-        onChatNew()
-        launchPersist("Chats and memory cleared") {
-            deleteAllChats()
-            memoryStore.clear()
-            invalidateWarmSessionAndReprewarm()
-        }
-    }
-
-    private suspend fun deleteAllChats() {
-        _uiState.value.chatSessions.forEach { chatHistoryStore.delete(it.id) }
-        withContext(Dispatchers.IO) { chatAttachmentStore.prune(emptySet()) }
     }
 
     fun onDismissSettings() = onHomeTapped()
@@ -1811,63 +1221,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return deviceToolRunner.run(tool, args)
     }
 
-    /** Saves the NVIDIA NIM chat settings; switching NIM on switches Azure off, so one chat provider is in use. */
-    fun onSaveNimConfig(config: NimConfig) {
-        val clean = config.copy(apiKey = config.apiKey.trim(), model = config.model.trim())
-        viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                apiKeyStore.setNimConfig(clean) && (!clean.enabled || apiKeyStore.setAzureConfig(_uiState.value.azure.copy(mode = AzureMode.OFF)))
-            }
-            if (saved) {
-                _uiState.update { it.copy(nim = clean, azure = if (clean.enabled) it.azure.copy(mode = AzureMode.OFF) else it.azure) }
-            } else {
-                showToast("Couldn't save the NVIDIA settings. Please try again.", AppNotificationType.ERROR)
-            }
-        }
-    }
-
-    /** Fetches the chat models NVIDIA's catalog offers, for the model picker. */
-    fun onLoadNimModels() {
-        if (_uiState.value.isLoadingNimModels) return
-        _uiState.update { it.copy(isLoadingNimModels = true) }
-        viewModelScope.launch {
-            try {
-                val ids = OpenAiChatClient.nimModelIds(_uiState.value.nim.apiKey)
-                _uiState.update { it.copy(nimModels = nimChatModels(ids)) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                showToast("Couldn't load the NVIDIA model list. Check the connection and try again.", AppNotificationType.ERROR)
-            } finally {
-                _uiState.update { it.copy(isLoadingNimModels = false) }
-            }
-        }
-    }
-
-    /** Saves the Azure OpenAI chat settings on their own, apart from the other Developer fields. */
-    fun onSaveAzureConfig(config: AzureConfig) {
-        val clean = config.copy(
-            endpoint = config.endpoint.trim(), apiKey = config.apiKey.trim(), model = config.model.trim()
-        )
-        viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                apiKeyStore.setAzureConfig(clean) && (clean.mode == AzureMode.OFF || apiKeyStore.setNimConfig(_uiState.value.nim.copy(enabled = false)))
-            }
-            if (saved) {
-                _uiState.update { it.copy(azure = clean, nim = if (clean.mode != AzureMode.OFF) it.nim.copy(enabled = false) else it.nim) }
-            } else {
-                showToast("Couldn't save the Azure settings. Please try again.", AppNotificationType.ERROR)
-            }
-        }
-    }
-
     fun onSaveDeveloperChanges(
         name: String,
         greeting: String,
         apiKey: String,
         embeddingApiKey: String,
         systemPrompt: String,
-        chatPrompt: String,
         documentFormatPrompt: String,
         retrievalChunkLimit: Int
     ) {
@@ -1888,7 +1247,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             name = name,
                             greeting = greeting,
                             systemPrompt = systemPrompt,
-                            chatPrompt = chatPrompt,
                             documentFormatPrompt = documentFormatPrompt,
                             retrievalChunkLimit = retrievalChunkLimit
                         )
@@ -2224,10 +1582,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun startSession(isAutoReconnect: Boolean = false) {
         userInitiatedStop = false
-        if (!isAutoReconnect) {
-            currentChatSessionId = java.util.UUID.randomUUID().toString()
-            currentChatStartedAtMillis = System.currentTimeMillis()
-        }
 
         val apiKey = resolveApiKey()
         if (!hasGeminiAccess()) {
@@ -2788,11 +2142,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         assistantTextBuffer.clear()
 
         if (userText.isNotEmpty() || assistantText.isNotEmpty()) {
-            val chatId = currentChatSessionId ?: java.util.UUID.randomUUID().toString().also {
-                currentChatSessionId = it
-                currentChatStartedAtMillis = System.currentTimeMillis()
-            }
-            val chatStartedAt = currentChatStartedAtMillis
             viewModelScope.launch {
                 // Best-effort: a failure to persist recent history (e.g. storage full) must not
                 // crash the live conversation over what's only a "remember the last few turns"
@@ -2800,8 +2149,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 try {
                     val turn = ConversationTurn(userText, assistantText)
                     conversationStore.appendTurn(turn)
-                    chatHistoryStore.appendTurn(chatId, chatStartedAt, turn)
-                    updateChatTitle(chatId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -3262,7 +2609,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         AppForegroundService.onStopRequested = null
         AppForegroundService.onMuteRequested = null
         prewarmJob?.cancel()
-        chatJob?.cancel()
         stopSession()
         warmClient?.close()
         warmClient = null

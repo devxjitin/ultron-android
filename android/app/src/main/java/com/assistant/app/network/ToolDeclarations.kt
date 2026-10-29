@@ -10,18 +10,7 @@ import com.assistant.app.data.USE_SKILL_TOOL
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Upper limit for one typed-chat reply (thinking included), so a runaway answer cannot spend unlimited tokens. */
-internal const val CHAT_REPLY_TOKEN_CAP = 16_384
-
-/** What goes before the text of a chat request that continues [reply] after a tool call: a paragraph break, unless the reply is empty or already ends in one. */
-internal fun roundSeparator(reply: CharSequence): String = when {
-    reply.isBlank() -> ""
-    reply.endsWith("\n\n") -> ""
-    reply.endsWith("\n") -> "\n"
-    else -> "\n\n"
-}
-
-/** Function declarations in the shape Gemini expects, shared by the Live voice session and the typed chat. */
+/** Function declarations in the shape Gemini expects, used by the Live voice session. */
 object ToolDeclarations {
 
     /** A device tool. */
@@ -43,7 +32,7 @@ object ToolDeclarations {
         )
     }
 
-    /** Search over the user's saved knowledge documents (RAG), for the typed chat. */
+    /** Search over the user's saved knowledge documents (RAG). */
     fun knowledgeSearch(): JSONObject = JSONObject()
         .put("name", "search_knowledge_base")
         .put(
@@ -62,9 +51,7 @@ object ToolDeclarations {
     /** A tool from a connected MCP server, declared under a prefixed name so it cannot clash with device tools. */
     fun mcp(
         tool: McpToolSpec,
-        prefix: String = GITHUB_TOOL_PREFIX,
-        /** Chat only: also carries the tool's own JSON Schema under [ORIGINAL_SCHEMA_KEY] for providers that accept it as is. */
-        withOriginalSchema: Boolean = false
+        prefix: String = GITHUB_TOOL_PREFIX
     ): JSONObject {
         val analysis = McpSchema.analyze(tool.schema)
         val note = if (analysis.issues.isEmpty()) "" else " (Argument types are simplified for this model: ${analysis.issues.joinToString()}.)"
@@ -72,22 +59,7 @@ object ToolDeclarations {
             .put("name", prefix + tool.name)
             .put("description", tool.description.take(400) + note)
         analysis.parameters?.let { declaration.put("parameters", it) }
-        if (withOriginalSchema) {
-            runCatching { JSONObject(tool.schema).also { it.remove("\$schema") } }.getOrNull()
-                ?.takeIf { it.optString("type") == "object" }?.let { declaration.put(ORIGINAL_SCHEMA_KEY, it) }
-        }
         return declaration
-    }
-
-    /** Declarations carry the tool's own schema under this key for Azure; Gemini rejects unknown fields, so its client removes it. */
-    const val ORIGINAL_SCHEMA_KEY = "_jsonSchema"
-
-    fun withoutPrivateFields(declarations: JSONArray): JSONArray = JSONArray().also { copy ->
-        for (i in 0 until declarations.length()) {
-            val declaration = JSONObject(declarations.getJSONObject(i).toString())
-            declaration.keys().asSequence().filter { it.startsWith("_") }.toList().forEach { declaration.remove(it) }
-            copy.put(declaration)
-        }
     }
 
     /** use_skill: loads the full instructions of one skill, so unused skills never fill the prompt. */

@@ -69,7 +69,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.AssistantOptions
-import com.assistant.app.data.ChatSession
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.ui.theme.AssistantAccent
@@ -89,8 +88,6 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 /** Pages reachable from the left menu. */
 enum class NavTab(val label: String, val icon: ImageVector) {
     HOME("Assistant", AssistantIcons.Home),
-    SEARCH("Search chats", Icons.Outlined.Search),
-    LIBRARY("Library", Icons.Outlined.PhotoLibrary),
     KNOWLEDGE("Knowledge", AssistantIcons.Knowledge),
     MEMORY("Memory", Icons.Outlined.Psychology),
     SKILLS("Skills", Icons.Outlined.Bolt),
@@ -114,25 +111,9 @@ fun AppDrawerContent(
     assistantName: String,
     onSelect: (NavTab) -> Unit,
     modifier: Modifier = Modifier,
-    chats: List<ChatSession> = emptyList(),
-    activeChatId: String? = null,
-    onOpenChat: (String) -> Unit = {},
-    onDeleteChat: (String) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {}
 ) {
-    var chatToDelete by remember { mutableStateOf<ChatSession?>(null) }
-    chatToDelete?.let { chat ->
-        AlertDialog(
-            onDismissRequest = { chatToDelete = null },
-            title = { Text("Delete this chat?") },
-            text = { Text("\"${chat.title}\" will be removed for good.") },
-            confirmButton = {
-                TextButton(onClick = { onDeleteChat(chat.id); chatToDelete = null }) { Text("Delete", color = AssistantError) }
-            },
-            dismissButton = { TextButton(onClick = { chatToDelete = null }) { Text("Cancel") } }
-        )
-    }
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 18.dp)) {
         DrawerHeader(assistantName)
         Spacer(Modifier.height(20.dp))
@@ -140,19 +121,12 @@ fun AppDrawerContent(
             // Small captions group the working pages, the preferences and the app info.
             when (tab) {
                 NavTab.HOME -> return@forEach // Home has no row: back from any page returns to it.
-                NavTab.LIBRARY -> NavSection("Workspace")
+                NavTab.KNOWLEDGE -> NavSection("Workspace")
                 NavTab.PERSONALIZATION -> NavSection("Preferences")
                 NavTab.DEVELOPER -> NavSection("App")
                 else -> Unit
             }
             NavRow(tab, tab == selected) { onSelect(tab) }
-        }
-        if (chats.isNotEmpty()) {
-            NavSection("Chats")
-            chats.take(MAX_DRAWER_CHATS).forEach { chat ->
-                ChatRow(chat.title, chat.id == activeChatId && selected == NavTab.HOME,
-                    onClick = { onOpenChat(chat.id) }, onLongClick = { chatToDelete = chat })
-            }
         }
         NavSection("Appearance")
         ThemePicker(themeMode, onThemeModeChange)
@@ -186,26 +160,6 @@ private fun ThemePicker(selected: ThemeMode, onChange: (ThemeMode) -> Unit) {
             }
         }
     }
-}
-
-private const val MAX_DRAWER_CHATS = 30
-
-/** One saved chat in the menu: just its title, highlighted while it is the open chat; long-press deletes it. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChatRow(title: String, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
-    Text(
-        title,
-        color = if (selected) AssistantAccent else AssistantTextSecondary,
-        fontSize = 14.sp,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).clip(shape)
-            .then(if (selected) Modifier.background(AssistantSelectedBg, shape) else Modifier)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 12.dp, vertical = 11.dp)
-    )
 }
 
 @Composable
@@ -269,9 +223,7 @@ fun AppTopBar(
     showMenuButton: Boolean,
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = AppTopBarHeight,
-    /** When set, a "new chat" button is shown at the right end of the bar. */
-    onNewChat: (() -> Unit)? = null
+    height: Dp = AppTopBarHeight
 ) {
     Row(
         modifier.fillMaxWidth().height(height).padding(horizontal = 8.dp),
@@ -298,11 +250,6 @@ fun AppTopBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
-        if (onNewChat != null) {
-            IconButton(onClick = onNewChat) {
-                Icon(Icons.Filled.AddComment, contentDescription = "New chat", tint = AssistantTextPrimary)
-            }
-        }
         Spacer(Modifier.size(8.dp))
     }
 }

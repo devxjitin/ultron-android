@@ -42,10 +42,9 @@ private enum class UsageRange(val label: String, val days: Int) {
     TODAY("Today", 1), WEEK("7 days", 7), MONTH("30 days", 30), ALL("All time", Int.MAX_VALUE)
 }
 
-private enum class UsageMetric(val label: String) { MESSAGES("Messages"), TOKENS("Tokens"), VOICE("Voice"), TOOLS("Tools") }
+private enum class UsageMetric(val label: String) { TOKENS("Tokens"), VOICE("Voice"), TOOLS("Tools") }
 
 private fun UsageDay.value(metric: UsageMetric): Double = when (metric) {
-    UsageMetric.MESSAGES -> chatMessages.toDouble()
     UsageMetric.TOKENS -> tokens.toDouble()
     UsageMetric.VOICE -> voiceSeconds / 60.0
     UsageMetric.TOOLS -> toolCalls.toDouble()
@@ -60,7 +59,7 @@ fun UsagePage(
     onDailyBudgetChange: (Long) -> Unit = {}
 ) {
     var rangeIndex by rememberSaveable { mutableIntStateOf(UsageRange.WEEK.ordinal) }
-    var metricIndex by rememberSaveable { mutableIntStateOf(UsageMetric.MESSAGES.ordinal) }
+    var metricIndex by rememberSaveable { mutableIntStateOf(UsageMetric.TOKENS.ordinal) }
     val range = UsageRange.entries[rangeIndex]
     val metric = UsageMetric.entries[metricIndex]
     val today = remember { LocalDate.now() }
@@ -81,9 +80,8 @@ fun UsagePage(
             onSelect = { id -> rangeIndex = UsageRange.entries.first { it.name == id }.ordinal }
         )
         Spacer(Modifier.height(16.dp))
-        PageLabel("Chat")
+        PageLabel("Overview")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile("Messages", total.chatMessages.toString(), "typed chat", Modifier.weight(1f))
             StatTile("Tool calls", total.toolCalls.toString(), "all tools", Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
@@ -167,7 +165,7 @@ fun UsagePage(
         )
 
         Text(
-            "Counted on this phone only and never sent anywhere. Chat is counted in tokens, per model; voice is measured in time. Chats are named by AI automatically.",
+            "Counted on this phone only and never sent anywhere. Model use is counted in tokens, per model; voice is measured in time.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 16.dp, start = 4.dp)
         )
     }
