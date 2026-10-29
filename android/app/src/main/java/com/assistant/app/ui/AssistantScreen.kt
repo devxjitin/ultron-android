@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.assistant.app.data.MicSensitivity
 import kotlinx.coroutines.delay
+import com.assistant.app.ui.components.HomeScene
 import com.assistant.app.ui.components.VoiceRibbon
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -214,6 +215,7 @@ fun AssistantScreen(
         }
         val main: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout)) {
+        if (currentTab == NavTab.HOME) HomeScene(isDarkTheme, Modifier.fillMaxSize())
         if (currentTab == NavTab.HOME) {
             Column(Modifier.fillMaxSize().padding(top = topReserve, bottom = 112.dp)
                 .verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
