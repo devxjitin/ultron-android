@@ -421,3 +421,4 @@
 [2026-10-29 21:54] [Claude] [Add: animated day and night home scene with moon, sun, river and trees]
 [2026-10-29 21:57] [Claude] [Docs: OTA build 29888185 published, not tested on device]
 [2026-10-29 22:08] [Claude] [Update: home scene redrawn in layers with mountains, mist, reflections and textured moon]
+[2026-10-29 22:11] [Claude] [Docs: OTA build 29888199 published, not tested on device]
