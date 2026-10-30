@@ -40,36 +40,83 @@ object SkillParser {
     }
 }
 
-/** A skill as the Skills page shows it. Skills ship inside the app, so they are always on and cannot be edited. */
-data class SkillEntry(val skill: Skill)
+/** A skill as the Skills page shows it: [builtIn] ones ship with the app and are locked; the user's own can be switched off, edited or deleted. */
+data class SkillEntry(val skill: Skill, val builtIn: Boolean, val enabled: Boolean = true)
 
 /**
  * The skills available to the assistant. Only the name and description go into the system prompt;
  * the instructions are returned by [use] when the model calls use_skill, so unused skills cost almost nothing.
- * Skills are locked: they are read only from assets/skills/<name>/SKILL.md, shipped with the app. The user can view
- * them but cannot add, change, switch off or delete any, and the model has no tool that writes them.
+ * Built-in skills live in assets/skills/<name>/SKILL.md and are locked: always on, never replaced. The user adds their
+ * own on the Skills page, kept in files/skills/<name>/SKILL.md. The model has no tool that writes skills.
  */
 object SkillRegistry {
     private val _entries = MutableStateFlow<List<SkillEntry>>(emptyList())
-    /** Every skill, for the Skills page. */
+    /** Every skill, on or off, for the Skills page. */
     val entries: StateFlow<List<SkillEntry>> = _entries.asStateFlow()
 
-    fun all(): List<Skill> = _entries.value.map { it.skill }
+    private var appContext: Context? = null
+
+    /** The skills that are switched on: these are what the model sees. */
+    fun all(): List<Skill> = _entries.value.filter { it.enabled }.map { it.skill }
+
+    private fun prefs(context: Context) = context.getSharedPreferences("skills", Context.MODE_PRIVATE)
+    private fun userDir(context: Context) = File(context.filesDir, "skills")
 
     @Synchronized
     fun load(context: Context) {
         val app = context.applicationContext
-        val found = LinkedHashMap<String, Skill>()
+        appContext = app
+        val builtIn = LinkedHashMap<String, Skill>()
         runCatching {
             app.assets.list("skills")?.sorted()?.forEach { dir ->
                 runCatching { app.assets.open("skills/$dir/SKILL.md").bufferedReader().use { it.readText() } }
-                    .getOrNull()?.let { SkillParser.parse(it, dir) }?.let { found[it.name] = it }
+                    .getOrNull()?.let { SkillParser.parse(it, dir) }?.let { builtIn[it.name] = it }
             }
         }
-        // Earlier versions let the user save their own skills; those files and the old switches are no longer used.
-        runCatching { File(app.filesDir, "skills").deleteRecursively() }
-        runCatching { app.getSharedPreferences("skills", Context.MODE_PRIVATE).edit().clear().apply() }
-        _entries.value = found.values.map { SkillEntry(it) }
+        val own = userDir(app).listFiles()?.sortedBy { it.name }.orEmpty().mapNotNull { dir ->
+            runCatching { File(dir, "SKILL.md").readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }
+        }.filter { it.name !in builtIn }
+        val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty()
+        _entries.value = builtIn.values.map { SkillEntry(it, builtIn = true) } +
+            own.map { SkillEntry(it, builtIn = false, enabled = it.name !in off) }
+    }
+
+    /** Switches one of the user's skills on or off; built-in skills always stay on. */
+    @Synchronized
+    fun setEnabled(name: String, enabled: Boolean) {
+        val app = appContext ?: return
+        if (_entries.value.none { it.skill.name == name && !it.builtIn }) return
+        val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty().toMutableSet()
+        if (enabled) off.remove(name) else off.add(name)
+        prefs(app).edit().putStringSet("disabled", off).apply()
+        _entries.value = _entries.value.map { if (it.skill.name == name) it.copy(enabled = enabled) else it }
+    }
+
+    /** Saves one of the user's skills; returns an error for the page to show, or null when saved. */
+    @Synchronized
+    fun save(name: String, description: String, body: String): String? {
+        val app = appContext ?: return "Skills are not ready yet."
+        val skill = SkillParser.parse("---\nname: ${name.trim()}\ndescription: ${description.trim().replace('\n', ' ')}\n---\n${body.trim()}")
+            ?: return "Use a short lowercase name (letters, digits, - or _), a description and instructions."
+        if (_entries.value.any { it.builtIn && it.skill.name == skill.name }) return "\"${skill.name}\" is a built-in skill; choose another name."
+        val dir = File(userDir(app), skill.name)
+        val written = runCatching {
+            dir.mkdirs()
+            File(dir, "SKILL.md").writeText("---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n${skill.body}\n")
+        }
+        if (written.isFailure) return "Could not save the skill."
+        load(app)
+        return null
+    }
+
+    /** Deletes one of the user's skills; built-in skills cannot be deleted. */
+    @Synchronized
+    fun delete(name: String) {
+        val app = appContext ?: return
+        if (_entries.value.none { it.skill.name == name && !it.builtIn }) return
+        File(userDir(app), name).deleteRecursively()
+        prefs(app).edit().putStringSet("disabled", prefs(app).getStringSet("disabled", emptySet()).orEmpty() - name).apply()
+        load(app)
     }
 
     /** The lines added to the system prompt; empty when there are no skills. */

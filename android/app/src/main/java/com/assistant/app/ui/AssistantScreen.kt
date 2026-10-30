@@ -111,6 +111,9 @@ fun AssistantScreen(
     onUsageTapped: () -> Unit = {},
     onStorageTapped: () -> Unit = {},
     onSkillsTapped: () -> Unit = {},
+    onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
+    onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
+    onSkillDeleted: (String) -> Unit = {},
     onClearCache: () -> Unit = {},
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
@@ -345,7 +348,7 @@ fun AssistantScreen(
             when (uiState.adminPage) {
                 AdminPage.SKILLS -> {
                     val skills by SkillRegistry.entries.collectAsState()
-                    SkillsPage(skills, pageModifier)
+                    SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
                 }
                 AdminPage.USAGE -> UsagePage(
                     uiState.usageDays, pageModifier,
