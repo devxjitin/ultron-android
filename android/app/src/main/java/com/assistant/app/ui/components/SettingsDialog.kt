@@ -97,6 +97,7 @@ fun SettingsPage(
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
+    onOwnerNameChanged: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
     isGeneratingPrompt: Boolean,
     generatedPromptDraft: String?,
@@ -208,7 +209,7 @@ fun SettingsPage(
             when (activeBranch) {
                 0 -> GeneralSettingsContent(
                     settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
-                    onMicSensitivitySelected, onBargeInToggled
+                    onMicSensitivitySelected, onBargeInToggled, onOwnerNameChanged
                 )
                 1 -> Column {
                     SectionLabel("Identity")
@@ -800,7 +801,8 @@ private fun GeneralSettingsContent(
     onVoiceSelected: (String) -> Unit,
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
-    onBargeInToggled: (Boolean) -> Unit
+    onBargeInToggled: (Boolean) -> Unit,
+    onOwnerNameChanged: (String) -> Unit
 ) {
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
@@ -830,6 +832,20 @@ private fun GeneralSettingsContent(
             selectedId = settings.languageCode,
             onSelect = onLanguageSelected
         )
+        SettingsHeading("Your name")
+        var ownerInput by remember(settings.ownerName) { mutableStateOf(settings.ownerName) }
+        OutlinedTextField(
+            value = ownerInput,
+            onValueChange = { ownerInput = it.take(com.assistant.app.data.MAX_ASSISTANT_NAME_LENGTH) },
+            singleLine = true,
+            placeholder = { Text("How should the assistant address you?") },
+            colors = assistantTextFieldColors(),
+            keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                if (ownerInput.trim() != settings.ownerName) onOwnerNameChanged(ownerInput)
+            }),
+            modifier = Modifier.fillMaxWidth()
+        )
         SettingsHeading("Microphone sensitivity")
         ChoiceDropdown(
             options = MicSensitivity.entries.map { it.name to "${it.label}: ${micHints.getValue(it)}" },
@@ -839,6 +855,7 @@ private fun GeneralSettingsContent(
         Spacer(Modifier.height(22.dp))
         ToggleCard(
             title = "Barge-in",
+            hint = "Talk over the assistant to interrupt it. Turn off if its voice echoes back on the speaker.",
             checked = settings.bargeInEnabled, onChange = onBargeInToggled
         )
         DefaultAssistantSection()

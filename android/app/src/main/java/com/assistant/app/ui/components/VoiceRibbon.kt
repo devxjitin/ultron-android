@@ -23,7 +23,7 @@ fun ribbonColors(voiceState: VoiceState): Pair<Color, Color> = when (voiceState)
 
 /** A tapered, luminous ribbon, drawn locally and driven by real microphone/playback levels. */
 @Composable
-fun VoiceRibbon(voiceState: VoiceState, amplitude: Float, modifier: Modifier = Modifier) {
+fun VoiceRibbon(voiceState: VoiceState, amplitude: () -> Float, modifier: Modifier = Modifier) {
     val live = voiceState == VoiceState.LISTENING || voiceState == VoiceState.SPEAKING
     val (leftTarget, rightTarget) = ribbonColors(voiceState)
     val left by animateColorAsState(leftTarget, tween(900), label = "ribbonLeft")
@@ -33,7 +33,8 @@ fun VoiceRibbon(voiceState: VoiceState, amplitude: Float, modifier: Modifier = M
     val phase = motion.animateFloat(0f, (2 * PI).toFloat(),
         infiniteRepeatable(tween(6500, easing = LinearEasing)), label = "ribbonFlow")
     val level = animateFloatAsState(
-        if (live && amplitude.isFinite()) amplitude.coerceIn(0f, 1f) else 0f,
+        // Read here so only the ribbon recomposes on each level update, not the whole screen.
+        if (live) amplitude().let { if (it.isFinite()) it.coerceIn(0f, 1f) else 0f } else 0f,
         tween(160), label = "ribbonLevel"
     )
     val path = remember { Path() }

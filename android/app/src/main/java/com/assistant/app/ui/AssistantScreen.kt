@@ -1,5 +1,13 @@
 package com.assistant.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Close
@@ -138,6 +146,7 @@ fun AssistantScreen(
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
+    onOwnerNameChanged: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
     onGeneratePromptFromKnowledgeBase: () -> Unit,
     onDismissPromptGenerationError: () -> Unit,
@@ -148,6 +157,7 @@ fun AssistantScreen(
     onUploadMarkdownFile: () -> Unit,
     onDismissKnowledgeDocumentError: () -> Unit,
     onDismissToast: () -> Unit,
+    voiceLevel: () -> Float = { 0f },
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(com.assistant.app.ui.theme.AssistantBackground)) {
         val availableHeight = maxHeight
@@ -218,55 +228,185 @@ fun AssistantScreen(
         }
         val main: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout)) {
-        if (currentTab == NavTab.HOME) HomeBackground(isDarkTheme, Modifier.fillMaxSize())
-        if (currentTab == NavTab.HOME) {
-            Column(Modifier.fillMaxSize().padding(top = topReserve, bottom = 112.dp)
-                .verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                Spacer(Modifier.height(if (compact) 0.dp else availableHeight * 0.13f))
-                Text(uiState.settings.assistantName, color = AssistantTextMuted, style = MaterialTheme.typography.labelLarge,
-                    letterSpacing = 1.2.sp)
-                Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
-                when (uiState.voiceState) {
-                    VoiceState.IDLE, VoiceState.ERROR -> Text(
-                        text = uiState.settings.greeting,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light),
-                        fontSize = if (compact) 24.sp else 30.sp,
-                        lineHeight = if (compact) 32.sp else 40.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth().padding(horizontal = 28.dp)
-                    )
-                    VoiceState.CONNECTING, VoiceState.RESETTING -> Text(
-                        text = strings.justAMoment,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light),
-                        fontSize = if (compact) 24.sp else 30.sp,
-                        lineHeight = if (compact) 32.sp else 40.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth().padding(horizontal = 28.dp)
-                    )
-                    VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING ->
-                        SessionTimer(sessionStartTimeMs = sessionStartMs, compact = compact)
-                }
-                VoiceRibbon(uiState.voiceState, currentAmplitude(uiState),
-                    Modifier.widthIn(max = 900.dp).fillMaxWidth()
-                        .height(if (compact) 80.dp else (availableHeight * 0.28f).coerceIn(160.dp, 270.dp)))
-                StatusLine(uiState, strings, hasMicPermission, micPermissionPermanentlyDenied)
-                uiState.activeTool?.takeIf { uiState.voiceState != VoiceState.SPEAKING }?.let { ToolChip(it) }
-                Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
-                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    if (uiState.voiceState in setOf(VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING)) {
-                        IconButton(onClick = onMuteToggled) {
-                            Icon(
-                                imageVector = if (uiState.isMicMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                                contentDescription = if (uiState.isMicMuted) strings.unmute else strings.mute,
-                                tint = if (uiState.isMicMuted) AssistantError else AssistantTextSecondary
-                            )
+        AnimatedContent(
+            targetState = currentTab,
+            // Settings, Knowledge and Developer share one page, so switching between them keeps an unsaved draft.
+            contentKey = { if (it == NavTab.KNOWLEDGE || it == NavTab.DEVELOPER) NavTab.SETTINGS else it },
+            transitionSpec = {
+                (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 30 }) togetherWith fadeOut(tween(110))
+            },
+            modifier = Modifier.fillMaxSize(),
+            label = "page"
+        ) { tab ->
+        Box(Modifier.fillMaxSize()) {
+            if (tab == NavTab.HOME) HomeBackground(isDarkTheme, Modifier.fillMaxSize())
+            if (tab == NavTab.HOME) {
+                Column(Modifier.fillMaxSize().padding(top = topReserve, bottom = 112.dp)
+                    .verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(Modifier.height(if (compact) 0.dp else availableHeight * 0.13f))
+                    Text(uiState.settings.assistantName, color = AssistantTextMuted, style = MaterialTheme.typography.labelLarge,
+                        letterSpacing = 1.2.sp)
+                    Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
+                    when (uiState.voiceState) {
+                        VoiceState.IDLE, VoiceState.ERROR -> Text(
+                            text = uiState.settings.greeting,
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light),
+                            fontSize = if (compact) 24.sp else 30.sp,
+                            lineHeight = if (compact) 32.sp else 40.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth().padding(horizontal = 28.dp)
+                        )
+                        VoiceState.CONNECTING, VoiceState.RESETTING -> Text(
+                            text = strings.justAMoment,
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light),
+                            fontSize = if (compact) 24.sp else 30.sp,
+                            lineHeight = if (compact) 32.sp else 40.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth().padding(horizontal = 28.dp)
+                        )
+                        VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING ->
+                            SessionTimer(sessionStartTimeMs = sessionStartMs, compact = compact)
+                    }
+                    VoiceRibbon(uiState.voiceState, voiceLevel,
+                        Modifier.widthIn(max = 900.dp).fillMaxWidth()
+                            .height(if (compact) 80.dp else (availableHeight * 0.28f).coerceIn(160.dp, 270.dp)))
+                    StatusLine(uiState, strings, hasMicPermission, micPermissionPermanentlyDenied)
+                    LiveCaptions(uiState)
+                    uiState.activeTool?.takeIf { uiState.voiceState != VoiceState.SPEAKING }?.let { ToolChip(it) }
+                    Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                        if (uiState.voiceState in setOf(VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING)) {
+                            IconButton(onClick = onMuteToggled) {
+                                Icon(
+                                    imageVector = if (uiState.isMicMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                                    contentDescription = if (uiState.isMicMuted) strings.unmute else strings.mute,
+                                    tint = if (uiState.isMicMuted) AssistantError else AssistantTextSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
+
+            if (tab == NavTab.MEMORY) {
+                MemoryPage(
+                    memories = uiState.memories,
+                    enabled = uiState.settings.memoryEnabled,
+                    onEnabledChange = onMemoryEnabledToggled,
+                    onAdd = onAddMemory,
+                    onUpdate = onUpdateMemory,
+                    onDelete = onDeleteMemory,
+                    onClearAll = onClearMemory,
+                    modifier = Modifier.padding(top = topReserve),
+                    removedByAssistant = uiState.removedMemories,
+                    onRestore = onRestoreMemory
+                )
+            }
+
+            if (tab == NavTab.CONNECTORS) {
+                ConnectorsPage(
+                    issues = uiState.connectorIssues,
+                    githubLogin = uiState.settings.githubLogin,
+                    deviceCode = uiState.githubDeviceCode,
+                    enabledTools = uiState.settings.enabledDeviceTools,
+                    onStartGithubSignIn = onStartGithubSignIn,
+                    onCancelGithubSignIn = onCancelGithubSignIn,
+                    onDisconnectGithub = onDisconnectGithub,
+                    githubTools = uiState.settings.githubTools,
+                    onToolsEnabled = onConnectorToolsEnabled,
+                    onRequestPermissions = onRequestConnectorPermissions,
+                    modifier = Modifier.padding(top = topReserve)
+                )
+            }
+
+            if (tab in listOf(NavTab.SKILLS, NavTab.USAGE, NavTab.STORAGE, NavTab.ABOUT)) {
+                val pageModifier = Modifier.padding(top = topReserve)
+                when (tab) {
+                    NavTab.SKILLS -> {
+                        val skills by SkillRegistry.entries.collectAsState()
+                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
+                    }
+                    NavTab.USAGE -> UsagePage(
+                        uiState.usageDays, pageModifier,
+                        dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged
+                    )
+                    NavTab.STORAGE -> StoragePage(
+                        memoryCount = uiState.memories.size,
+                        knowledgeCount = uiState.knowledgeDocuments.size,
+                        cacheBytes = uiState.cacheBytes,
+                        hasUsage = uiState.usageDays.isNotEmpty(),
+                        onClearCache = onClearCache,
+                        onClearMemory = onClearMemory,
+                        onResetUsage = onResetUsage,
+                        modifier = pageModifier
+                    )
+                    NavTab.ABOUT -> AboutPage(
+                        assistantName = uiState.settings.assistantName,
+                        updateState = uiState.updateCheckState,
+                        availableUpdate = uiState.availableUpdate,
+                        lastCheckedAt = uiState.lastUpdateCheckAt,
+                        updateError = uiState.updateCheckError,
+                        downloadProgress = uiState.updateDownloadProgress,
+                        onCheckForUpdates = onCheckForUpdates,
+                        onUpdateNow = onUpdateNow,
+                        modifier = pageModifier
+                    )
+                    else -> Unit
+                }
+            }
+
+            if (tab in listOf(NavTab.SETTINGS, NavTab.KNOWLEDGE, NavTab.DEVELOPER)) {
+                SettingsPage(
+                    modifier = Modifier.padding(top = topReserve),
+                    page = uiState.adminPage,
+                    currentApiKey = uiState.currentApiKey,
+                    currentEmbeddingApiKey = uiState.currentEmbeddingApiKey,
+                    settings = uiState.settings,
+                    onLiveModelSelected = onLiveModelSelected,
+                    onVoiceSelected = onVoiceSelected,
+                    onLanguageSelected = onLanguageSelected,
+                    onMicSensitivitySelected = onMicSensitivitySelected,
+                    onBargeInToggled = onBargeInToggled,
+                    onOwnerNameChanged = onOwnerNameChanged,
+                    onClearApiKey = onClearApiKey,
+                    onClearEmbeddingApiKey = onClearEmbeddingApiKey,
+                    onSaveDeveloperChanges = onSaveDeveloperChanges,
+                    isSavingDeveloper = uiState.isSavingDeveloperSettings,
+                    isGeneratingPrompt = uiState.isGeneratingPrompt,
+                    generatedPromptDraft = uiState.generatedPromptDraft,
+                    promptGenerationError = uiState.promptGenerationError,
+                    onGeneratePromptFromKnowledgeBase = onGeneratePromptFromKnowledgeBase,
+                    onDismissPromptGenerationError = onDismissPromptGenerationError,
+                    knowledgeDocuments = uiState.knowledgeDocuments,
+                    isSavingKnowledgeDocument = uiState.isSavingKnowledgeDocument,
+                    knowledgePreparationStage = uiState.knowledgePreparationStage,
+                    savingKnowledgeDocumentTarget = uiState.savingKnowledgeDocumentTarget,
+                    uploadedChunks = uiState.uploadedChunks,
+                    totalChunks = uiState.totalChunks,
+                    knowledgeDocumentError = uiState.knowledgeDocumentError,
+                    onAddKnowledgeDocument = onAddKnowledgeDocument,
+                    onUpdateKnowledgeDocument = onUpdateKnowledgeDocument,
+                    onDeleteKnowledgeDocument = onDeleteKnowledgeDocument,
+                    knowledgeStoreCorrupt = uiState.knowledgeStoreCorrupt,
+                    onResetKnowledge = onResetKnowledge,
+                    onUploadMarkdownFile = onUploadMarkdownFile,
+                    onDismissKnowledgeDocumentError = onDismissKnowledgeDocumentError,
+                    onDismiss = onDismissSettings,
+                    onDirtyChanged = { settingsDirty = it },
+                    pendingNavigation = pendingNav,
+                    onPendingNavigationHandled = { pendingNav = null }
+                )
+            }
+
+        }
         }
 
-        if (currentTab == NavTab.HOME) {
+        AnimatedVisibility(
+            visible = currentTab == NavTab.HOME,
+            enter = fadeIn(tween(220)),
+            exit = fadeOut(tween(120)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
             MicButton(
                 voiceState = uiState.voiceState,
                 onClick = {
@@ -277,7 +417,7 @@ fun AssistantScreen(
                     }
                 },
                 accent = true,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp)
+                modifier = Modifier.padding(bottom = 28.dp)
             )
         }
 
@@ -291,21 +431,6 @@ fun AssistantScreen(
             isDarkTheme = isDarkTheme,
             modifier = Modifier.align(Alignment.TopCenter)
         )
-
-        if (uiState.showMemory) {
-            MemoryPage(
-                memories = uiState.memories,
-                enabled = uiState.settings.memoryEnabled,
-                onEnabledChange = onMemoryEnabledToggled,
-                onAdd = onAddMemory,
-                onUpdate = onUpdateMemory,
-                onDelete = onDeleteMemory,
-                onClearAll = onClearMemory,
-                modifier = Modifier.padding(top = topReserve),
-                removedByAssistant = uiState.removedMemories,
-                onRestore = onRestoreMemory
-            )
-        }
 
         uiState.updateInfo?.let { update ->
             val progress = uiState.updateDownloadProgress
@@ -324,100 +449,6 @@ fun AssistantScreen(
                 },
                 confirmButton = { TextButton(onClick = onInstallUpdate, enabled = progress == null) { Text("Update") } },
                 dismissButton = { TextButton(onClick = onDismissUpdate, enabled = progress == null) { Text("Later") } }
-            )
-        }
-
-        if (uiState.showConnectors) {
-            ConnectorsPage(
-                issues = uiState.connectorIssues,
-                githubLogin = uiState.settings.githubLogin,
-                deviceCode = uiState.githubDeviceCode,
-                enabledTools = uiState.settings.enabledDeviceTools,
-                onStartGithubSignIn = onStartGithubSignIn,
-                onCancelGithubSignIn = onCancelGithubSignIn,
-                onDisconnectGithub = onDisconnectGithub,
-                githubTools = uiState.settings.githubTools,
-                onToolsEnabled = onConnectorToolsEnabled,
-                onRequestPermissions = onRequestConnectorPermissions,
-                modifier = Modifier.padding(top = topReserve)
-            )
-        }
-
-        if (uiState.showSettings) {
-            val pageModifier = Modifier.padding(top = topReserve)
-            when (uiState.adminPage) {
-                AdminPage.SKILLS -> {
-                    val skills by SkillRegistry.entries.collectAsState()
-                    SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
-                }
-                AdminPage.USAGE -> UsagePage(
-                    uiState.usageDays, pageModifier,
-                    dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged
-                )
-                AdminPage.STORAGE -> StoragePage(
-                    memoryCount = uiState.memories.size,
-                    knowledgeCount = uiState.knowledgeDocuments.size,
-                    cacheBytes = uiState.cacheBytes,
-                    hasUsage = uiState.usageDays.isNotEmpty(),
-                    onClearCache = onClearCache,
-                    onClearMemory = onClearMemory,
-                    onResetUsage = onResetUsage,
-                    modifier = pageModifier
-                )
-                AdminPage.ABOUT -> AboutPage(
-                    assistantName = uiState.settings.assistantName,
-                    updateState = uiState.updateCheckState,
-                    availableUpdate = uiState.availableUpdate,
-                    lastCheckedAt = uiState.lastUpdateCheckAt,
-                    updateError = uiState.updateCheckError,
-                    downloadProgress = uiState.updateDownloadProgress,
-                    onCheckForUpdates = onCheckForUpdates,
-                    onUpdateNow = onUpdateNow,
-                    modifier = pageModifier
-                )
-                else -> Unit
-            }
-        }
-
-        if (uiState.showSettings && uiState.adminPage in setOf(AdminPage.SETTINGS, AdminPage.DEVELOPER, AdminPage.KNOWLEDGE)) {
-            SettingsPage(
-                modifier = Modifier.padding(top = topReserve),
-                page = uiState.adminPage,
-                currentApiKey = uiState.currentApiKey,
-                currentEmbeddingApiKey = uiState.currentEmbeddingApiKey,
-                settings = uiState.settings,
-                onLiveModelSelected = onLiveModelSelected,
-                onVoiceSelected = onVoiceSelected,
-                onLanguageSelected = onLanguageSelected,
-                onMicSensitivitySelected = onMicSensitivitySelected,
-                onBargeInToggled = onBargeInToggled,
-                onClearApiKey = onClearApiKey,
-                onClearEmbeddingApiKey = onClearEmbeddingApiKey,
-                onSaveDeveloperChanges = onSaveDeveloperChanges,
-                isSavingDeveloper = uiState.isSavingDeveloperSettings,
-                isGeneratingPrompt = uiState.isGeneratingPrompt,
-                generatedPromptDraft = uiState.generatedPromptDraft,
-                promptGenerationError = uiState.promptGenerationError,
-                onGeneratePromptFromKnowledgeBase = onGeneratePromptFromKnowledgeBase,
-                onDismissPromptGenerationError = onDismissPromptGenerationError,
-                knowledgeDocuments = uiState.knowledgeDocuments,
-                isSavingKnowledgeDocument = uiState.isSavingKnowledgeDocument,
-                knowledgePreparationStage = uiState.knowledgePreparationStage,
-                savingKnowledgeDocumentTarget = uiState.savingKnowledgeDocumentTarget,
-                uploadedChunks = uiState.uploadedChunks,
-                totalChunks = uiState.totalChunks,
-                knowledgeDocumentError = uiState.knowledgeDocumentError,
-                onAddKnowledgeDocument = onAddKnowledgeDocument,
-                onUpdateKnowledgeDocument = onUpdateKnowledgeDocument,
-                onDeleteKnowledgeDocument = onDeleteKnowledgeDocument,
-                knowledgeStoreCorrupt = uiState.knowledgeStoreCorrupt,
-                onResetKnowledge = onResetKnowledge,
-                onUploadMarkdownFile = onUploadMarkdownFile,
-                onDismissKnowledgeDocumentError = onDismissKnowledgeDocumentError,
-                onDismiss = onDismissSettings,
-                onDirtyChanged = { settingsDirty = it },
-                pendingNavigation = pendingNav,
-                onPendingNavigationHandled = { pendingNav = null }
             )
         }
 
@@ -566,5 +597,27 @@ private fun SessionTimer(sessionStartTimeMs: Long?, compact: Boolean) {
     )
 }
 
-private fun currentAmplitude(uiState: AssistantUiState): Float =
-    if (uiState.voiceState == VoiceState.SPEAKING) uiState.playbackAmplitude else uiState.micAmplitude
+/** Live transcript of the current exchange: what the user said, then what the assistant is saying. */
+@Composable
+private fun LiveCaptions(uiState: AssistantUiState) {
+    val active = uiState.voiceState == VoiceState.LISTENING || uiState.voiceState == VoiceState.PROCESSING ||
+        uiState.voiceState == VoiceState.SPEAKING
+    val show = active && (uiState.captionUser.isNotBlank() || uiState.captionAssistant.isNotBlank())
+    AnimatedVisibility(visible = show, enter = fadeIn(tween(200)), exit = fadeOut(tween(160))) {
+        Column(
+            Modifier.widthIn(max = 620.dp).fillMaxWidth().padding(horizontal = 28.dp, vertical = 12.dp).animateContentSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (uiState.captionUser.isNotBlank()) Text(
+                uiState.captionUser.trim(), color = AssistantTextMuted, style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            if (uiState.captionAssistant.isNotBlank()) Text(
+                uiState.captionAssistant.trim(), color = com.assistant.app.ui.theme.AssistantTextPrimary,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                textAlign = TextAlign.Center, maxLines = 5, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}

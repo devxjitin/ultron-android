@@ -111,6 +111,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Hard cap on one session, counted from the user's mic tap. It then stops and the user
          *  taps the mic to start again; auto-reconnects inside the cap don't extend it. */
         const val MAX_SESSION_MS = 15 * 60 * 1000L
+        private const val CAPTION_MAX_CHARS = 240
         /** How long to wait, once the user has finished speaking (local UI heuristic) or a
          *  tool response has been sent back, for the model to produce SOMETHING -- audio,
          *  another tool call, or turnComplete. The Live protocol has no server-side "I'm still
@@ -203,6 +204,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
+
+    /** Mic level while listening, playback level while speaking. Kept out of [uiState] because it changes
+     *  ~25 times a second and only the voice ribbon needs it; putting it in the state recomposed the whole screen. */
+    private val _voiceLevel = MutableStateFlow(0f)
+    val voiceLevel: StateFlow<Float> = _voiceLevel.asStateFlow()
 
     private var liveClient: LiveClient? = null
     private var micStreamer: MicStreamer? = null
@@ -483,7 +489,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (state == VoiceState.IDLE || state == VoiceState.ERROR) return
         val muted = !_uiState.value.isMicMuted
         micStreamer?.setUserMuted(muted)
-        _uiState.update { it.copy(isMicMuted = muted, micAmplitude = 0f) }
+        if (muted) _voiceLevel.value = 0f
+        _uiState.update { it.copy(isMicMuted = muted) }
     }
 
     private fun clearAdminDrafts() {
@@ -1058,6 +1065,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun onOwnerNameChanged(name: String) {
+        launchPersist(settingsAppliedMessage("Name saved")) {
+            settingsStore.setOwnerName(name)
+            invalidateWarmSessionAndReprewarm()
+        }
+    }
+
     fun onVoiceSelected(voiceName: String) {
         launchPersist(settingsAppliedMessage("Voice updated")) {
             settingsStore.setVoice(voiceName)
@@ -1542,7 +1556,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 AssistantOptions.languageLabel(settings.languageCode),
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
-                if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList()
+                if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
+                ownerName = settings.ownerName
             )
             connectLiveSession(
                 apiKey, systemInstruction, settings, KnowledgeBaseProvider.liveHistoryTurns(history),
@@ -1649,12 +1664,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     lastLoudAtMillis = SystemClock.elapsedRealtime()
                 }
                 userTextBuffer.append(text)
+                // A new user line after the assistant spoke starts a fresh caption pair.
+                _uiState.update {
+                    val fresh = it.captionAssistant.isNotEmpty()
+                    it.copy(captionUser = ((if (fresh) "" else it.captionUser) + text).takeLast(CAPTION_MAX_CHARS), captionAssistant = "")
+                }
                 resetIdleTimeout()
             }
 
             override fun onOutputTranscript(text: String) {
                 if (liveClient !== client) return
                 assistantTextBuffer.append(text)
+                _uiState.update { it.copy(captionAssistant = (it.captionAssistant + text).takeLast(CAPTION_MAX_CHARS)) }
                 resetIdleTimeout()
             }
 
@@ -1848,9 +1869,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 _uiState.update {
                     it.copy(
                         voiceState = VoiceState.ERROR,
-                        errorMessage = message,
-                        micAmplitude = 0f,
-                        playbackAmplitude = 0f
+                        errorMessage = message
                     )
                 }
             }
@@ -1874,22 +1893,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     currentState == VoiceState.ERROR -> Unit // already surfaced by onError
                     currentState == VoiceState.IDLE -> Unit // already stopped/never started streaming
                     userInitiatedStop -> _uiState.update {
-                        it.copy(voiceState = VoiceState.IDLE, micAmplitude = 0f, playbackAmplitude = 0f)
+                        it.copy(voiceState = VoiceState.IDLE)
                     }
                     !isNetworkAvailable() -> _uiState.update {
                         it.copy(
                             voiceState = VoiceState.ERROR,
-                            errorMessage = "No internet connection. Please check Wi-Fi and try again.",
-                            micAmplitude = 0f,
-                            playbackAmplitude = 0f
+                            errorMessage = "No internet connection. Please check Wi-Fi and try again."
                         )
                     }
                     consecutiveAutoReconnects >= maxAutoReconnects -> _uiState.update {
                         it.copy(
                             voiceState = VoiceState.ERROR,
-                            errorMessage = "Session kept disconnecting. Please try again.",
-                            micAmplitude = 0f,
-                            playbackAmplitude = 0f
+                            errorMessage = "Session kept disconnecting. Please try again."
                         )
                     }
                     else -> {
@@ -1897,7 +1912,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         // reconnect automatically, backing off a bit more each consecutive time.
                         consecutiveAutoReconnects++
                         _uiState.update {
-                            it.copy(voiceState = VoiceState.RESETTING, micAmplitude = 0f, playbackAmplitude = 0f)
+                            it.copy(voiceState = VoiceState.RESETTING)
                         }
                         val delayMs = reconnectBackoffMs.getOrElse(consecutiveAutoReconnects - 1) { reconnectBackoffMs.last() }
                         reconnectJob?.cancel()
@@ -1928,21 +1943,20 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.update {
                 it.copy(
                     voiceState = VoiceState.ERROR,
-                    errorMessage = "Couldn't use the microphone or speaker right now. Please try again.",
-                    micAmplitude = 0f,
-                    playbackAmplitude = 0f
+                    errorMessage = "Couldn't use the microphone or speaker right now. Please try again."
                 )
             }
             return
         }
         resetIdleTimeout()
         resetSpeechDetection()
+        _uiState.update { it.copy(captionUser = "", captionAssistant = "") }
 
         var player: AudioPlayer? = null
         val createdPlayer = AudioPlayer(
             onPlaybackAmplitude = amplitude@{ amp ->
                 if (liveClient !== client || audioPlayer !== player) return@amplitude
-                _uiState.update { it.copy(playbackAmplitude = amp) }
+                _voiceLevel.value = amp
             },
             onPlaybackIdle = playbackIdle@{
                 // AudioTrack callbacks can arrive after a reconnect or after this player was
@@ -1967,9 +1981,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 _uiState.update {
                     it.copy(
                         voiceState = VoiceState.ERROR,
-                        errorMessage = message,
-                        micAmplitude = 0f,
-                        playbackAmplitude = 0f
+                        errorMessage = message
                     )
                 }
             },
@@ -1981,9 +1993,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.update {
                 it.copy(
                     voiceState = VoiceState.ERROR,
-                    errorMessage = "Couldn't play audio right now. Please try again.",
-                    micAmplitude = 0f,
-                    playbackAmplitude = 0f
+                    errorMessage = "Couldn't play audio right now. Please try again."
                 )
             }
             return
@@ -2002,9 +2012,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 _uiState.update {
                     it.copy(
                         voiceState = VoiceState.ERROR,
-                        errorMessage = message,
-                        micAmplitude = 0f,
-                        playbackAmplitude = 0f
+                        errorMessage = message
                     )
                 }
             },
@@ -2063,7 +2071,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         userTextBuffer.clear()
         assistantTextBuffer.clear()
         _uiState.update {
-            it.copy(voiceState = VoiceState.IDLE, micAmplitude = 0f, playbackAmplitude = 0f)
+            it.copy(voiceState = VoiceState.IDLE)
         }
         // A manual stop ends this conversation -- clear the persisted history so it doesn't
         // survive into whatever the next session says.
@@ -2131,7 +2139,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     AssistantOptions.languageLabel(settings.languageCode),
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
-                    if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList()
+                    if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
+                    ownerName = settings.ownerName
                 )
 
                 if (generation != prewarmGeneration) return@launch
@@ -2254,7 +2263,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     micStreamer?.setMuted(false)
                     resetSpeechDetection()
                     audioPlayer?.clearQueueForInterruption()
-                    _uiState.update { it.copy(voiceState = VoiceState.LISTENING, playbackAmplitude = 0f) }
+                    _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
                     return@launch
                 }
             }
@@ -2285,9 +2294,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update {
             it.copy(
                 voiceState = VoiceState.ERROR,
-                errorMessage = "The assistant didn't respond in time. Please try again.",
-                micAmplitude = 0f,
-                playbackAmplitude = 0f
+                errorMessage = "The assistant didn't respond in time. Please try again."
             )
         }
     }
@@ -2300,7 +2307,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  PROCESSING so the UI doesn't look stuck while the assistant is generating a reply. */
     private fun onMicAmplitude(amp: Float) {
         if (_uiState.value.isMicMuted) return
-        _uiState.update { it.copy(micAmplitude = amp) }
+        if (_uiState.value.voiceState != VoiceState.SPEAKING) _voiceLevel.value = amp
         val now = SystemClock.elapsedRealtime()
         if (amp >= SPEECH_AMPLITUDE_THRESHOLD) {
             if (_uiState.value.voiceState == VoiceState.LISTENING ||
