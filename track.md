@@ -429,3 +429,5 @@
 [2026-10-30 14:59] [Claude] [Docs: OTA build 29889204 published, not tested on device]
 [2026-10-30 15:34] [Claude] [Add: Skills page me apni skills add/edit/off/delete; built-in locked]
 [2026-10-30 15:34] [Claude] [Docs: OTA build 29889240 published, not tested on device]
+[2026-10-30 15:50] [Claude] [Add: skill form Name/Description/Instruction with .md upload]
+[2026-10-30 15:50] [Claude] [Docs: OTA build 29889256 published, not tested on device]
