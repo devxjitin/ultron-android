@@ -434,3 +434,4 @@
 [2026-10-30 17:58] [Claude] [Add: GitHub Actions publishes OTA on voice-only push via OIDC role]
 [2026-10-30 17:59] [Claude] [Fix: CI setup-android failed on removed tools package]
 [2026-10-30 18:13] [Claude] [Fix: OIDC trust me ID-based sub; CI published OTA 29889392]
+[2026-10-30 18:16] [Claude] [Docs: PR 13 voice-only merged to main; 5 merged claude/* branches deleted]
