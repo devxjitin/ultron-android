@@ -72,7 +72,7 @@ import com.assistant.app.data.MIN_RETRIEVAL_CHUNK_LIMIT
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.data.RagDocument
 import com.assistant.app.viewmodel.ADD_DOCUMENT_TARGET_ID
-import com.assistant.app.viewmodel.AdminPage
+import com.assistant.app.viewmodel.AppPage
 import com.assistant.app.viewmodel.KnowledgePreparationStage
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
@@ -121,7 +121,7 @@ fun SettingsPage(
     onResetKnowledge: () -> Unit,
     onUploadMarkdownFile: () -> Unit,
     onDismissKnowledgeDocumentError: () -> Unit,
-    page: AdminPage,
+    page: AppPage,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     /** Reports whether the Developer draft has unsaved edits, so navigation outside this page can guard it. */
@@ -185,9 +185,9 @@ fun SettingsPage(
         if (destination != null) destination() else onDismiss()
     }
     val activeBranch = when (page) {
-        AdminPage.SETTINGS -> 0
-        AdminPage.DEVELOPER -> 1
-        AdminPage.KNOWLEDGE -> 2
+        AppPage.SETTINGS -> 0
+        AppPage.DEVELOPER -> 1
+        AppPage.KNOWLEDGE -> 2
         else -> 3
     }
     // Scoped to this page only: slightly smaller text than the app-wide typography.

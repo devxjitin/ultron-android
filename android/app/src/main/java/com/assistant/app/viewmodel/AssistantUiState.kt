@@ -5,8 +5,8 @@ import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
 
-/** Which admin page [AssistantUiState.showSettings] opens. */
-enum class AdminPage { SETTINGS, DEVELOPER, ABOUT, KNOWLEDGE, USAGE, STORAGE, SKILLS }
+/** The page on screen. Exactly one is shown at a time; HOME is the voice screen. */
+enum class AppPage { HOME, KNOWLEDGE, MEMORY, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }
@@ -31,10 +31,10 @@ enum class VoiceState {
 }
 
 data class AssistantUiState(
+    val page: AppPage = AppPage.HOME,
     val voiceState: VoiceState = VoiceState.IDLE,
     /** User pressed Mute during a session: mic audio isn't sent, the session stays open. */
     val isMicMuted: Boolean = false,
-    val showConnectors: Boolean = false,
     /** Ids of added connectors whose sign-in stopped working; Connectors shows them with Reconnect. */
     val connectorIssues: Set<String> = emptySet(),
     /** A newer build waiting on the AWS update server; shown in a dialog until installed or dismissed. */
@@ -50,7 +50,6 @@ data class AssistantUiState(
     val usageDays: List<com.assistant.app.data.UsageDay> = emptyList(),
     /** Bytes of temporary files (downloaded updates, previews) the app can clear. */
     val cacheBytes: Long = 0L,
-    val showMemory: Boolean = false,
     /** Facts the assistant remembers about the user, newest last. */
     val memories: List<MemoryItem> = emptyList(),
     /** Notes the assistant removed itself, newest last; the Memory page offers to restore them. */
@@ -62,10 +61,8 @@ data class AssistantUiState(
     val activeTool: String? = null,
     val hasApiKey: Boolean = false,
     val currentApiKey: String = "",
-    val showSettings: Boolean = false,
     /** True when the stored knowledge data cannot be decoded; the admin can reset it. */
     val knowledgeStoreCorrupt: Boolean = false,
-    val adminPage: AdminPage = AdminPage.SETTINGS,
     val settings: AssistantSettings = AssistantSettings(),
     /** User-managed knowledge documents, searched by the search_knowledge_base tool. Starts
      *  empty -- nothing ships bundled; the admin adds documents from Settings. */

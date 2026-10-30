@@ -133,7 +133,7 @@ data class AssistantSettings(
     /** Number of ranked knowledge chunks returned to the voice model per query. */
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
-    val enabledDeviceTools: Set<DeviceTool> = DeviceTool.entries.toSet(),
+    val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
     /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
     /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
     /** Tokens per day after which the app stops starting chats and automatic model work; 0 means no limit. */

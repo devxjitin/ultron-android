@@ -100,7 +100,7 @@ The home screen has a day/night button at the top right that switches between th
 
 ### Connectors
 
-Every connector is defined in code with its fixed set of tools and a **surface**: *Voice*, or *Voice only* (automation). Nothing is switched on in a fresh install. The sidebar has one place, **Connectors**, which lists every connector, connected or not, in A-Z order, with two buttons at the top:
+Every connector is defined in code with its fixed set of tools and a **surface**: *Voice*, or *Voice only* (automation). A fresh install starts with a safe set switched on (device info, device controls, alarms, apps and settings, web search, web reader, weather, phone navigation and screen control); the rest, such as calls, messages and notifications, stay off until you connect them. The sidebar has one place, **Connectors**, which lists every connector, connected or not, in A-Z order, with two buttons at the top:
 
 - **Installed** shows the Voice connectors. Connect turns a connector's tools on (and asks for the Android permission or access it needs, or the sign-in); a connected one shows Connected.
 - **Automation** shows the phone-control connectors, which are voice only.
