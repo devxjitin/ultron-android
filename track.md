@@ -427,3 +427,5 @@
 [2026-10-30 09:39] [Claude] [Refactor: Ultron prompt rewrite, Marvel persona, deduped policy, tools hidden]
 [2026-10-30 09:43] [Claude] [WIP: OTA publish failed, aws login expired; build compiles]
 [2026-10-30 14:59] [Claude] [Docs: OTA build 29889204 published, not tested on device]
+[2026-10-30 15:34] [Claude] [Add: Skills page me apni skills add/edit/off/delete; built-in locked]
+[2026-10-30 15:34] [Claude] [Docs: OTA build 29889240 published, not tested on device]
