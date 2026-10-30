@@ -28,7 +28,7 @@ fun AppIconTile(size: Dp, modifier: Modifier = Modifier) {
         // The launcher art keeps a wide safe margin for adaptive-icon masks; zoom in so the mark fills the tile.
         Image(
             painterResource(R.drawable.ic_launcher_foreground), contentDescription = null,
-            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.6f; scaleY = 1.6f }
+            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.2f; scaleY = 1.2f }
         )
     }
 }
