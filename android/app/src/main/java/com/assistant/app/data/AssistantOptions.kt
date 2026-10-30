@@ -6,22 +6,13 @@ object AssistantOptions {
     /** Fixed Gemini text model that prepares PDFs into knowledge datasets. */
     const val DATASET_MODEL = "gemini-3.5-flash-lite"
 
-    /**
-     * [extendedThinking] models need `thinkingConfig` in setup, only accept NON_BLOCKING function
-     * calls, and report real turn state in `interactionStatus` (a `turnComplete` can arrive while
-     * the model is still working, e.g. after a spoken filler before a tool call).
-     */
-    data class LiveModel(val id: String, val label: String, val extendedThinking: Boolean = false)
+    data class LiveModel(val id: String, val label: String)
 
     /** Live API models the user can choose between in Settings. */
     val liveModels: List<LiveModel> = listOf(
         LiveModel("gemini-3.8-live", "Gemini 3.8 Live"),
-        LiveModel("gemini-3.8-live-extended-thinking", "Gemini 3.8 Live (extended thinking)", extendedThinking = true),
         LiveModel("gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (preview)")
     )
-
-    /** Thinking effort sent to extended-thinking models; low keeps voice replies quick. */
-    const val EXTENDED_THINKING_LEVEL = "LOW"
 
     val defaultLiveModel: String = liveModels.first().id
 

@@ -1,7 +1,6 @@
 package com.assistant.app.ui.components
 
 import android.Manifest
-import android.app.AppOpsManager
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -98,17 +97,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.assistant.app.AssistantAccessibilityService
+import com.assistant.app.data.AccessChecks
+import com.assistant.app.data.AccessState
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.GoogleService
 import com.assistant.app.data.McpToolSpec
 import com.assistant.app.data.PhoneConnectors
-import com.assistant.app.data.Surface
 import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
@@ -128,8 +125,6 @@ private sealed interface Kind {
     /** Tools that run on this phone; [permissions] and [access] are what Android must allow. */
     data class Local(val permissions: List<String> = emptyList(), val access: Access = Access.NONE) : Kind
     data object GitHub : Kind
-    /** A Google Workspace service: adding it opens Google's account picker and permission screen. */
-    data class Google(val service: GoogleService) : Kind
     /** An online service that needs no sign-in: connecting just switches its tools on. */
     data object Online : Kind
 }
@@ -141,44 +136,40 @@ private class Connector(
     val subtitle: String,
     val icon: ImageVector,
     val kind: Kind,
-    val tools: List<DeviceTool> = emptyList(),
-    /** Automation connectors act on the phone itself and work in voice only; every other connector works in voice and chat. */
-    val automation: Boolean = false
+    val tools: List<DeviceTool> = emptyList()
 )
-
-private fun photosPermissions(): List<String> = when {
-    // Android 14 lets the user share only selected photos, which is the separate "visual user selected" permission.
-    Build.VERSION.SDK_INT >= 34 -> listOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-    Build.VERSION.SDK_INT >= 33 -> listOf(Manifest.permission.READ_MEDIA_IMAGES)
-    else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-}
 
 private const val PHONE = "On your phone"
 
-/** A phone-side connector: its tools and whether it reaches the chat come from [PhoneConnectors]. */
+/** A phone-side connector: its tools come from [PhoneConnectors]. */
 private fun phone(
     id: String, name: String, description: String, icon: ImageVector,
     kind: Kind = Kind.Local(), subtitle: String = PHONE
 ) = Connector(
-    id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id),
-    automation = PhoneConnectors.surface(id) == Surface.VOICE
+    id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id)
 )
 
+/** Permissions the device-info tools need; Bluetooth and activity recognition only exist on newer Android. */
+private fun deviceInfoPermissions(): List<String> = buildList {
+    add(Manifest.permission.ACCESS_FINE_LOCATION)
+    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
+    if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
+}
+
 private val PhoneCatalog = listOf(
-    phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps, light level and an internet speed test.",
-        Icons.Outlined.PhoneAndroid),
+    phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps and light level.",
+        Icons.Outlined.PhoneAndroid, Kind.Local(deviceInfoPermissions())),
     phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
         Icons.Outlined.Tune),
-    phone("alarms_notes", "Alarms & notes", "Set alarms, timers and reminders, and keep quick notes on this device.",
+    phone("alarms", "Alarms & reminders", "Set alarms, timers and reminders.",
         Icons.Outlined.Alarm),
     phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
         Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
     phone("contacts", "Contacts", "Find people and see their birthdays from your phone's address book.",
         Icons.Outlined.Contacts, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
-    phone("notifications", "Notifications", "Read your current notifications and catch up on what you missed.",
+    phone("notifications", "Notifications", "Read, reply to and clear notifications, and see what is playing in any music or video app.",
         Icons.Outlined.Notifications, Kind.Local(access = Access.NOTIFICATION_ACCESS)),
-    phone("photos", "Photos", "Count and list your recent photos.",
-        Icons.Outlined.PhotoLibrary, Kind.Local(photosPermissions())),
     phone("location", "Location", "Know where you are and get directions.",
         Icons.Outlined.LocationOn, Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
     phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
@@ -191,12 +182,12 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
     phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
         Icons.Outlined.PlayCircle),
-    // Automation connectors (voice only).
-    phone("calls", "Calls", "Dial a number, call a contact by name and save new contacts.",
-        Icons.Outlined.Call, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
-    phone("messages", "Messages", "Send a text message to a number or to a contact by name right away, without opening any screen.",
-        Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_CONTACTS))),
-    phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, change the wallpaper, use the clipboard and show notifications.",
+    phone("calls", "Calls", "Dial, answer and end calls, see who called, call a contact by name and save new contacts.",
+        Icons.Outlined.Call, Kind.Local(listOf(
+            Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_CALL_LOG))),
+    phone("messages", "Messages", "Read your latest text messages and send one to a number or a contact by name right away, without opening any screen.",
+        Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS))),
+    phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, use the clipboard and show notifications.",
         Icons.Outlined.Apps),
     phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
         Icons.Outlined.Explore, Kind.Local(access = Access.ACCESSIBILITY)),
@@ -209,25 +200,7 @@ private val GitHubConnector = Connector(
     "Sign in with GitHub", Icons.Outlined.Code, Kind.GitHub
 )
 
-private fun googleConnector(service: GoogleService, description: String, icon: ImageVector) =
-    Connector(service.id, service.label, description, "Sign in with Google", icon, Kind.Google(service))
-
-private val GoogleConnectors = listOf(
-    googleConnector(GoogleService.CALENDAR, "See your schedule, find a free slot, create and answer events in Google Calendar.",
-        Icons.Outlined.CalendarMonth),
-    googleConnector(GoogleService.GMAIL, "Search your inbox, read and summarize threads, and draft replies.",
-        Icons.Outlined.Mail),
-    googleConnector(GoogleService.DRIVE, "Find, read and upload files in Google Drive.",
-        Icons.Outlined.Folder),
-    googleConnector(GoogleService.DOCS, "Read, summarize and edit your Google Docs.",
-        Icons.Outlined.Description),
-    googleConnector(GoogleService.SHEETS, "Read, analyze and update your Google Sheets.",
-        Icons.Outlined.TableChart),
-    googleConnector(GoogleService.SLIDES, "Read and edit slides in your Google Slides presentations.",
-        Icons.Outlined.Slideshow)
-)
-
-private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector + GoogleConnectors
+private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector
 
 @Composable
 fun ConnectorsPage(
@@ -240,10 +213,6 @@ fun ConnectorsPage(
     onCancelGithubSignIn: () -> Unit,
     onDisconnectGithub: () -> Unit,
     githubTools: List<McpToolSpec>,
-    googleAccounts: Map<String, String>,
-    googleTools: Map<String, List<McpToolSpec>>,
-    onConnectGoogle: (GoogleService) -> Unit,
-    onDisconnectGoogle: (GoogleService) -> Unit,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
     modifier: Modifier = Modifier
@@ -259,7 +228,6 @@ fun ConnectorsPage(
     }
 
     var query by remember { mutableStateOf("") }
-    var automationTab by rememberSaveable { mutableStateOf(false) }
     var setupNeeded by remember { mutableStateOf(false) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -268,14 +236,13 @@ fun ConnectorsPage(
 
     fun isConnected(c: Connector): Boolean = when (val kind = c.kind) {
         is Kind.GitHub -> githubLogin.isNotEmpty()
-        is Kind.Google -> kind.service.id in googleAccounts
         // Added means its tools are on; a revoked permission leaves it listed so it can be repaired.
         is Kind.Local -> c.tools.any { it in enabledTools }
         is Kind.Online -> c.tools.any { it in enabledTools }
     }
 
     // Evaluated once per change of its inputs: accessGranted() queries the system, and the page lists the whole catalog.
-    val connectedIds = remember(resumeTick, enabledTools, githubLogin, googleAccounts) {
+    val connectedIds = remember(resumeTick, enabledTools, githubLogin) {
         Catalog.filter { isConnected(it) }.map { it.id }.toSet()
     }
     fun connected(c: Connector): Boolean = c.id in connectedIds
@@ -295,7 +262,6 @@ fun ConnectorsPage(
     fun connect(c: Connector) {
         when (val kind = c.kind) {
             is Kind.GitHub -> if (BuildConfig.GITHUB_CLIENT_ID.isNotBlank()) onStartGithubSignIn() else setupNeeded = true
-            is Kind.Google -> onConnectGoogle(kind.service)
             is Kind.Online -> onToolsEnabled(c.tools, true, c.name)
             is Kind.Local -> {
                 onToolsEnabled(c.tools, true, c.name)
@@ -317,9 +283,8 @@ fun ConnectorsPage(
         }
     }
 
-    // Every connector, connected or not, A-Z. Installed holds the voice and chat ones; Automation the voice-only ones.
+    // Every connector, connected or not, A-Z.
     val shown = Catalog
-        .filter { it.automation == automationTab }
         .filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
         .sortedBy { it.name.lowercase() }
 
@@ -328,7 +293,6 @@ fun ConnectorsPage(
 
     fun toolLines(c: Connector): List<ToolLine> = when (val kind = c.kind) {
         is Kind.GitHub -> githubTools.map { mcpLine(it) }
-        is Kind.Google -> googleTools[kind.service.id].orEmpty().map { mcpLine(it) }
         else -> c.tools.map { ToolLine(it.label, it.hint, false) }
     }
 
@@ -343,7 +307,6 @@ fun ConnectorsPage(
                 broken && c.kind is Kind.Local -> "Permission needed"
                 broken -> "Sign-in stopped working"
                 c.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
-                c.kind is Kind.Google && c.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[c.kind.service.id]}"
                 else -> c.subtitle
             },
             connectLabel = "Connect",
@@ -365,7 +328,6 @@ fun ConnectorsPage(
             subtitle = when {
                 broken && detail.kind is Kind.Local -> "Permission needed"
                 detail.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
-                detail.kind is Kind.Google && detail.kind.service.id in googleAccounts -> "Signed in as ${googleAccounts[detail.kind.service.id]}"
                 else -> detail.subtitle
             },
             tools = toolLines(detail),
@@ -398,15 +360,8 @@ fun ConnectorsPage(
             ),
             modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
         )
-        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TabChip("Installed", !automationTab) { automationTab = false }
-            TabChip("Automation", automationTab) { automationTab = true }
-        }
+        Spacer(Modifier.height(14.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            if (automationTab) {
-                Text("These act on the phone itself, so they work in voice only.", color = AssistantTextMuted, fontSize = 13.sp,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
-            }
             if (shown.isEmpty()) {
                 Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
             }
@@ -425,7 +380,6 @@ fun ConnectorsPage(
                 Text(
                     when (c.kind) {
                         is Kind.GitHub -> "The saved sign-in is removed from this device. You can connect again any time."
-                        is Kind.Google -> "The account is removed from this app. You can connect it again from this page. To fully revoke access, remove the app in your Google account's security settings."
                         is Kind.Online -> "The assistant stops using this service."
                         is Kind.Local -> "The assistant stops using these tools. Android's own permission or access stays until you remove it in the phone's settings."
                     }
@@ -435,7 +389,6 @@ fun ConnectorsPage(
                 TextButton(onClick = {
                     when (c.kind) {
                         is Kind.GitHub -> onDisconnectGithub()
-                        is Kind.Google -> onDisconnectGoogle(c.kind.service)
                         is Kind.Local, is Kind.Online -> onToolsEnabled(c.tools, false, c.name)
                                 }
                     disconnecting = null
@@ -447,24 +400,15 @@ fun ConnectorsPage(
 }
 
 private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UNUSED_PARAMETER") tick: Int): Boolean = when (kind.access) {
-    Access.NOTIFICATION_ACCESS -> NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-    Access.ACCESSIBILITY -> AssistantAccessibilityService.instance != null
-    Access.USAGE_ACCESS -> {
-        val ops = context.getSystemService(AppOpsManager::class.java)
-        val mode = if (Build.VERSION.SDK_INT >= 29) {
-            ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-        } else {
-            @Suppress("DEPRECATION") ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-        }
-        mode == AppOpsManager.MODE_ALLOWED
-    }
-    // Approximate location, or only the photos the user picked, is enough: any one of such a pair counts.
-    Access.NONE -> if (Manifest.permission.ACCESS_COARSE_LOCATION in kind.permissions ||
-        (Build.VERSION.SDK_INT >= 34 && Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED in kind.permissions)
-    ) {
-        kind.permissions.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
-    } else {
-        kind.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+    Access.NOTIFICATION_ACCESS -> AccessChecks.notificationListener(context) != AccessState.OFF
+    Access.ACCESSIBILITY -> AccessChecks.accessibility(context) != AccessState.OFF
+    Access.USAGE_ACCESS -> AccessChecks.usageAccess(context)
+    // Approximate location is enough: either of the two location permissions counts. Every other one is required.
+    Access.NONE -> {
+        val locations = setOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        fun granted(p: String) = ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED
+        val (loc, others) = kind.permissions.partition { it in locations }
+        others.all { granted(it) } && (loc.isEmpty() || loc.any { granted(it) })
     }
 }
 
@@ -472,36 +416,6 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
 private fun SectionHeading(text: String) {
     Text(text.uppercase(), color = AssistantTextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 10.dp))
-}
-
-/** One of the two buttons above the connector list (Installed / Automation). */
-@Composable
-private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Box(
-        Modifier.clip(shape)
-            .background(if (selected) AssistantAccent.copy(alpha = 0.18f) else AssistantFieldBackground)
-            .border(BorderStroke(1.dp, if (selected) AssistantAccent else AssistantOutline), shape)
-            .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 9.dp)
-    ) {
-        Text(label, color = if (selected) AssistantAccent else AssistantTextSecondary, fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
-    }
-}
-
-/** Says where a connector works: Voice + Chat, or Voice only (automation). */
-@Composable
-private fun SurfaceChip(voiceOnly: Boolean) {
-    val shape = RoundedCornerShape(8.dp)
-    val textColor = if (voiceOnly) AssistantTextSecondary else AssistantAccent
-    Text(
-        if (voiceOnly) "Voice only" else "Voice + Chat",
-        color = textColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(shape)
-            .background(if (voiceOnly) AssistantFieldBackground else AssistantAccent.copy(alpha = 0.14f))
-            .border(BorderStroke(1.dp, textColor.copy(alpha = 0.35f)), shape)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
-    )
 }
 
 @Composable
@@ -534,8 +448,6 @@ private fun ConnectorCard(
                 Text(connector.name, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                     maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 21.sp)
                 Text(subtitle, color = AssistantTextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(6.dp))
-                SurfaceChip(voiceOnly = connector.automation)
             }
             Spacer(Modifier.size(8.dp))
             when {
@@ -568,26 +480,21 @@ private fun mcpLine(tool: McpToolSpec) = ToolLine(
 /** The long-form facts shown on a connector's own page. */
 private class Info(val about: String, val needs: String, val privacy: String, val runsOn: String = "Your phone")
 
-private const val GOOGLE_NEEDS = "Sign in with a Google account and approve Google's permission screen."
-private const val GOOGLE_PRIVACY = "Your Google sign-in stays on this phone. The assistant's requests pass through your own Google Workspace server " +
-    "on AWS Lambda, which only forwards them to Google and stores nothing. It includes tools that change your data."
-private const val GOOGLE_RUNS = "Your Google Workspace server on AWS Lambda, then Google's own APIs"
-
 private val InfoById: Map<String, Info> = mapOf(
     "device_info" to Info(
         "Lets the assistant tell you things about your phone: the date and time, battery, free storage and memory, network and Wi-Fi, Bluetooth, step count and room light. It only reads and never changes anything. The internet speed test downloads about 5 MB.",
         "No Android permission.",
-        "Readings stay on the phone. They reach Gemini (or Azure OpenAI in the chat) only as part of the conversation when you ask."
+        "Readings stay on the phone. They reach Gemini only as part of the conversation when you ask."
     ),
     "device_controls" to Info(
         "Changes simple phone settings when you ask: the flashlight, screen brightness inside Ultron, volume, ringer mode, vibration, Do Not Disturb, music play, pause and skip, how long the screen stays on, and auto-rotate.",
         "Screen timeout and auto-rotate need Android's Modify system settings permission, and Do Not Disturb needs Do Not Disturb access. Android asks the first time you use them.",
         "Nothing leaves the phone except the words of the conversation."
     ),
-    "alarms_notes" to Info(
-        "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose, and keeps quick notes. Notes are saved only on this phone.",
+    "alarms" to Info(
+        "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose.",
         "No permission. Reminders appear as notifications, so keep notifications on for Ultron.",
-        "Notes never leave the phone unless you ask the assistant to read them out."
+        "Nothing leaves the phone except the words of the conversation."
     ),
     "calendar" to Info(
         "Reads your upcoming events from every calendar on the phone (Google Calendar included), checks whether a time slot is free, adds events and cancels them, all by itself with no screen opening. Repeating events are never deleted.",
@@ -603,11 +510,6 @@ private val InfoById: Map<String, Info> = mapOf(
         "Tells you where the phone is right now and starts navigation to a place in your maps app.",
         "Location permission.",
         "Your coordinates and address are sent to the model when you ask where you are."
-    ),
-    "photos" to Info(
-        "Counts your recent photos and lists their file names. It does not open or send the pictures.",
-        "Photos permission.",
-        "Only file names and counts are shared with the model."
     ),
     "notifications" to Info(
         "Reads the notifications currently on your phone so the assistant can tell you what you missed.",
@@ -649,34 +551,28 @@ private val InfoById: Map<String, Info> = mapOf(
         "Requests go to GitHub's own MCP server with your sign-in token, which is kept encrypted on this phone. Repository text is untrusted and never treated as instructions.",
         "GitHub's MCP server"
     ),
-    "google_calendar" to Info("See your calendars and events, find a free slot, and create, answer and delete events.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "gmail" to Info("Search your inbox, read messages, list labels and create drafts. Drafts are never sent automatically.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_drive" to Info("Search files, list recent files, read file contents and create new files.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_docs" to Info("Read your Google Docs, add text to them and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_sheets" to Info("Read cell values, and update or append rows in your Google Sheets.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
-    "google_slides" to Info("Read your Google Slides presentations and replace text in them.", GOOGLE_NEEDS, GOOGLE_PRIVACY, GOOGLE_RUNS),
     "calls" to Info(
-        "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save. It works in voice and in the chat.",
+        "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save.",
         "Contacts permission. Android asks for the Phone permission the first time a call is placed.",
         "A call is placed only when you ask. The number or name is part of the conversation."
     ),
     "messages" to Info(
-        "Sends a text message (SMS) to a number or to a contact by name as soon as you ask, with no screen to confirm on. It sends only what you said, one message per request, up to 480 characters, and at most 10 messages an hour. It refuses very short numbers, which can be paid services, and if several contacts match it asks you which one. It works in voice and in the chat.",
+        "Sends a text message (SMS) to a number or to a contact by name as soon as you ask, with no screen to confirm on. It sends only what you said, one message per request, up to 480 characters, and at most 10 messages an hour. It refuses very short numbers, which can be paid services, and if several contacts match it asks you which one.",
         "SMS permission and Contacts permission. Android asks the first time a message is sent.",
         "Your carrier may charge for SMS as usual. The recipient and the text are part of the conversation with the model."
     ),
     "apps_settings" to Info(
-        "Opens apps by name, the camera, Android settings and an app's info page, changes the wallpaper from an image link, reads or writes the clipboard and posts a notification. It works by voice only.",
-        "No special permission. The wallpaper tool needs an internet link to an image.",
+        "Opens apps by name, the camera, Android settings and an app's info page, reads or writes the clipboard and posts a notification.",
+        "No special permission.",
         "Clipboard text you ask the assistant to read is sent to the model."
     ),
     "navigation" to Info(
-        "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone. It works by voice only.",
+        "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone.",
         "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
         "It sends taps and gestures to your phone only. It does not read what is on the screen."
     ),
     "screen" to Info(
-        "Reads the buttons and text on the screen, taps them, types and waits for text, so the assistant can use other apps for you. It works by voice only.",
+        "Reads the buttons and text on the screen, taps them, types and waits for text, so the assistant can use other apps for you.",
         "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
         "Screen text is sent to Gemini whenever the assistant reads the screen, and it may include private information. Use it with care."
     )
@@ -720,7 +616,6 @@ private fun ConnectorDetail(
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SurfaceChip(voiceOnly = connector.automation)
                 Spacer(Modifier.weight(1f))
                 when {
                     reconnect -> Pill(if (connector.kind is Kind.Local) "Repair" else "Reconnect", filled = true, onClick = onConnect)
@@ -729,11 +624,6 @@ private fun ConnectorDetail(
                 }
             }
             DetailSection("About", info?.about ?: connector.description)
-            DetailSection(
-                "Works in",
-                if (connector.automation) "Voice only. Automation connectors act on your phone, so they never run from the typed chat."
-                else "Voice and the typed chat."
-            )
             DetailSection("Runs on", info?.runsOn ?: "Your phone")
             info?.let {
                 DetailSection("What it needs", it.needs)

@@ -51,6 +51,7 @@ class UsageStore(private val context: Context) {
         const val PURPOSE_TITLE = "title"
         const val PURPOSE_PERSONA = "persona"
         const val PURPOSE_PDF = "pdf"
+        const val PURPOSE_SCREEN = "screen"
     }
 
     /** Oldest day first. */

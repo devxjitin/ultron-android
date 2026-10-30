@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.assistant.app.data.GoogleService
 import com.assistant.app.data.MicSensitivity
 import kotlinx.coroutines.delay
+import com.assistant.app.ui.components.HomeBackground
 import com.assistant.app.ui.components.VoiceRibbon
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -53,17 +53,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.components.AboutPage
-import com.assistant.app.ui.components.ChatSearchPage
-import com.assistant.app.ui.components.LibraryPage
-import com.assistant.app.ui.components.PersonalizationPage
 import com.assistant.app.ui.components.StoragePage
 import com.assistant.app.ui.components.SkillsPage
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.ui.components.UsagePage
-import com.assistant.app.data.AttachmentRef
-import com.assistant.app.data.LibraryItem
-import com.assistant.app.data.Personalization
-import com.assistant.app.data.libraryItems
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
@@ -71,8 +64,6 @@ import com.assistant.app.ui.components.AppDrawerContent
 import com.assistant.app.ui.theme.ThemeMode
 import com.assistant.app.ui.components.AppTopBar
 import com.assistant.app.ui.components.AppTopBarHeight
-import com.assistant.app.network.ChatAttachment
-import com.assistant.app.ui.components.ChatHome
 import com.assistant.app.ui.components.ConnectorsPage
 import com.assistant.app.ui.components.MicButton
 import androidx.activity.compose.BackHandler
@@ -103,15 +94,8 @@ fun AssistantScreen(
     micPermissionPermanentlyDenied: Boolean = false,
     onMicTapped: () -> Unit,
     onMuteToggled: () -> Unit = {},
-    onChatSend: (String, List<ChatAttachment>) -> Boolean = { _, _ -> false },
-    onChatDraftSaved: (String, List<ChatAttachment>) -> Unit = { _, _ -> },
-    onChatEdit: (Long, String) -> Unit = { _, _ -> },
-    onChatNew: () -> Unit = {},
-    onChatNotice: (String) -> Unit = {},
-    onShareConsumed: (Long) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
-    onOpenChat: (String) -> Unit = {},
     onRequestPermission: () -> Unit,
     onOpenAppSettings: () -> Unit = {},
     onSettingsTapped: () -> Unit,
@@ -124,28 +108,16 @@ fun AssistantScreen(
     onDismissUpdate: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
     onUpdateNow: () -> Unit = {},
-    onSearchTapped: () -> Unit = {},
-    onLibraryTapped: () -> Unit = {},
-    onPersonalizationTapped: () -> Unit = {},
     onUsageTapped: () -> Unit = {},
     onStorageTapped: () -> Unit = {},
     onSkillsTapped: () -> Unit = {},
     onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
     onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
     onSkillDeleted: (String) -> Unit = {},
-    onPersonalizationChanged: (Personalization) -> Unit = {},
-    onLoadAttachment: (AttachmentRef) -> ChatAttachment? = { null },
-    onLibraryDelete: (LibraryItem) -> Unit = {},
-    onClearLibraryFiles: () -> Unit = {},
     onClearCache: () -> Unit = {},
-    onExportChats: () -> Unit = {},
-    onExportUnreadableChats: () -> Unit = {},
-    onDiscardUnreadableChats: () -> Unit = {},
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
-    onOpenChatAt: (String, Int?) -> Unit = { _, _ -> },
-    onChatFocusConsumed: () -> Unit = {},
     onDailyBudgetChanged: (Long) -> Unit = {},
     onDismissAgentPromptUpdate: () -> Unit = {},
     onAddMemory: (String) -> Unit = {},
@@ -153,13 +125,9 @@ fun AssistantScreen(
     onDeleteMemory: (String) -> Unit = {},
     onClearMemory: () -> Unit = {},
     onRestoreMemory: (String) -> Unit = {},
-    onClearAllChats: () -> Unit = {},
-    onClearChatsAndMemory: () -> Unit = {},
     onStartGithubSignIn: () -> Unit = {},
     onCancelGithubSignIn: () -> Unit = {},
     onDisconnectGithub: () -> Unit = {},
-    onConnectGoogle: (GoogleService) -> Unit = {},
-    onDisconnectGoogle: (GoogleService) -> Unit = {},
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
     onRequestConnectorPermissions: (List<String>) -> Unit = {},
     onDismissSettings: () -> Unit,
@@ -170,10 +138,7 @@ fun AssistantScreen(
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
-    onSaveDeveloperChanges: (String, String, String, String, String, String, String, Int) -> Unit,
-    onSaveAzure: (com.assistant.app.data.AzureConfig) -> Unit = {},
-    onSaveNim: (com.assistant.app.data.NimConfig) -> Unit = {},
-    onLoadNimModels: () -> Unit = {},
+    onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
     onGeneratePromptFromKnowledgeBase: () -> Unit,
     onDismissPromptGenerationError: () -> Unit,
     onAddKnowledgeDocument: (String, String) -> Unit,
@@ -183,11 +148,11 @@ fun AssistantScreen(
     onUploadMarkdownFile: () -> Unit,
     onDismissKnowledgeDocumentError: () -> Unit,
     onDismissToast: () -> Unit,
-    onDeleteChatSession: (String) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(com.assistant.app.ui.theme.AssistantBackground)) {
         val availableHeight = maxHeight
         val strings = visitorStrings()
+        val isDarkTheme = themeMode == ThemeMode.DARK || (themeMode == ThemeMode.SYSTEM && androidx.compose.foundation.isSystemInDarkTheme())
         val compact = availableHeight < 480.dp
         val currentTab = when {
             uiState.showSettings ->
@@ -196,9 +161,6 @@ fun AssistantScreen(
                     AdminPage.DEVELOPER -> NavTab.DEVELOPER
                     AdminPage.ABOUT -> NavTab.ABOUT
                     AdminPage.SETTINGS -> NavTab.SETTINGS
-                    AdminPage.SEARCH -> NavTab.SEARCH
-                    AdminPage.LIBRARY -> NavTab.LIBRARY
-                    AdminPage.PERSONALIZATION -> NavTab.PERSONALIZATION
                     AdminPage.USAGE -> NavTab.USAGE
                     AdminPage.STORAGE -> NavTab.STORAGE
                     AdminPage.SKILLS -> NavTab.SKILLS
@@ -218,14 +180,9 @@ fun AssistantScreen(
         // Settings <-> Knowledge keeps the same page (and draft), so it isn't guarded.
         var settingsDirty by remember { mutableStateOf(false) }
         var pendingNav by remember { mutableStateOf<(() -> Unit)?>(null) }
-        // Typed but unsaved Personalization text gets the same protection, with a simple keep-or-discard question.
-        var personalizationDirty by remember { mutableStateOf(false) }
-        var pendingPersonalizationNav by remember { mutableStateOf<(() -> Unit)?>(null) }
         val guardedNav: (() -> Unit) -> Unit = { action ->
             when {
                 uiState.showSettings && settingsDirty -> pendingNav = action
-                uiState.showSettings && uiState.adminPage == AdminPage.PERSONALIZATION && personalizationDirty ->
-                    pendingPersonalizationNav = action
                 else -> action()
             }
         }
@@ -241,22 +198,10 @@ fun AssistantScreen(
             AppDrawerContent(
                 selected = currentTab,
                 assistantName = uiState.settings.assistantName,
-                chats = uiState.chatSessions,
-                activeChatId = uiState.activeChatId,
-                onOpenChat = { id ->
-                    scope.launch { drawerState.close() }
-                    guardedNav { onOpenChat(id) }
-                },
-                onDeleteChat = onDeleteChatSession,
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
                         NavTab.HOME -> guardedNav(onHomeTapped)
-                        NavTab.SEARCH -> guardedNav(onSearchTapped)
-                        NavTab.LIBRARY -> guardedNav(onLibraryTapped)
-                        NavTab.PERSONALIZATION -> guardedNav(onPersonalizationTapped)
                         NavTab.USAGE -> guardedNav(onUsageTapped)
                         NavTab.STORAGE -> guardedNav(onStorageTapped)
                         NavTab.SKILLS -> guardedNav(onSkillsTapped)
@@ -273,37 +218,8 @@ fun AssistantScreen(
         }
         val main: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout)) {
-        if (currentTab == NavTab.HOME && !sessionActive) {
-            // No voice session: the home screen is a typed chat; its voice button starts a session.
-            ChatHome(
-                messages = uiState.chatMessages,
-                isSending = uiState.isChatSending,
-                assistantName = uiState.settings.assistantName,
-                greeting = uiState.settings.greeting,
-                errorMessage = uiState.errorMessage.takeIf { uiState.voiceState == VoiceState.ERROR },
-                onSend = onChatSend,
-                chatKey = uiState.activeChatId,
-                focusIndex = uiState.chatFocusIndex,
-                onFocusConsumed = onChatFocusConsumed,
-                initialInput = uiState.chatDraftText,
-                initialFiles = uiState.chatDraftFiles,
-                onDraftSaved = onChatDraftSaved,
-                onEdit = onChatEdit,
-                onNotice = onChatNotice,
-                incomingShare = uiState.incomingShare,
-                onShareConsumed = onShareConsumed,
-                onVoiceClick = {
-                    when {
-                        hasMicPermission -> onMicTapped()
-                        micPermissionPermanentlyDenied -> onOpenAppSettings()
-                        else -> onRequestPermission()
-                    }
-                },
-                modifier = Modifier.padding(top = topReserve)
-            )
-        }
-
-        if (currentTab == NavTab.HOME && sessionActive) {
+        if (currentTab == NavTab.HOME) HomeBackground(isDarkTheme, Modifier.fillMaxSize())
+        if (currentTab == NavTab.HOME) {
             Column(Modifier.fillMaxSize().padding(top = topReserve, bottom = 112.dp)
                 .verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(if (compact) 0.dp else availableHeight * 0.13f))
@@ -350,7 +266,7 @@ fun AssistantScreen(
             }
         }
 
-        if (currentTab == NavTab.HOME && sessionActive) {
+        if (currentTab == NavTab.HOME) {
             MicButton(
                 voiceState = uiState.voiceState,
                 onClick = {
@@ -369,8 +285,10 @@ fun AssistantScreen(
             title = if (currentTab == NavTab.HOME) "" else currentTab.label,
             showMenuButton = !wide,
             onMenuClick = { scope.launch { drawerState.open() } },
-            // Only once there is a conversation to leave; an empty chat is already a fresh one.
-            onNewChat = if (currentTab == NavTab.HOME && !sessionActive && uiState.chatMessages.isNotEmpty()) onChatNew else null,
+            onToggleTheme = if (currentTab == NavTab.HOME) {
+                { onThemeModeChange(if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK) }
+            } else null,
+            isDarkTheme = isDarkTheme,
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
@@ -419,10 +337,6 @@ fun AssistantScreen(
                 onCancelGithubSignIn = onCancelGithubSignIn,
                 onDisconnectGithub = onDisconnectGithub,
                 githubTools = uiState.settings.githubTools,
-                googleAccounts = uiState.settings.googleAccounts,
-                googleTools = uiState.settings.googleTools,
-                onConnectGoogle = onConnectGoogle,
-                onDisconnectGoogle = onDisconnectGoogle,
                 onToolsEnabled = onConnectorToolsEnabled,
                 onRequestPermissions = onRequestConnectorPermissions,
                 modifier = Modifier.padding(top = topReserve)
@@ -432,15 +346,6 @@ fun AssistantScreen(
         if (uiState.showSettings) {
             val pageModifier = Modifier.padding(top = topReserve)
             when (uiState.adminPage) {
-                AdminPage.SEARCH -> ChatSearchPage(uiState.chatSessions, onOpenChat = onOpenChatAt, modifier = pageModifier)
-                AdminPage.LIBRARY -> {
-                    val files = remember(uiState.chatSessions) { libraryItems(uiState.chatSessions) }
-                    LibraryPage(files, load = onLoadAttachment, onOpenChat = onOpenChat, onDelete = onLibraryDelete, onNotice = onChatNotice, modifier = pageModifier)
-                }
-                AdminPage.PERSONALIZATION -> PersonalizationPage(
-                    uiState.settings.personalization, uiState.settings.assistantName, onPersonalizationChanged, pageModifier,
-                    onDirtyChanged = { personalizationDirty = it }
-                )
                 AdminPage.SKILLS -> {
                     val skills by SkillRegistry.entries.collectAsState()
                     SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
@@ -449,30 +354,16 @@ fun AssistantScreen(
                     uiState.usageDays, pageModifier,
                     dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged
                 )
-                AdminPage.STORAGE -> {
-                    val files = remember(uiState.chatSessions) { libraryItems(uiState.chatSessions) }
-                    StoragePage(
-                        chatCount = uiState.chatSessions.size,
-                        messageCount = uiState.chatSessions.sumOf { it.turns.size * 2 },
-                        libraryFiles = files.size,
-                        libraryBytes = files.sumOf { it.file.size.toLong() },
-                        memoryCount = uiState.memories.size,
-                        knowledgeCount = uiState.knowledgeDocuments.size,
-                        cacheBytes = uiState.cacheBytes,
-                        hasUsage = uiState.usageDays.isNotEmpty(),
-                        unreadableChats = uiState.unreadableChats,
-                        onExportChats = onExportChats,
-                        onExportUnreadable = onExportUnreadableChats,
-                        onDiscardUnreadable = onDiscardUnreadableChats,
-                        onClearCache = onClearCache,
-                        onClearLibrary = onClearLibraryFiles,
-                        onClearChats = onClearAllChats,
-                        onClearMemory = onClearMemory,
-                        onClearChatsAndMemory = onClearChatsAndMemory,
-                        onResetUsage = onResetUsage,
-                        modifier = pageModifier
-                    )
-                }
+                AdminPage.STORAGE -> StoragePage(
+                    memoryCount = uiState.memories.size,
+                    knowledgeCount = uiState.knowledgeDocuments.size,
+                    cacheBytes = uiState.cacheBytes,
+                    hasUsage = uiState.usageDays.isNotEmpty(),
+                    onClearCache = onClearCache,
+                    onClearMemory = onClearMemory,
+                    onResetUsage = onResetUsage,
+                    modifier = pageModifier
+                )
                 AdminPage.ABOUT -> AboutPage(
                     assistantName = uiState.settings.assistantName,
                     updateState = uiState.updateCheckState,
@@ -503,13 +394,6 @@ fun AssistantScreen(
                 onClearApiKey = onClearApiKey,
                 onClearEmbeddingApiKey = onClearEmbeddingApiKey,
                 onSaveDeveloperChanges = onSaveDeveloperChanges,
-                azure = uiState.azure,
-                onSaveAzure = onSaveAzure,
-                nim = uiState.nim,
-                nimModels = uiState.nimModels,
-                isLoadingNimModels = uiState.isLoadingNimModels,
-                onSaveNim = onSaveNim,
-                onLoadNimModels = onLoadNimModels,
                 isSavingDeveloper = uiState.isSavingDeveloperSettings,
                 isGeneratingPrompt = uiState.isGeneratingPrompt,
                 generatedPromptDraft = uiState.generatedPromptDraft,
@@ -547,18 +431,6 @@ fun AssistantScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 116.dp)
         )
-
-        pendingPersonalizationNav?.let { leave ->
-            AlertDialog(
-                onDismissRequest = { pendingPersonalizationNav = null },
-                title = { Text("Discard unsaved changes?") },
-                text = { Text("You typed in Personalization but did not press Save.") },
-                confirmButton = {
-                    TextButton(onClick = { pendingPersonalizationNav = null; personalizationDirty = false; leave() }) { Text("Discard") }
-                },
-                dismissButton = { TextButton(onClick = { pendingPersonalizationNav = null }) { Text("Keep editing") } }
-            )
-        }
 
         if (uiState.restartRequestId > 0) {
             AlertDialog(

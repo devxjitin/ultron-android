@@ -8,6 +8,10 @@ plugins {
     id("io.objectbox")
 }
 
+// Firebase AI Logic needs android/app/google-services.json (gitignored). Without it the app still builds and
+// falls back to the on-device Gemini key.
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+
 // Optional compile-time default API key, read from local.properties (gitignored, never
 // committed). The app also lets the key be entered/changed at runtime from Settings, which
 // takes priority -- this is just a convenience fallback for development.
@@ -20,12 +24,6 @@ val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
-// Base URL (with its access token) of the Google Workspace MCP server on AWS that the Google connectors talk to.
-// Add: GOOGLE_MCP_URL=https://...  to android/local.properties.
-val googleMcpUrl: String = localProperties.getProperty("GOOGLE_MCP_URL", "")
-// Azure OpenAI resource used by the "Azure API key" chat option (the key itself is entered in-app).
-// Add: AZURE_ENDPOINT=https://<resource>.openai.azure.com  to android/local.properties.
-val azureEndpoint: String = localProperties.getProperty("AZURE_ENDPOINT", "")
 // URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
@@ -65,8 +63,6 @@ android {
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
-        buildConfigField("String", "GOOGLE_MCP_URL", "\"$googleMcpUrl\"")
-        buildConfigField("String", "AZURE_ENDPOINT", "\"$azureEndpoint\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
     }
@@ -173,8 +169,12 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("androidx.security:security-crypto:1.1.0")
-    // Google's own sign-in/consent screen for the Google Workspace connectors (Calendar, Gmail, Drive...).
-    implementation("com.google.android.gms:play-services-auth:22.0.0")
+
+    // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-ai")
+    // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

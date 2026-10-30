@@ -40,14 +40,43 @@ object SkillParser {
     }
 }
 
-/** A skill as the Skills page shows it: [builtIn] ones ship with the app and can only be switched off. */
-data class SkillEntry(val skill: Skill, val builtIn: Boolean, val enabled: Boolean)
+/** The three form fields filled from an uploaded .md file; the user can still correct them before saving. */
+data class SkillDraft(val name: String, val description: String, val instruction: String)
+
+/**
+ * Reads an uploaded .md file into the Name / Description / Instruction fields. Frontmatter `name:` and `description:` are
+ * used when present; otherwise the name comes from the file name and the description from the first plain line.
+ */
+fun SkillParser.draftFromMarkdown(text: String, fileName: String): SkillDraft {
+    val lines = text.replace("\r\n", "\n").trimStart('﻿').lines()
+    val fields = HashMap<String, String>()
+    var bodyStart = 0
+    if (lines.firstOrNull()?.trim() == "---") {
+        val end = lines.drop(1).indexOfFirst { it.trim() == "---" }
+        if (end >= 0) {
+            lines.subList(1, end + 1).forEach { line ->
+                val colon = line.indexOf(':')
+                if (colon > 0) fields[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim().trim('"', '\'')
+            }
+            bodyStart = end + 2
+        }
+    }
+    val body = lines.drop(bodyStart).joinToString("\n").trim()
+    val fromFile = fileName.substringBeforeLast('.').lowercase().replace(Regex("[^a-z0-9_-]+"), "-").trim('-').take(48)
+    val name = (fields["name"]?.trim()?.lowercase()?.replace(Regex("[^a-z0-9_-]+"), "-")?.trim('-')?.take(48)).takeUnless { it.isNullOrEmpty() } ?: fromFile
+    val description = fields["description"]?.takeIf { it.isNotBlank() }
+        ?: body.lines().map { it.trim().trimStart('#', '-', '*', ' ') }.firstOrNull { it.isNotEmpty() }.orEmpty()
+    return SkillDraft(name, description.take(300), body.take(MAX_SKILL_BODY_CHARS))
+}
+
+/** A skill as the Skills page shows it: [builtIn] ones ship with the app and are locked; the user's own can be switched off, edited or deleted. */
+data class SkillEntry(val skill: Skill, val builtIn: Boolean, val enabled: Boolean = true)
 
 /**
  * The skills available to the assistant. Only the name and description go into the system prompt;
  * the instructions are returned by [use] when the model calls use_skill, so unused skills cost almost nothing.
- * Bundled skills live in assets/skills/<name>/SKILL.md; the user adds their own on the Skills page, kept in files/skills/<name>/SKILL.md.
- * A user skill with a bundled skill's name replaces it.
+ * Built-in skills live in assets/skills/<name>/SKILL.md and are locked: always on, never replaced. The user adds their
+ * own on the Skills page, kept in files/skills/<name>/SKILL.md. The model has no tool that writes skills.
  */
 object SkillRegistry {
     private val _entries = MutableStateFlow<List<SkillEntry>>(emptyList())
@@ -66,36 +95,39 @@ object SkillRegistry {
     fun load(context: Context) {
         val app = context.applicationContext
         appContext = app
-        val found = LinkedHashMap<String, Pair<Skill, Boolean>>()
+        val builtIn = LinkedHashMap<String, Skill>()
         runCatching {
             app.assets.list("skills")?.sorted()?.forEach { dir ->
                 runCatching { app.assets.open("skills/$dir/SKILL.md").bufferedReader().use { it.readText() } }
-                    .getOrNull()?.let { SkillParser.parse(it, dir) }?.let { found[it.name] = it to true }
+                    .getOrNull()?.let { SkillParser.parse(it, dir) }?.let { builtIn[it.name] = it }
             }
         }
-        userDir(app).listFiles()?.sortedBy { it.name }?.forEach { dir ->
-            val file = File(dir, "SKILL.md")
-            if (file.isFile) runCatching { file.readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }?.let { found[it.name] = it to false }
-        }
+        val own = userDir(app).listFiles()?.sortedBy { it.name }.orEmpty().mapNotNull { dir ->
+            runCatching { File(dir, "SKILL.md").readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }
+        }.filter { it.name !in builtIn }
         val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty()
-        _entries.value = found.values.map { (skill, builtIn) -> SkillEntry(skill, builtIn, skill.name !in off) }
+        _entries.value = builtIn.values.map { SkillEntry(it, builtIn = true) } +
+            own.map { SkillEntry(it, builtIn = false, enabled = it.name !in off) }
     }
 
+    /** Switches one of the user's skills on or off; built-in skills always stay on. */
     @Synchronized
     fun setEnabled(name: String, enabled: Boolean) {
         val app = appContext ?: return
+        if (_entries.value.none { it.skill.name == name && !it.builtIn }) return
         val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty().toMutableSet()
         if (enabled) off.remove(name) else off.add(name)
         prefs(app).edit().putStringSet("disabled", off).apply()
         _entries.value = _entries.value.map { if (it.skill.name == name) it.copy(enabled = enabled) else it }
     }
 
-    /** Saves a user skill; returns an error for the page to show, or null when saved. */
+    /** Saves one of the user's skills; returns an error for the page to show, or null when saved. */
     @Synchronized
     fun save(name: String, description: String, body: String): String? {
         val app = appContext ?: return "Skills are not ready yet."
         val skill = SkillParser.parse("---\nname: ${name.trim()}\ndescription: ${description.trim().replace('\n', ' ')}\n---\n${body.trim()}")
             ?: return "Use a short lowercase name (letters, digits, - or _), a description and instructions."
+        if (_entries.value.any { it.builtIn && it.skill.name == skill.name }) return "\"${skill.name}\" is a built-in skill; choose another name."
         val dir = File(userDir(app), skill.name)
         val written = runCatching {
             dir.mkdirs()
@@ -106,11 +138,13 @@ object SkillRegistry {
         return null
     }
 
-    /** Deletes a user skill (a bundled one comes back if this was its replacement). */
+    /** Deletes one of the user's skills; built-in skills cannot be deleted. */
     @Synchronized
     fun delete(name: String) {
         val app = appContext ?: return
+        if (_entries.value.none { it.skill.name == name && !it.builtIn }) return
         File(userDir(app), name).deleteRecursively()
+        prefs(app).edit().putStringSet("disabled", prefs(app).getStringSet("disabled", emptySet()).orEmpty() - name).apply()
         load(app)
     }
 

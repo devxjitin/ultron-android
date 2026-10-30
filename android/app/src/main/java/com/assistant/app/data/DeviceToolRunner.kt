@@ -6,7 +6,6 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.app.AlarmManager
 import android.app.AppOpsManager
-import android.app.WallpaperManager
 import android.app.usage.UsageStatsManager
 import android.app.PendingIntent
 import android.app.Application
@@ -61,7 +60,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.AssistantNotificationListener
-import com.assistant.app.ReminderReceiver
 import androidx.core.location.LocationManagerCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -98,9 +96,10 @@ class DeviceToolRunner(
     private val getBrightnessOverride: () -> Int?,
     private val setBrightnessOverride: (Int) -> Unit,
     /** Asks the on-screen activity to show Android's permission dialog for these permissions. */
-    private val requestPermissions: (List<String>) -> Unit
+    private val requestPermissions: (List<String>) -> Unit,
+    /** Describes a screenshot (JPEG bytes) following the prompt; used by look_at_screen. */
+    private val describeScreen: suspend (ByteArray, String) -> String = { _, _ -> "" }
 ) {
-    private val notes = NoteStore(app)
     private val http by lazy {
         HttpClients.shared.newBuilder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -128,7 +127,7 @@ class DeviceToolRunner(
             DeviceTool.BRIGHTNESS -> {
                 val target = DeviceToolLevels.next(currentBrightness(), text("action"), number("percent"), min = 5)
                     ?: return INVALID_LEVEL
-                setBrightnessOverride(target)
+                setBrightness(target)
                 "status=ok\nBrightness is now $target%."
             }
             DeviceTool.GET_BRIGHTNESS -> "status=ok\nBrightness is ${currentBrightness()}%."
@@ -186,6 +185,7 @@ class DeviceToolRunner(
                 else "status=ok\n" + found.joinToString("\n") { "${it.first}: ${it.second}" }
             }
             DeviceTool.CALL_CONTACT -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val found = findContacts(name, 5)
@@ -203,6 +203,7 @@ class DeviceToolRunner(
             }
             DeviceTool.SEND_SMS -> sendSms(text("number") ?: return MISSING, text("message") ?: return MISSING, null)
             DeviceTool.SEND_SMS_CONTACT -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
                 missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)?.let { return it }
                 val name = text("name") ?: return MISSING
                 val message = text("message") ?: return MISSING
@@ -255,19 +256,6 @@ class DeviceToolRunner(
                 }
                 "status=ok\nNavigation opened for $destination."
             }
-            DeviceTool.CREATE_NOTE -> {
-                val id = notes.add(text("text") ?: return MISSING)
-                "status=ok\nNote saved with id $id."
-            }
-            DeviceTool.SEARCH_NOTES -> {
-                val found = notes.search(text("query"))
-                if (found.isEmpty()) "status=empty\nNo notes found."
-                else "status=ok\n" + found.joinToString("\n") { "#${it.id}: ${it.text}" }
-            }
-            DeviceTool.DELETE_NOTE -> {
-                val id = number("id") ?: return MISSING
-                if (notes.delete(id)) "status=ok\nNote $id deleted." else "status=not_found\nNo note with id $id."
-            }
             DeviceTool.WEB_SEARCH -> webSearch(text("query") ?: return MISSING, text("time"))
             DeviceTool.YOUTUBE_SEARCH -> YouTubeLookup.search(text("query") ?: return MISSING, number("limit") ?: 10)
             DeviceTool.YOUTUBE_INFO -> YouTubeLookup.videoInfo(text("video") ?: return MISSING)
@@ -311,12 +299,24 @@ class DeviceToolRunner(
             DeviceTool.WIFI_INFO -> wifiInfo()
             DeviceTool.READ_SCREEN -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+                // A screen can be empty for a moment while an app opens or changes page, so look a few times before concluding.
+                var body = service.readScreen()
+                var attempt = 0
+                while (body.isNullOrBlank() && attempt < 3) {
+                    delay(500)
+                    body = service.readScreen()
+                    attempt++
+                }
                 val appName = service.currentPackage()?.let { appLabel(it) }
-                val body = service.readScreen()
-                if (body == null) "status=unavailable\nThe screen cannot be read right now (the app may block it)."
-                else if (body.isBlank()) "status=empty\nNothing readable is on screen in ${appName ?: "this app"}."
-                else "status=ok\nApp: ${appName ?: "unknown"}\n$body"
+                if (body.isNullOrBlank()) {
+                    "status=hidden\n${appName ?: "This app"} shows nothing the assistant can read; some apps hide their screen on purpose. " +
+                        "Do not stop: call look_at_screen (it reads the screen as a picture), " +
+                        "or try press_back, scroll, wait_for_text, click_on_text with a likely label, or tap_position if the layout is known, " +
+                        "or reach the same goal another way (the app's search, a different screen, another app or tool). " +
+                        "If nothing works, tell him which app it is and what you could not see, and offer what you can still do."
+                } else "status=ok\nApp: ${appName ?: "unknown"}\n$body"
             }
+            DeviceTool.LOOK_AT_SCREEN -> lookAtScreen(text("question"))
             DeviceTool.CURRENT_APP -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 val pkg = service.currentPackage() ?: return "status=unavailable\nCannot tell which app is on screen."
@@ -329,6 +329,70 @@ class DeviceToolRunner(
             DeviceTool.CLICK_ITEM -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 service.clickItem(number("number") ?: return MISSING)
+            }
+            DeviceTool.END_CALL -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.ANSWER_PHONE_CALLS)?.let { return it }
+                extras.endCall()
+            }
+            DeviceTool.ANSWER_CALL -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.ANSWER_PHONE_CALLS)?.let { return it }
+                extras.answerCall()
+            }
+            DeviceTool.READ_CALL_LOG -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.READ_CALL_LOG)?.let { return it }
+                extras.callLog(number("limit") ?: 5, text("kind"))
+            }
+            DeviceTool.READ_SMS -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
+                missingPermission(Manifest.permission.READ_SMS)?.let { return it }
+                extras.readSms(number("limit") ?: 5)
+            }
+            DeviceTool.REPLY_NOTIFICATION -> {
+                val listener = AssistantNotificationListener.instance ?: return listenerDenied()
+                extras.replyToNotification(listener, text("app") ?: return MISSING, text("message") ?: return MISSING)
+            }
+            DeviceTool.DISMISS_NOTIFICATION -> {
+                val listener = AssistantNotificationListener.instance ?: return listenerDenied()
+                extras.dismissNotifications(listener, text("app") ?: return MISSING)
+            }
+            DeviceTool.NOW_PLAYING -> {
+                if (AssistantNotificationListener.instance == null) return listenerDenied()
+                extras.nowPlaying()
+            }
+            DeviceTool.OPEN_PANEL -> extras.openPanel(text("panel"))
+            DeviceTool.LIST_APPS -> extras.listApps(text("filter"))
+            DeviceTool.OPEN_URL -> extras.openUrl(text("url") ?: return MISSING)
+            DeviceTool.SHARE_TEXT -> extras.shareText(text("text") ?: return MISSING)
+            DeviceTool.POWER_MENU -> globalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, "Power menu")
+            DeviceTool.SPLIT_SCREEN ->
+                if (Build.VERSION.SDK_INT < 24) "status=unavailable\nThis needs Android 7 or newer."
+                else globalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, "Split screen")
+            DeviceTool.SWIPE -> {
+                val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+                val x1 = number("from_x") ?: return MISSING
+                val y1 = number("from_y") ?: return MISSING
+                val x2 = number("to_x") ?: return MISSING
+                val y2 = number("to_y") ?: return MISSING
+                val metrics = app.resources.displayMetrics
+                if (listOf(x1, x2).any { it !in 0..metrics.widthPixels } || listOf(y1, y2).any { it !in 0..metrics.heightPixels }) {
+                    return "status=invalid\nThe screen is ${metrics.widthPixels}x${metrics.heightPixels} pixels."
+                }
+                val ms = (number("milliseconds") ?: 400).coerceIn(100, 3_000).toLong()
+                if (service.gesture(x1.toFloat(), y1.toFloat(), x2.toFloat(), y2.toFloat(), ms)) "status=ok\nSwiped from $x1,$y1 to $x2,$y2."
+                else "status=failed\nThe swipe did not go through."
+            }
+            DeviceTool.LONG_PRESS -> {
+                val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+                val x = number("x") ?: return MISSING
+                val y = number("y") ?: return MISSING
+                val metrics = app.resources.displayMetrics
+                if (x !in 0..metrics.widthPixels || y !in 0..metrics.heightPixels) {
+                    return "status=invalid\nThe screen is ${metrics.widthPixels}x${metrics.heightPixels} pixels."
+                }
+                if (service.longPress(x.toFloat(), y.toFloat())) "status=ok\nLong pressed $x,$y." else "status=failed\nThe long press did not go through."
             }
             DeviceTool.TAP_POSITION -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
@@ -381,7 +445,6 @@ class DeviceToolRunner(
                 start(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
                 "status=ok\nShowing the home screen."
             }
-            DeviceTool.SPEED_TEST -> speedTest()
             DeviceTool.CONTACT_BIRTHDAY -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
@@ -410,22 +473,6 @@ class DeviceToolRunner(
                 val begin = start.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 calendarConflicts(begin, begin + (number("duration_minutes") ?: 60).coerceIn(5, 1440) * 60_000L)
             }
-            DeviceTool.RECENT_PHOTOS -> {
-                fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
-                var onlySelected = false
-                if (Build.VERSION.SDK_INT >= 34) {
-                    onlySelected = !allowed(Manifest.permission.READ_MEDIA_IMAGES) && allowed(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-                    if (!onlySelected) {
-                        missingPermission(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)?.let { return it }
-                    }
-                } else {
-                    val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
-                    else Manifest.permission.READ_EXTERNAL_STORAGE
-                    missingPermission(permission)?.let { return it }
-                }
-                val photos = recentPhotos((number("days") ?: 7).coerceIn(1, 90), (number("limit") ?: 5).coerceIn(1, 10))
-                if (onlySelected) "$photos\nNote: the user shared only some photos with the app, so this may not be everything." else photos
-            }
             DeviceTool.SCREEN_TIMEOUT -> {
                 val seconds = number("seconds")?.takeIf { it in 15..1800 } ?: return "status=invalid\nSeconds must be 15-1800."
                 needWriteSettings()?.let { return it }
@@ -438,7 +485,6 @@ class DeviceToolRunner(
                 Settings.System.putInt(app.contentResolver, Settings.System.ACCELEROMETER_ROTATION, on)
                 "status=ok\nAuto-rotate is ${if (on == 1) "on" else "off"}."
             }
-            DeviceTool.SET_WALLPAPER -> setWallpaper(text("url") ?: return MISSING, text("screen"))
             DeviceTool.MOST_USED_APPS -> mostUsedApps((number("days") ?: 1).coerceIn(1, 7), (number("limit") ?: 5).coerceIn(1, 10))
             DeviceTool.APP_USAGE -> appUsage(text("name") ?: return MISSING, (number("days") ?: 1).coerceIn(1, 7))
             DeviceTool.SET_ALARM -> {
@@ -461,6 +507,7 @@ class DeviceToolRunner(
                 "status=ok\nTimer started for $seconds seconds."
             }
             DeviceTool.DIAL -> {
+                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
                 missingPermission(Manifest.permission.CALL_PHONE)?.let { return it }
                 val phone = text("number")?.filter { it.isDigit() || it == '+' }?.takeIf { it.isNotEmpty() } ?: return MISSING
                 placeCall(phone)
@@ -477,7 +524,7 @@ class DeviceToolRunner(
                     else -> Settings.ACTION_SETTINGS
                 }
                 start(Intent(action))
-                "status=ok\nSettings opened. The user must switch things on or off themselves."
+                "status=ok\nSettings opened. Now switch it yourself: read_screen, then click_on_text on the switch, then read_screen again to confirm. Do not ask the user to do it unless accessibility is off."
             }
         }
     }
@@ -488,10 +535,21 @@ class DeviceToolRunner(
             ContextCompat.checkSelfPermission(app, it) != PackageManager.PERMISSION_GRANTED
         }
         if (absent.isEmpty()) return null
+        // Asked before and still missing: Android shows no second dialog after "don't allow", so send them to the app's settings page.
+        if (absent.all { it in askedPermissions }) {
+            start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + app.packageName)))
+            return "status=permission_needed\nThe permission was denied earlier, so Android will not ask again. Ultron's App info page " +
+                "was opened; the user must open Permissions there and allow it, then ask again."
+        }
+        askedPermissions.addAll(absent)
         requestPermissions(absent)
         return "status=permission_needed\nAndroid is asking the user for permission on the phone screen. " +
             "Tell them to allow it, then try again."
     }
+
+    private val askedPermissions = mutableSetOf<String>()
+
+    private val extras by lazy { PhoneExtras(app) { intent -> start(intent) } }
 
     /** Name and number pairs for contacts whose name matches [name]. */
     private fun findContacts(name: String, limit: Int): List<Pair<String, String>> {
@@ -616,6 +674,7 @@ class DeviceToolRunner(
      * sent, failed with a reason, or handed over but not confirmed in time. [recipient] is the contact name when known.
      */
     private suspend fun sendSms(number: String, message: String, recipient: String?): String {
+        if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
         missingPermission(Manifest.permission.SEND_SMS)?.let { return it }
         val clean = SmsRules.cleanNumber(number)
             ?: return "status=invalid\nThat is not a normal phone number (7 to 15 digits). No message was sent."
@@ -679,34 +738,6 @@ class DeviceToolRunner(
             .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
         return apps.firstOrNull { it.second.equals(name, ignoreCase = true) }
             ?: apps.firstOrNull { it.second.contains(name, ignoreCase = true) }
-    }
-
-    private suspend fun speedTest(): String {
-        val result = withTimeoutOrNull(25_000L) {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    val startedAt = System.nanoTime()
-                    var bytes = 0L
-                    http.newCall(Request.Builder().url("https://speed.cloudflare.com/__down?bytes=5000000").build())
-                        .execute().use { response ->
-                            if (!response.isSuccessful) return@use
-                            val source = response.body?.source() ?: return@use
-                            val buffer = ByteArray(65_536)
-                            while (true) {
-                                val read = source.read(buffer)
-                                if (read < 0) break
-                                bytes += read
-                            }
-                        }
-                    bytes to (System.nanoTime() - startedAt) / 1e9
-                }.getOrNull()
-            }
-        }
-        if (result == null || result.first < 100_000) return "status=failed\nThe speed test could not finish. The connection may be offline or very slow."
-        val mbps = result.first * 8 / result.second / 1_000_000
-        return "status=ok\nDownload speed is about %.1f Mbps (%.1f MB in %.1f s).".format(
-            Locale.ENGLISH, mbps, result.first / 1_000_000.0, result.second
-        )
     }
 
     /** Saves the event into the first calendar the user can write to (their own account's before read-only or local ones). */
@@ -836,30 +867,67 @@ class DeviceToolRunner(
         else "status=ok\nThat slot clashes with: ${clashes.joinToString()}."
     }
 
-    private fun recentPhotos(days: Int, limit: Int): String {
-        val since = System.currentTimeMillis() / 1000 - days * 86_400L
-        val dateFormat = DateTimeFormatter.ofPattern("d MMM, hh:mm a", Locale.ENGLISH)
-        val names = mutableListOf<String>()
-        var total = 0
-        app.contentResolver.query(
-            Images.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(Images.Media.DISPLAY_NAME, Images.Media.DATE_ADDED),
-            "${Images.Media.DATE_ADDED} >= ?", arrayOf(since.toString()), "${Images.Media.DATE_ADDED} DESC"
-        )?.use { cursor ->
-            total = cursor.count
-            while (cursor.moveToNext() && names.size < limit) {
-                val whenText = java.time.Instant.ofEpochSecond(cursor.getLong(1)).atZone(ZoneId.systemDefault()).format(dateFormat)
-                names.add("${cursor.getString(0)} ($whenText)")
+    /** Reads the screen as a picture, using the accessibility service's own screenshot (no extra permission). */
+    private suspend fun lookAtScreen(question: String?): String {
+        val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
+        val blocked = "status=blocked\nThis app protects its window, so Android does not let any assistant see it. " +
+            "Do not try to get around that. Tell him which app it is, then use the buttons and positions he describes, " +
+            "or ask him to read out what he sees."
+        val bitmap = when (val shot = service.takeShot()) {
+            is AssistantAccessibilityService.Shot.Ok -> shot.bitmap
+            AssistantAccessibilityService.Shot.Protected -> return blocked
+            AssistantAccessibilityService.Shot.Unsupported -> return "status=unavailable\nThis needs Android 11 or newer."
+            AssistantAccessibilityService.Shot.Failed -> return "status=failed\nNo picture of the screen could be taken right now. " +
+                "If this keeps happening, the accessibility service may need to be turned off and on again in Android settings."
+        }
+        if (ScreenImage.looksBlank(bitmap)) return blocked
+        val appName = AssistantAccessibilityService.instance?.currentPackage()?.let { appLabel(it) }
+        val prompt = "This is a screenshot of an Android phone" + (appName?.let { " showing the app $it" } ?: "") + ". " +
+            (question?.takeIf { it.isNotBlank() }?.let { "Focus on: $it. " } ?: "") +
+            "Reply with JSON only, no code fence: {\"summary\": \"two or three sentences about what the screen shows\", " +
+            "\"items\": [{\"label\": \"visible text or icon meaning\", \"x\": 0, \"y\": 0}]}. " +
+            "List up to 40 buttons, links, fields and other things worth tapping, top to bottom. x and y are the centre of the item " +
+            "as numbers from 0 to 1000 across the picture (0,0 top left; 1000,1000 bottom right). Never include passwords or card numbers."
+        val raw = try {
+            describeScreen(ScreenImage.toJpeg(bitmap), prompt)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return "status=failed\nThe picture could not be read (${e.javaClass.simpleName}). Try again."
+        }
+        if (raw.isBlank()) return "status=failed\nThe picture could not be read."
+        val json = runCatching {
+            JSONObject(raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+        }.getOrNull() ?: return "status=ok\nApp: ${appName ?: "unknown"}\n${raw.trim().take(3_000)}"
+        val width = bitmap.width
+        val height = bitmap.height
+        val items = json.optJSONArray("items")
+        val lines = buildString {
+            if (items != null) for (i in 0 until minOf(items.length(), 40)) {
+                val item = items.optJSONObject(i) ?: continue
+                val label = item.optString("label").takeIf { it.isNotBlank() } ?: continue
+                val x = (item.optDouble("x", -1.0) / 1000.0 * width).toInt()
+                val y = (item.optDouble("y", -1.0) / 1000.0 * height).toInt()
+                if (x < 0 || y < 0) continue
+                append("[${i + 1}] \"${label.take(80)}\" @$x,$y\n")
             }
         }
-        return if (total == 0) "status=empty\nNo photos in the last $days day(s)."
-        else "status=ok\n$total photo(s) in the last $days day(s). Newest: ${names.joinToString()}."
+        return "status=ok\nApp: ${appName ?: "unknown"}\n${json.optString("summary")}\n$lines" +
+            "(Positions are screen pixels for tap_screen_position; they are estimates from a picture, so check the result after tapping.)"
     }
 
     private fun accessibilityDenied(): String {
+        if (AccessChecks.accessibility(app) == AccessState.ENABLED_NOT_CONNECTED) {
+            // Switched on but Android has not (re)started the service, common right after an update or an OEM kill.
+            return "status=permission_needed\nThe Ultron accessibility service is switched on but not running yet. " +
+                "Ask the user to switch it off and on again in Accessibility settings, then try again."
+        }
         start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        val restricted = if (Build.VERSION.SDK_INT >= 33) {
+            " If the switch is greyed out, open Ultron's App info, tap the three dots and choose Allow restricted settings first."
+        } else ""
         return "status=permission_needed\nThe accessibility service is not enabled. The Accessibility settings were opened; " +
-            "the user must turn on Assistant there, then ask again."
+            "the user must turn on Ultron there, then ask again.$restricted"
     }
 
     private fun globalAction(action: Int, label: String): String {
@@ -934,7 +1002,12 @@ class DeviceToolRunner(
     }
 
     private fun wifiInfo(): String {
-        missingPermission(Manifest.permission.ACCESS_FINE_LOCATION)?.let { return it }
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Ask for both together: on Android 12+ a request for only the precise one shows no dialog.
+            requestPermissions(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            return "status=permission_needed\nAndroid is asking the user for location permission on the phone screen, which it needs to read the Wi-Fi name. " +
+                "Tell them to allow it, then try again."
+        }
         @Suppress("DEPRECATION")
         val info = app.applicationContext.getSystemService(WifiManager::class.java).connectionInfo
         val ssid = info?.ssid?.trim('"')
@@ -944,37 +1017,7 @@ class DeviceToolRunner(
         return "status=ok\nConnected to $ssid, signal ${info.rssi} dBm, speed ${info.linkSpeed} Mbps."
     }
 
-    private suspend fun setWallpaper(url: String, screen: String?): String {
-        val scheme = Uri.parse(url).scheme
-        if (scheme != "http" && scheme != "https") return "status=invalid\nOnly http and https links are supported."
-        val bytes = withContext(Dispatchers.IO) {
-            runCatching {
-                http.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                    if (response.isSuccessful) response.peekBody(MAX_IMAGE_BYTES).bytes() else null
-                }
-            }.getOrNull()
-        } ?: return "status=failed\nCould not download that image."
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        var sample = 1
-        while (bounds.outWidth / sample > 2048 || bounds.outHeight / sample > 2048) sample *= 2
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-            ?: return "status=failed\nThat link is not an image Android can read."
-        val flags = when (screen) {
-            "home" -> WallpaperManager.FLAG_SYSTEM
-            "lock" -> WallpaperManager.FLAG_LOCK
-            else -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-        }
-        withContext(Dispatchers.IO) { WallpaperManager.getInstance(app).setBitmap(bitmap, null, true, flags) }
-        return "status=ok\nWallpaper updated."
-    }
-
-    private fun usageAccessGranted(): Boolean {
-        val ops = app.getSystemService(AppOpsManager::class.java)
-        @Suppress("DEPRECATION")
-        val mode = ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), app.packageName)
-        return mode == AppOpsManager.MODE_ALLOWED
-    }
+    private fun usageAccessGranted(): Boolean = AccessChecks.usageAccess(app)
 
     private fun usageTotals(days: Int): Map<String, Long>? {
         if (!usageAccessGranted()) return null
@@ -1080,13 +1123,27 @@ class DeviceToolRunner(
         return "status=ok\nAmbient light is ${lux.toInt()} lux ($word)."
     }
 
-    private fun readNotifications(limit: Int): String {
-        val listener = AssistantNotificationListener.instance
-        if (listener == null) {
-            start(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            return "status=permission_needed\nNotification access is not granted. The access screen was opened; " +
-                "the user must allow this app there, then ask again."
+    /** Result for a tool that needs the notification listener when it is off or has lost its connection. */
+    private fun listenerDenied(): String {
+        if (AccessChecks.notificationListener(app) == AccessState.ENABLED_NOT_CONNECTED) {
+            // Access is on but Android dropped the connection; ask it to reconnect instead of opening Settings.
+            runCatching {
+                android.service.notification.NotificationListenerService.requestRebind(
+                    android.content.ComponentName(app, AssistantNotificationListener::class.java)
+                )
+            }
+            return "status=retry\nNotification access is on but was disconnected. Android is reconnecting it; try again in a few seconds."
         }
+        start(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        val restricted = if (Build.VERSION.SDK_INT >= 33) {
+            " If the switch is greyed out, open Ultron's App info, tap the three dots and choose Allow restricted settings first."
+        } else ""
+        return "status=permission_needed\nNotification access is not granted. The access screen was opened; " +
+            "the user must allow Ultron there, then ask again.$restricted"
+    }
+
+    private fun readNotifications(limit: Int): String {
+        val listener = AssistantNotificationListener.instance ?: return listenerDenied()
         val pm = app.packageManager
         val items = listener.activeNotifications
             .filter { it.isClearable && it.packageName != app.packageName }
@@ -1112,8 +1169,22 @@ class DeviceToolRunner(
             }.joinToString("\n")
     }
 
+    /** Sets screen brightness for the whole phone when Modify system settings is allowed, otherwise only inside Ultron. */
+    private fun setBrightness(percent: Int) {
+        if (Settings.System.canWrite(app)) {
+            val ok = runCatching {
+                Settings.System.putInt(app.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+                Settings.System.putInt(app.contentResolver, Settings.System.SCREEN_BRIGHTNESS, (percent * 255 / 100).coerceIn(1, 255))
+            }.isSuccess
+            if (ok) { setBrightnessOverride(-1); return }
+        }
+        setBrightnessOverride(percent)
+    }
+
     private fun start(intent: Intent) {
-        app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        // The accessibility service is allowed to start screens from the background; a plain app context is not, and Android drops that silently.
+        val context: android.content.Context = AssistantAccessibilityService.instance ?: app
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /**
@@ -1121,6 +1192,7 @@ class DeviceToolRunner(
      * while Ultron is in the background (a voice session running behind another app), and the call then never started.
      */
     private fun placeCall(number: String) {
+
         val telecom = app.getSystemService(TelecomManager::class.java)
         if (telecom == null) start(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)))
         else telecom.placeCall(Uri.fromParts("tel", number, null), Bundle())
@@ -1256,13 +1328,14 @@ class DeviceToolRunner(
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
-        /** Tools that query contacts, calendar, photos, usage stats, notifications, apps or local notes. */
+        const val NO_TELEPHONY = "status=unavailable\nThis phone has no calling or SMS hardware, so that action is not possible."
+        /** Tools that query contacts, calendar, usage stats, notifications or apps. */
         val BLOCKING_TOOLS = setOf(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
-            DeviceTool.CALENDAR_CONFLICTS, DeviceTool.RECENT_PHOTOS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE,
-            DeviceTool.CREATE_NOTE, DeviceTool.SEARCH_NOTES, DeviceTool.DELETE_NOTE, DeviceTool.STORAGE_MEMORY,
+            DeviceTool.CALENDAR_CONFLICTS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
-            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.SET_WALLPAPER, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT
+            DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
+            DeviceTool.READ_CALL_LOG, DeviceTool.READ_SMS, DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L

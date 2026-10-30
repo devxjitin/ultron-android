@@ -63,12 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.AssistantOptions
 import com.assistant.app.data.AssistantSettings
-import com.assistant.app.data.AZURE_CHAT_MODELS
-import com.assistant.app.data.AzureConfig
-import com.assistant.app.data.AzureMode
-import com.assistant.app.data.NIM_SUGGESTED_MODELS
-import com.assistant.app.data.NimConfig
-import com.assistant.app.data.DEFAULT_CHAT_PROMPT
 import com.assistant.app.data.DEFAULT_SYSTEM_PROMPT
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.MAX_ASSISTANT_NAME_LENGTH
@@ -103,7 +97,7 @@ fun SettingsPage(
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
-    onSaveDeveloperChanges: (String, String, String, String, String, String, String, Int) -> Unit,
+    onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
     isGeneratingPrompt: Boolean,
     generatedPromptDraft: String?,
     promptGenerationError: String?,
@@ -136,13 +130,6 @@ fun SettingsPage(
     onPendingNavigationHandled: () -> Unit = {},
     /** True while a Developer Save is running; Save is disabled so it can't be submitted twice. */
     isSavingDeveloper: Boolean = false,
-    azure: AzureConfig = AzureConfig(),
-    onSaveAzure: (AzureConfig) -> Unit = {},
-    nim: NimConfig = NimConfig(),
-    nimModels: List<String> = emptyList(),
-    isLoadingNimModels: Boolean = false,
-    onSaveNim: (NimConfig) -> Unit = {},
-    onLoadNimModels: () -> Unit = {}
 ) {
     var keyInput by remember(currentApiKey) { mutableStateOf(currentApiKey) }
     var keyVisible by remember { mutableStateOf(false) }
@@ -158,7 +145,6 @@ fun SettingsPage(
     var nameInput by remember(settings.assistantName) { mutableStateOf(settings.assistantName) }
     var greetingInput by remember(settings.greeting) { mutableStateOf(settings.greeting) }
     var promptInput by remember(settings.systemPrompt) { mutableStateOf(settings.systemPrompt) }
-    var chatPromptInput by remember(settings.chatPrompt) { mutableStateOf(settings.chatPrompt) }
     // A generated draft replaces the field directly only when there are no unsaved edits to lose.
     var pendingGeneratedDraft by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(generatedPromptDraft) {
@@ -177,7 +163,6 @@ fun SettingsPage(
             keyInput != currentApiKey ||
             embeddingKeyInput != currentEmbeddingApiKey ||
             promptInput != settings.systemPrompt ||
-            chatPromptInput != settings.chatPrompt ||
             documentFormatPromptInput != settings.documentFormatPrompt ||
             retrievalChunkLimitInput != settings.retrievalChunkLimit
 
@@ -276,14 +261,6 @@ fun SettingsPage(
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
                 Spacer(Modifier.height(16.dp))
-                    AzureChatSection(azure, onSaveAzure)
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-                    NimChatSection(nim, nimModels, isLoadingNimModels, onSaveNim, onLoadNimModels)
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
                     SectionLabel("Knowledge API key (required)")
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
@@ -370,22 +347,6 @@ fun SettingsPage(
                         TextButton(onClick = {
                             promptInput = DEFAULT_SYSTEM_PROMPT.trim()
                         }) {
-                            Text("Reset to default", color = AssistantError)
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Chat prompt")
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = chatPromptInput,
-                        onValueChange = { chatPromptInput = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { chatPromptInput = DEFAULT_CHAT_PROMPT.trim() }) {
                             Text("Reset to default", color = AssistantError)
                         }
                     }
@@ -594,7 +555,6 @@ fun SettingsPage(
                         keyInput,
                         embeddingKeyInput,
                         promptInput,
-                        chatPromptInput,
                         documentFormatPromptInput,
                         retrievalChunkLimitInput
                     )
@@ -655,7 +615,6 @@ fun SettingsPage(
                         keyInput,
                         embeddingKeyInput,
                         promptInput,
-                        chatPromptInput,
                         documentFormatPromptInput,
                         retrievalChunkLimitInput
                     )
@@ -926,146 +885,3 @@ internal fun SettingsDropdown(
         Text(text = hint, color = AssistantTextMuted, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
     }
 }
-
-/** NVIDIA NIM for the typed chat: a key from build.nvidia.com and any hosted model, chosen by the user. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun NimChatSection(
-    nim: NimConfig, models: List<String>, loading: Boolean, onSave: (NimConfig) -> Unit, onLoadModels: () -> Unit
-) {
-    var enabled by remember(nim) { mutableStateOf(nim.enabled) }
-    var key by remember(nim) { mutableStateOf(nim.apiKey) }
-    var model by remember(nim) { mutableStateOf(nim.model) }
-    var keyVisible by remember { mutableStateOf(false) }
-    val changed = enabled != nim.enabled || key != nim.apiKey || model != nim.model
-
-    SectionLabel("Chat model (NVIDIA NIM)")
-    Spacer(Modifier.height(8.dp))
-    ChoiceDropdown(
-        options = listOf("off" to "Off", "on" to "Use NVIDIA NIM for chat"),
-        selectedId = if (enabled) "on" else "off",
-        onSelect = { enabled = it == "on" }
-    )
-    if (enabled) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Free hosted models from build.nvidia.com. Create an API key there (it starts with nvapi-) and pick any model. Turning this on turns Azure off. Some models cannot use tools or read images; the chat then answers without them.",
-            color = AssistantTextMuted, style = androidx.compose.material3.MaterialTheme.typography.bodySmall
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("NVIDIA API key") },
-            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { keyVisible = !keyVisible }) {
-                    Icon(
-                        imageVector = if (keyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (keyVisible) "Hide key" else "Show key"
-                    )
-                }
-            },
-            colors = assistantTextFieldColors()
-        )
-        Spacer(Modifier.height(8.dp))
-        val choices = (models.ifEmpty { NIM_SUGGESTED_MODELS } + model).distinct()
-        ChoiceDropdown(options = choices.map { it to it }, selectedId = model, onSelect = { model = it })
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = model,
-            onValueChange = { model = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Model id") },
-            placeholder = { Text("meta/llama-3.3-70b-instruct") },
-            colors = assistantTextFieldColors()
-        )
-    }
-    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        if (enabled) TextButton(enabled = !loading, onClick = onLoadModels) { Text(if (loading) "Loading…" else "Load models") }
-        TextButton(
-            enabled = changed && (!enabled || (key.isNotBlank() && model.isNotBlank())),
-            onClick = { onSave(NimConfig(enabled, key, model)) }
-        ) { Text("Save NVIDIA model") }
-    }
-}
-
-/** Chooses how the typed chat reaches Azure OpenAI: with just an API key, or with the resource's own endpoint. */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-@Composable
-private fun AzureChatSection(azure: AzureConfig, onSave: (AzureConfig) -> Unit) {
-    var mode by remember(azure) { mutableStateOf(azure.mode) }
-    var endpoint by remember(azure) { mutableStateOf(azure.endpoint) }
-    var key by remember(azure) { mutableStateOf(azure.apiKey) }
-    var model by remember(azure) { mutableStateOf(azure.model) }
-    var keyVisible by remember { mutableStateOf(false) }
-    val changed = mode != azure.mode || endpoint != azure.endpoint || key != azure.apiKey || model != azure.model
-
-    SectionLabel("Chat model (Azure)")
-    Spacer(Modifier.height(8.dp))
-    ChoiceDropdown(
-        options = listOf(AzureMode.OFF.name to "Gemini", AzureMode.API_KEY.name to "Azure API key", AzureMode.ENDPOINT.name to "Azure OpenAI endpoint"),
-        selectedId = mode.name,
-        onSelect = { id -> mode = AzureMode.valueOf(id) }
-    )
-    if (mode != AzureMode.OFF) {
-        Spacer(Modifier.height(8.dp))
-        if (mode == AzureMode.ENDPOINT) {
-            OutlinedTextField(
-                value = endpoint,
-                onValueChange = { endpoint = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Endpoint") },
-                placeholder = { Text("https://<resource>.openai.azure.com") },
-                colors = assistantTextFieldColors()
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Azure API key") },
-            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { keyVisible = !keyVisible }) {
-                    Icon(
-                        imageVector = if (keyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (keyVisible) "Hide key" else "Show key"
-                    )
-                }
-            },
-            colors = assistantTextFieldColors()
-        )
-        Spacer(Modifier.height(8.dp))
-        ChoiceDropdown(
-            options = AZURE_CHAT_MODELS.map { (id, label) -> id to label },
-            selectedId = model,
-            onSelect = { model = it }
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = model,
-            onValueChange = { model = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Deployment name") },
-            colors = assistantTextFieldColors()
-        )
-    }
-    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TextButton(
-            enabled = changed && (mode == AzureMode.OFF || (key.isNotBlank() && model.isNotBlank() && (mode != AzureMode.ENDPOINT || endpoint.isNotBlank()))),
-            onClick = { onSave(AzureConfig(mode, endpoint, key, model)) }
-        ) { Text("Save chat model") }
-    }
-}
-
-

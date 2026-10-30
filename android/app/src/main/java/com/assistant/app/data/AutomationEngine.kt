@@ -5,6 +5,7 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.media.AudioManager
 import com.assistant.app.AutomationReceiver
 import android.util.Log
@@ -197,7 +198,14 @@ object AutomationEngine {
 
     private fun setAlarm(context: Context, action: ScheduledAction) {
         context.getSystemService(AlarmManager::class.java)
-            .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, action.atMillis, pendingIntent(context, action.id))
+            .let { manager ->
+                val pending = pendingIntent(context, action.id)
+                // Exact when Android allows it, so a reminder fires at the minute asked for instead of being batched.
+                val exact = Build.VERSION.SDK_INT < 31 || manager.canScheduleExactAlarms()
+                if (exact) runCatching { manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, action.atMillis, pending) }
+                    .onFailure { manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, action.atMillis, pending) }
+                else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, action.atMillis, pending)
+            }
     }
 
     private fun pendingIntent(context: Context, id: Int): PendingIntent = PendingIntent.getBroadcast(

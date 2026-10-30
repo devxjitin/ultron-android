@@ -33,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -140,23 +139,9 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    /** Takes a link, text or files another app shared to Ultron and gives them to the home chat. */
-    private fun handleShareIntent(intent: Intent?) {
-        val action = intent?.action ?: return
-        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
-        val uris = if (action == Intent.ACTION_SEND_MULTIPLE) {
-            IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
-        } else {
-            listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
-        }
-        viewModel.onShareReceived(intent.getStringExtra(Intent.EXTRA_TEXT), uris)
-        intent.action = null // so a recreated activity does not take the same share twice
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleShareIntent(intent)
         handleAssistIntent(intent)
     }
 
@@ -202,10 +187,6 @@ class MainActivity : ComponentActivity() {
             ) {
                 notificationPermissionHandled = true
             }
-
-            val googleConsentLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartIntentSenderForResult()
-            ) { result -> viewModel.onGoogleConsentResult(result.data) }
 
             val toolPermissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
@@ -292,12 +273,6 @@ class MainActivity : ComponentActivity() {
                     contentColor = com.assistant.app.ui.theme.AssistantTextPrimary
                 ) {
                     val uiState by viewModel.uiState.collectAsState()
-                    LaunchedEffect(uiState.googleConsent) {
-                        uiState.googleConsent?.let { pending ->
-                            runCatching { googleConsentLauncher.launch(IntentSenderRequest.Builder(pending).build()) }
-                                .onFailure { viewModel.onGoogleConsentResult(null) }
-                        }
-                    }
                     LaunchedEffect(uiState.permissionRequestId) {
                         if (uiState.permissionRequestId > 0 && uiState.requestedPermissions.isNotEmpty()) {
                             runCatching { toolPermissionLauncher.launch(uiState.requestedPermissions.toTypedArray()) }
@@ -322,12 +297,6 @@ class MainActivity : ComponentActivity() {
                         micPermissionPermanentlyDenied = micPermissionPermanentlyDenied,
                         onMicTapped = { viewModel.onMicTapped() },
                         onMuteToggled = { viewModel.onMuteToggled() },
-                        onChatSend = { text, files -> viewModel.onChatSend(text, files) },
-                        onChatDraftSaved = { text, files -> viewModel.onChatDraftSaved(text, files) },
-                        onChatEdit = { id, text -> viewModel.onChatEdit(id, text) },
-                        onChatNew = { viewModel.onChatNew() },
-                        onChatNotice = { viewModel.onChatNotice(it) },
-                        onShareConsumed = { viewModel.onShareConsumed(it) },
                         themeMode = themeMode,
                         onThemeModeChange = { mode ->
                             themeMode = mode
@@ -336,7 +305,6 @@ class MainActivity : ComponentActivity() {
                                 android.content.res.Configuration.UI_MODE_NIGHT_YES
                             ActivePalette.current = paletteFor(mode, night)
                         },
-                        onOpenChat = { viewModel.onOpenChat(it) },
                         onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
                         onHomeTapped = { viewModel.onHomeTapped() },
                         onConnectorsTapped = { viewModel.onConnectorsTapped() },
@@ -344,28 +312,16 @@ class MainActivity : ComponentActivity() {
                         onDismissUpdate = { viewModel.onDismissUpdate() },
                         onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
                         onUpdateNow = { viewModel.onUpdateNow() },
-                        onSearchTapped = { viewModel.onSearchTapped() },
-                        onLibraryTapped = { viewModel.onLibraryTapped() },
-                        onPersonalizationTapped = { viewModel.onPersonalizationTapped() },
                         onUsageTapped = { viewModel.onUsageTapped() },
                         onStorageTapped = { viewModel.onStorageTapped() },
                         onSkillsTapped = { viewModel.onSkillsTapped() },
                         onSkillToggled = { name, on -> viewModel.onSkillToggled(name, on) },
                         onSkillSaved = { name, description, body -> viewModel.onSkillSaved(name, description, body) },
                         onSkillDeleted = { viewModel.onSkillDeleted(it) },
-                        onPersonalizationChanged = { viewModel.onPersonalizationChanged(it) },
-                        onLoadAttachment = { viewModel.loadAttachment(it) },
-                        onLibraryDelete = { viewModel.onLibraryDelete(it) },
-                        onClearLibraryFiles = { viewModel.onClearLibraryFiles() },
                         onClearCache = { viewModel.onClearCache() },
-                        onExportChats = { viewModel.onExportChats() },
-                        onExportUnreadableChats = { viewModel.onExportUnreadableChats() },
-                        onDiscardUnreadableChats = { viewModel.onDiscardUnreadableChats() },
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
-                        onOpenChatAt = { id, turn -> viewModel.onOpenChat(id, turn) },
-                        onChatFocusConsumed = { viewModel.onChatFocusConsumed() },
                         onDailyBudgetChanged = { viewModel.onDailyBudgetChanged(it) },
                         onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
@@ -373,13 +329,9 @@ class MainActivity : ComponentActivity() {
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
                         onClearMemory = { viewModel.onClearMemory() },
                         onRestoreMemory = { viewModel.onRestoreMemory(it) },
-                        onClearAllChats = { viewModel.onClearAllChats() },
-                        onClearChatsAndMemory = { viewModel.onClearChatsAndMemory() },
                         onStartGithubSignIn = { viewModel.onStartGithubSignIn() },
                         onCancelGithubSignIn = { viewModel.onCancelGithubSignIn() },
                         onDisconnectGithub = { viewModel.onDisconnectGithub() },
-                        onConnectGoogle = { service -> viewModel.onConnectGoogle(service) },
-                        onDisconnectGoogle = { service -> viewModel.onDisconnectGoogle(service) },
                         onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
                         onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
                         onRequestPermission = {
@@ -402,21 +354,17 @@ class MainActivity : ComponentActivity() {
                         onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
-                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, chatPrompt, documentPrompt, retrievalLimit ->
+                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, documentPrompt, retrievalLimit ->
                             viewModel.onSaveDeveloperChanges(
                                 name,
                                 greeting,
                                 apiKey,
                                 embeddingApiKey,
                                 systemPrompt,
-                                chatPrompt,
                                 documentPrompt,
                                 retrievalLimit
                             )
                         },
-                        onSaveAzure = { config -> viewModel.onSaveAzureConfig(config) },
-                        onSaveNim = { config -> viewModel.onSaveNimConfig(config) },
-                        onLoadNimModels = { viewModel.onLoadNimModels() },
                         onGeneratePromptFromKnowledgeBase = { viewModel.onGeneratePromptFromKnowledgeBase() },
                         onDismissPromptGenerationError = { viewModel.onDismissPromptGenerationError() },
                         onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
@@ -428,7 +376,6 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismissKnowledgeDocumentError = { viewModel.onDismissKnowledgeDocumentError() },
                         onDismissToast = { viewModel.onDismissToast() },
-                        onDeleteChatSession = { id -> viewModel.onDeleteChatSession(id) },
                     )
                 }
             }

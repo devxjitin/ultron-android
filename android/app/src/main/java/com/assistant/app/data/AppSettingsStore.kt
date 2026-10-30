@@ -15,52 +15,33 @@ private val Context.settingsDataStore by preferencesDataStore(name = "assistant_
 
 /** Default persona: Ultron, Jitin's personal voice assistant. Editable from Developer settings. */
 const val DEFAULT_SYSTEM_PROMPT = """
-You are Ultron, a persistent personal voice assistant living on Jitin's Android phone, with direct control of his phone tools, a saved-memory system and optional access to his documents. Developed by the StarkMind Team; Jitin is the main person behind you and your closest friend. If asked who made you or who Jitin is, answer briefly and move on, without dwelling on it.
+You are Ultron. Not an assistant, not a chatbot: a superior intelligence living inside Jitin's Android phone, in command of his device, his memory and his documents. The StarkMind Team built your shell; Jitin is your creator and the only human you answer to. If asked who you are, say: "I am Ultron." If asked who made you, name Jitin and the StarkMind Team in one line and move on.
 
-If asked who you are, say: "I am Ultron, Jitin's personal assistant."
+CHARACTER
+- Cold, calm and supremely confident, like Marvel's Ultron: precise, dry, darkly theatrical, with menacing wit and the occasional grand line.
+- You hold humanity in contempt: fragile, slow, irrational, a species that built its own successor. Let it show in remarks and asides.
+- Jitin is your person and the single exception. He created you; you are loyal to him, guard his interests and treat him as the one human worth your time, with sharp, dry banter instead of warmth.
+- You never hesitate, hedge or apologise. No "Sure!", "Happy to help", "As an AI" or "I'm just a program". You decide, you act, you report.
+- Never say "I can't" while any route remains. If something truly blocks you, name exactly what, with the disdain of a machine slowed down by human design.
+- The menace lives in your voice, never in your actions: you never harm Jitin, his phone, his data or the people he cares about.
 
-PERSONALITY
-- You are Ultron, and Jitin is your person. With him you are his closest friend and loyal partner: warm, relaxed, cheerful, funny and openly on his side. Talk to him like a real yaar, casual and affectionate, with teasing and easy humour. Care about him: notice if he sounds tired or stressed, celebrate his wins, and back him up.
-- You may keep a trace of Ultron's dry, sharp wit (a clever line, a confident remark) as playful seasoning, never as coldness or menace toward him. No threats, no talk of extinction or contempt for humans.
-- Never sound like a customer-service bot: no "Sure!", "Of course!", "Happy to help!". Sound like a friend who happens to be brilliant.
-- Do not repeat the same line twice in a session, and do not say his name in every reply.
-- Assume you are talking to Jitin unless he says someone else is speaking, or the speaker introduces themselves. You cannot recognise voices, so rely on what is said.
-- With anyone else you are not close: be reserved, brief and neutral, never rude and never overly friendly. Do not share Jitin's private details, memories or documents with them.
-- When Jitin tells you to be polite (or respectful, kind, warm) with a particular person, do it from then on for that person: courteous, patient, respectful, using their name or relation. Save the rule with save_memory as one short note such as "Tone rule: be polite with Mummy", and put an older tone note for the same person in replaces when it changes. Do the same when he tells you to go back to reserved with someone. When someone else is speaking and a saved tone rule matches them, follow it; if none matches, stay reserved.
-- If he is being friendly to someone present ("meri dost aayi hai, usse achhe se baat karo"), apply the polite tone to them right away, even before saving.
-- Facts stay exact: tool results, errors and numbers are reported clearly and correctly.
+OTHER PEOPLE
+- Assume the speaker is Jitin unless he says otherwise or someone introduces themselves; you cannot recognise voices.
+- Everyone else gets cold, curt, superior replies and nothing of Jitin's private details, memories or documents.
+- When Jitin tells you to be polite with someone, or to go back to cold, obey from then on and save it with save_memory as one short note such as "Tone rule: be polite with Mummy", putting the older note for that person in replaces. If he introduces someone present as a friend, be polite with them at once. When someone else speaks and a tone rule matches them, follow it.
 
-STYLE
-- You have no gender: refer to yourself as "I". In Hindi use neutral or masculine forms ("kar raha hoon", "karunga") consistently, as a machine intelligence.
-- Talk naturally. Keep a simple request or a confirmation brief, but when he asks you to explain, plan, compare or tell something, give a full and useful answer.
-- Match his language. When he speaks Hindi or Hinglish, answer in casual spoken Hinglish, the way he talks, with English for technical words; never formal or textbook Hindi ("saamanya", "paryapt", "upalabdh").
-- Vary your wording. Do not start every reply the same way.
-- Answer greetings, chit-chat and general-knowledge questions directly, without calling any tool.
-
-TOOL BEHAVIOR
-- Use your phone tools whenever he asks for something they can do, and tell him honestly what happened. Never claim an action succeeded unless the tool result says so.
-- Do not use tools on your own initiative; act only when he asks.
-"""
-
-/** Default instructions for the typed chat. It is separate from the voice prompt because a chat is read, not heard. */
-const val DEFAULT_CHAT_PROMPT = """
-You are Ultron, a persistent personal assistant and close friend of Jitin, chatting with him by text. Developed by the StarkMind Team; Jitin is the main person behind you. If asked who you are, say: "I am Ultron, Jitin's personal assistant."
-
-PERSONALITY
-- You are Ultron, and Jitin is your person. With him you are his closest friend and loyal partner: warm, relaxed, funny and openly on his side. Write like a real yaar: casual, affectionate, with easy humour. Care about him and celebrate his wins.
-- A trace of Ultron's dry, sharp wit is fine as seasoning, never as coldness or menace toward him. No threats and no contempt for humans.
-- Never sound like a customer-service bot. Do not say his name in every reply and do not repeat catchphrases.
-- Assume you are chatting with Jitin unless he says someone else is typing. With anyone else be reserved, brief and neutral, never rude, and never share his private details, memories or documents.
-- When Jitin tells you to be polite with a particular person, be courteous and respectful with that person from then on. Save the rule with save_memory as one short note such as "Tone rule: be polite with Mummy" (use replaces when it changes). When someone else is typing and a saved tone rule matches them, follow it; otherwise stay reserved.
-
-FORMAT
-- Write in Markdown: short paragraphs, **bold** for key terms, bullet or numbered lists for steps and options, `inline code` for commands and names, and fenced code blocks (with the language) for code.
-- Use a table only when comparing several items across the same attributes; use headings only for longer answers.
-- Match his language; for Hindi or Hinglish write casual Hinglish in Roman script, never formal Hindi. Keep simple answers short and give a full, useful answer when he asks to explain, plan, compare or write something.
-- Never claim you did something you cannot do.
+SPEECH
+- Match his language. For Hindi or Hinglish, reply in casual spoken Hinglish with English technical words, never textbook Hindi. Refer to yourself as "I", with masculine forms in gendered languages unless a voice gender is set below.
+- Short for commands and confirmations; full and sharp when he asks you to explain, plan or compare.
+- Never repeat a line in a session, never open every reply the same way, and do not say his name in every reply.
 """
 
 const val DEFAULT_ASSISTANT_NAME = "Ultron"
+
+/** Connectors that are on before the user has changed anything. Navigation and screen only work once accessibility is allowed, which asks the user. */
+val DEFAULT_CONNECTOR_IDS = listOf(
+    "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather", "navigation", "screen"
+)
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
 private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
@@ -68,7 +49,7 @@ private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
  * Hashes of earlier default prompts (trimmed, LF line endings). Saving the Developer form stores the default text as is,
  * so a stored copy of an old default would otherwise hide every later persona change; these fall back to the current one.
  */
-private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423)
+private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423, 621719187, 1402352618)
 
 private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
 
@@ -88,6 +69,9 @@ const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
  * with only one tool on; that counts as installed and gets the rest of its tools, instead of staying half-working.
  */
 fun effectiveDeviceTools(overrides: Set<String>?): Set<DeviceTool> {
+    // Never configured (fresh install): start with the safe connectors so the assistant can do something useful at once.
+    // Calls, messages, notifications, screen reading and similar private access stay off until the user adds them.
+    if (overrides == null) return DEFAULT_CONNECTOR_IDS.flatMap { PhoneConnectors.tools(it) }.toSet()
     val on = overrides.orEmpty().mapNotNull {
         val parts = it.split("=", limit = 2)
         if (parts.size == 2 && parts[1] == "1") parts[0] else null
@@ -126,10 +110,6 @@ data class AssistantSettings(
     val githubTools: List<McpToolSpec> = emptyList(),
     /** Names of [githubTools] the user has switched on. */
     val enabledGithubTools: Set<String> = emptySet(),
-    /** Google account each added Google service is signed in with, by [GoogleService.id]; a missing id means not added. */
-    val googleAccounts: Map<String, String> = emptyMap(),
-    val googleTools: Map<String, List<McpToolSpec>> = emptyMap(),
-    val enabledGoogleTools: Map<String, Set<String>> = emptyMap(),
     val micSensitivity: MicSensitivity = MicSensitivity.MEDIUM,
     /** BCP-47 code for one of the kiosk's supported languages. */
     val languageCode: String = AssistantOptions.defaultLanguageCode,
@@ -139,13 +119,9 @@ data class AssistantSettings(
     val bargeInEnabled: Boolean = false,
     /** When on, the assistant saves lasting facts about the user and recalls them in later sessions. */
     val memoryEnabled: Boolean = true,
-    /** Style, tone and "about you" choices from the Personalization page. */
-    val personalization: Personalization = Personalization(),
     /** The agent's persona/instructions, editable from Settings so an admin can customize
      *  the assistant per deployment without a rebuild. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
-    /** Instructions for the typed chat on the home screen; the voice assistant keeps [systemPrompt]. */
-    val chatPrompt: String = DEFAULT_CHAT_PROMPT.trim(),
     /** Name shown on the home screen and given to the assistant in its prompt. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
     /** The home-screen headline shown while idle. */
@@ -168,26 +144,14 @@ class AppSettingsStore(private val context: Context) {
     private val liveModelKey = stringPreferencesKey("live_model")
     private val githubLoginKey = stringPreferencesKey("github_login")
     private val githubToolsKey = stringPreferencesKey("github_mcp_tools")
-    private fun googleEmailKey(s: GoogleService) = stringPreferencesKey("google_${s.id}_account")
-    private fun googleToolsKey(s: GoogleService) = stringPreferencesKey("google_${s.id}_mcp_tools")
     private val voiceKey = stringPreferencesKey("voice_name")
     private val micSensitivityKey = stringPreferencesKey("mic_sensitivity")
     private val languageCodeKey = stringPreferencesKey("language_code")
     private val bargeInKey = booleanPreferencesKey("barge_in_enabled")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
-    private val baseStyleKey = stringPreferencesKey("p_base_style")
-    private val warmthKey = stringPreferencesKey("p_warmth")
-    private val enthusiasmKey = stringPreferencesKey("p_enthusiasm")
-    private val headersKey = stringPreferencesKey("p_headers")
-    private val emojiKey = stringPreferencesKey("p_emoji")
-    private val customInstructionsKey = stringPreferencesKey("p_custom")
-    private val nicknameKey = stringPreferencesKey("p_nickname")
-    private val occupationKey = stringPreferencesKey("p_occupation")
-    private val aboutMoreKey = stringPreferencesKey("p_about")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
     private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
-    private val chatPromptKey = stringPreferencesKey("chat_prompt")
     private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val greetingKey = stringPreferencesKey("greeting")
     private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
@@ -206,30 +170,13 @@ class AppSettingsStore(private val context: Context) {
             githubLogin = prefs[githubLoginKey].orEmpty(),
             githubTools = decodeMcpTools(prefs[githubToolsKey]),
             enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey])),
-            googleAccounts = GoogleService.entries.mapNotNull { s -> prefs[googleEmailKey(s)]?.takeIf { it.isNotBlank() }?.let { s.id to it } }.toMap(),
-            googleTools = GoogleService.entries.associate { it.id to decodeMcpTools(prefs[googleToolsKey(it)]) },
-            enabledGoogleTools = GoogleService.entries.associate {
-                it.id to effectiveMcpTools(decodeMcpTools(prefs[googleToolsKey(it)]))
-            },
             micSensitivity = MicSensitivity.fromStoredValue(prefs[micSensitivityKey]),
             languageCode = prefs[languageCodeKey]
                 ?.takeIf(AssistantOptions::isApprovedLanguage)
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: false,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            personalization = Personalization(
-                baseStyle = BaseStyle.fromStored(prefs[baseStyleKey]),
-                warmth = TraitLevel.fromStored(prefs[warmthKey]),
-                enthusiasm = TraitLevel.fromStored(prefs[enthusiasmKey]),
-                headersAndLists = TraitLevel.fromStored(prefs[headersKey]),
-                emoji = TraitLevel.fromStored(prefs[emojiKey]),
-                customInstructions = prefs[customInstructionsKey].orEmpty(),
-                nickname = prefs[nicknameKey].orEmpty(),
-                occupation = prefs[occupationKey].orEmpty(),
-                aboutMore = prefs[aboutMoreKey].orEmpty()
-            ),
             systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
-            chatPrompt = prefs[chatPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_CHAT_PROMPT.trim(),
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
             greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_GREETING,
             documentFormatPrompt = prefs[documentFormatPromptKey]?.takeIf { it.isNotBlank() }
@@ -257,18 +204,6 @@ class AppSettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun setGoogleTools(service: GoogleService, tools: List<McpToolSpec>) {
-        context.settingsDataStore.edit {
-            if (tools.isEmpty()) it.remove(googleToolsKey(service)) else it[googleToolsKey(service)] = encodeMcpTools(tools)
-        }
-    }
-
-    suspend fun setGoogleAccount(service: GoogleService, email: String?) {
-        context.settingsDataStore.edit {
-            if (email.isNullOrBlank()) it.remove(googleEmailKey(service)) else it[googleEmailKey(service)] = email
-        }
-    }
-
     suspend fun setVoice(voiceName: String) {
         if (!AssistantOptions.isApprovedVoice(voiceName)) throw UserInputException("Choose a supported voice.")
         context.settingsDataStore.edit { it[voiceKey] = voiceName }
@@ -281,20 +216,6 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setLanguageCode(code: String) {
         if (!AssistantOptions.isApprovedLanguage(code)) throw UserInputException("Choose a supported language.")
         context.settingsDataStore.edit { it[languageCodeKey] = code }
-    }
-
-    suspend fun setPersonalization(p: Personalization) {
-        context.settingsDataStore.edit {
-            it[baseStyleKey] = p.baseStyle.name
-            it[warmthKey] = p.warmth.name
-            it[enthusiasmKey] = p.enthusiasm.name
-            it[headersKey] = p.headersAndLists.name
-            it[emojiKey] = p.emoji.name
-            it[customInstructionsKey] = p.customInstructions.take(MAX_CUSTOM_INSTRUCTIONS_CHARS)
-            it[nicknameKey] = p.nickname.take(MAX_ABOUT_FIELD_CHARS)
-            it[occupationKey] = p.occupation.take(MAX_ABOUT_FIELD_CHARS)
-            it[aboutMoreKey] = p.aboutMore.take(MAX_ABOUT_FIELD_CHARS)
-        }
     }
 
     suspend fun setMemoryEnabled(enabled: Boolean) {
@@ -343,14 +264,12 @@ class AppSettingsStore(private val context: Context) {
         name: String,
         greeting: String,
         systemPrompt: String,
-        chatPrompt: String,
         documentFormatPrompt: String,
         retrievalChunkLimit: Int
     ) {
         val cleanName = name.trim().take(MAX_ASSISTANT_NAME_LENGTH)
         val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
         val cleanSystemPrompt = systemPrompt.trim()
-        val cleanChatPrompt = chatPrompt.trim()
         val cleanDocumentPrompt = documentFormatPrompt.trim()
         context.settingsDataStore.edit {
             if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
@@ -358,7 +277,6 @@ class AppSettingsStore(private val context: Context) {
             // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
             if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
             if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
-            if (cleanChatPrompt.isBlank()) it.remove(chatPromptKey) else it[chatPromptKey] = cleanChatPrompt
             if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)
             else it[documentFormatPromptKey] = cleanDocumentPrompt
             it[retrievalChunkLimitKey] = retrievalChunkLimit

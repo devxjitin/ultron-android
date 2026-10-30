@@ -36,6 +36,15 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
+    /** Android 15 caps data-sync services; stop cleanly at the limit instead of being killed for not stopping. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf(startId)
+    }
+
+    override fun onTimeout(startId: Int) {
+        stopSelf(startId)
+    }
+
     companion object {
         private const val NOTIFICATION_ID = 3999
 

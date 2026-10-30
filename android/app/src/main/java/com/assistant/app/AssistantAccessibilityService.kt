@@ -2,12 +2,14 @@ package com.assistant.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -39,12 +41,70 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     // ---------------------------------------------------------------- reading
 
+    /** What came back from [takeShot]. */
+    sealed interface Shot {
+        class Ok(val bitmap: Bitmap) : Shot
+        /** The app protects its window, so Android refuses to show it. */
+        data object Protected : Shot
+        data object Unsupported : Shot
+        data object Failed : Shot
+    }
+
+    /**
+     * One screenshot through the accessibility service: no extra permission, nothing keeps recording, and Android
+     * itself refuses windows that apps mark as secure. This never tries to get around that refusal.
+     */
+    suspend fun takeShot(): Shot {
+        if (Build.VERSION.SDK_INT < 30) return Shot.Unsupported
+        repeat(2) { attempt ->
+            val outcome = suspendCancellableCoroutine<Any> { continuation ->
+                takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        val buffer = screenshot.hardwareBuffer
+                        val bitmap = try {
+                            Bitmap.wrapHardwareBuffer(buffer, screenshot.colorSpace)?.copy(Bitmap.Config.ARGB_8888, false)
+                        } finally {
+                            buffer.close()
+                        }
+                        if (continuation.isActive) continuation.resume(bitmap ?: Shot.Failed)
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        if (continuation.isActive) continuation.resume(errorCode)
+                    }
+                })
+            }
+            when (outcome) {
+                is Bitmap -> return Shot.Ok(outcome)
+                is Int -> when {
+                    outcome == ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT && attempt == 0 -> delay(1_200L)
+                    Build.VERSION.SDK_INT >= 34 && outcome == ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> return Shot.Protected
+                    else -> return Shot.Failed
+                }
+                else -> return Shot.Failed
+            }
+        }
+        return Shot.Failed
+    }
+
+    /**
+     * The content root of the app in front. Some apps (pop-ups, split screen, apps that switch windows) have no
+     * "active" window for a moment, so this falls back to the topmost other app window before giving up.
+     */
+    private fun frontRoot(): AccessibilityNodeInfo? {
+        rootInActiveWindow?.let { return it }
+        return windows.orEmpty()
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .firstNotNullOfOrNull { it.root }
+    }
+
     /** Package name of the app currently on screen, or null when nothing is readable. */
-    fun currentPackage(): String? = rootInActiveWindow?.packageName?.toString()
+    fun currentPackage(): String? = frontRoot()?.packageName?.toString()
 
     /** A numbered list of what is visible, or null when the screen cannot be read. */
     fun readScreen(): String? {
-        val root = rootInActiveWindow ?: return null
+        val root = frontRoot() ?: return null
         val items = mutableListOf<ScreenItem>()
         collect(root, inheritedTappable = false, depth = 0, out = items)
         lastItems = items
@@ -60,7 +120,7 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     /** True when [text] appears (case-insensitive) in the current screen's text. */
     fun screenContains(text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
+        val root = frontRoot() ?: return false
         return !root.findAccessibilityNodeInfosByText(text).isNullOrEmpty()
     }
 
@@ -101,7 +161,7 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     /** Clicks the [occurrence]-th (1-based) element whose text or description contains [text]. */
     suspend fun clickByText(text: String, occurrence: Int): String {
-        val root = rootInActiveWindow ?: return "status=unavailable\nThe screen cannot be read right now."
+        val root = frontRoot() ?: return "status=unavailable\nThe screen cannot be read right now."
         val matches = root.findAccessibilityNodeInfosByText(text).orEmpty()
         val node = matches.getOrNull(occurrence - 1)
             ?: return "status=not_found\nNothing on screen matches \"$text\". Call read_screen to see what is there."
@@ -124,10 +184,16 @@ class AssistantAccessibilityService : AccessibilityService() {
     }
 
     /** A short finger tap at screen coordinates. */
-    suspend fun tap(x: Float, y: Float): Boolean {
-        val path = Path().apply { moveTo(x, y) }
-        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, 60)).build()
-        return withTimeoutOrNull(3_000L) {
+    suspend fun tap(x: Float, y: Float): Boolean = gesture(x, y, x, y, 60)
+
+    /** A long press: the finger stays down for [holdMs]. */
+    suspend fun longPress(x: Float, y: Float, holdMs: Long = 900): Boolean = gesture(x, y, x, y, holdMs)
+
+    /** One finger moving from the first point to the second over [durationMs]; a zero-length path is a tap or a hold. */
+    suspend fun gesture(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long): Boolean {
+        val path = Path().apply { moveTo(x1, y1); if (x1 != x2 || y1 != y2) lineTo(x2, y2) }
+        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1))).build()
+        return withTimeoutOrNull(durationMs + 3_000L) {
             suspendCancellableCoroutine { continuation ->
                 val accepted = dispatchGesture(gesture, object : GestureResultCallback() {
                     override fun onCompleted(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resume(true) }
@@ -140,7 +206,7 @@ class AssistantAccessibilityService : AccessibilityService() {
 
     /** Types into the focused text field (or the first one on screen). Never touches password fields. */
     fun typeText(text: String, append: Boolean): String {
-        val root = rootInActiveWindow ?: return "status=unavailable\nThe screen cannot be read right now."
+        val root = frontRoot() ?: return "status=unavailable\nThe screen cannot be read right now."
         val field = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
             ?: firstEditable(root, 0)
             ?: return "status=not_found\nNo text field is on screen. Tap a text field first."
@@ -156,7 +222,7 @@ class AssistantAccessibilityService : AccessibilityService() {
     /** Presses Enter/Search/Go on the focused field (Android 11 or newer). */
     fun pressEnter(): String {
         if (Build.VERSION.SDK_INT < 30) return "status=unavailable\nThis needs Android 11 or newer."
-        val field = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val field = frontRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
             ?: return "status=not_found\nNo text field is focused."
         return if (field.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)) "status=ok\nPressed Enter."
         else "status=failed\nThe field did not accept Enter."

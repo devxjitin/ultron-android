@@ -10,26 +10,14 @@ import com.assistant.app.data.USE_SKILL_TOOL
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Upper limit for one typed-chat reply (thinking included), so a runaway answer cannot spend unlimited tokens. */
-internal const val CHAT_REPLY_TOKEN_CAP = 16_384
-
-/** What goes before the text of a chat request that continues [reply] after a tool call: a paragraph break, unless the reply is empty or already ends in one. */
-internal fun roundSeparator(reply: CharSequence): String = when {
-    reply.isBlank() -> ""
-    reply.endsWith("\n\n") -> ""
-    reply.endsWith("\n") -> "\n"
-    else -> "\n\n"
-}
-
-/** Function declarations in the shape Gemini expects, shared by the Live voice session and the typed chat. */
+/** Function declarations in the shape Gemini expects, used by the Live voice session. */
 object ToolDeclarations {
 
-    /** A device tool. [nonBlocking] lets the Live model keep talking while the tool runs. */
-    fun device(tool: DeviceTool, nonBlocking: Boolean = false): JSONObject {
+    /** A device tool. */
+    fun device(tool: DeviceTool): JSONObject {
         val declaration = JSONObject()
             .put("name", tool.functionName)
             .put("description", tool.description)
-        if (nonBlocking) declaration.put("behavior", "NON_BLOCKING")
         if (tool.params.isEmpty()) return declaration
         val properties = JSONObject()
         tool.params.forEach { param ->
@@ -44,12 +32,12 @@ object ToolDeclarations {
         )
     }
 
-    /** Search over the user's saved knowledge documents (RAG), for the typed chat. */
+    /** Search over the user's saved knowledge documents (RAG). */
     fun knowledgeSearch(): JSONObject = JSONObject()
         .put("name", "search_knowledge_base")
         .put(
             "description",
-            "Searches the documents and notes the user saved in this app. Call this only " +
+            "Searches the documents the user saved in this app. Call this only " +
                 "when the user asks about information they stored themselves, never for " +
                 "everyday or general questions."
         )
@@ -63,57 +51,36 @@ object ToolDeclarations {
     /** A tool from a connected MCP server, declared under a prefixed name so it cannot clash with device tools. */
     fun mcp(
         tool: McpToolSpec,
-        nonBlocking: Boolean = false,
-        prefix: String = GITHUB_TOOL_PREFIX,
-        /** Chat only: also carries the tool's own JSON Schema under [ORIGINAL_SCHEMA_KEY] for providers that accept it as is. */
-        withOriginalSchema: Boolean = false
+        prefix: String = GITHUB_TOOL_PREFIX
     ): JSONObject {
         val analysis = McpSchema.analyze(tool.schema)
         val note = if (analysis.issues.isEmpty()) "" else " (Argument types are simplified for this model: ${analysis.issues.joinToString()}.)"
         val declaration = JSONObject()
             .put("name", prefix + tool.name)
             .put("description", tool.description.take(400) + note)
-        if (nonBlocking) declaration.put("behavior", "NON_BLOCKING")
         analysis.parameters?.let { declaration.put("parameters", it) }
-        if (withOriginalSchema) {
-            runCatching { JSONObject(tool.schema).also { it.remove("\$schema") } }.getOrNull()
-                ?.takeIf { it.optString("type") == "object" }?.let { declaration.put(ORIGINAL_SCHEMA_KEY, it) }
-        }
         return declaration
     }
 
-    /** Declarations carry the tool's own schema under this key for Azure; Gemini rejects unknown fields, so its client removes it. */
-    const val ORIGINAL_SCHEMA_KEY = "_jsonSchema"
-
-    fun withoutPrivateFields(declarations: JSONArray): JSONArray = JSONArray().also { copy ->
-        for (i in 0 until declarations.length()) {
-            val declaration = JSONObject(declarations.getJSONObject(i).toString())
-            declaration.keys().asSequence().filter { it.startsWith("_") }.toList().forEach { declaration.remove(it) }
-            copy.put(declaration)
-        }
-    }
-
     /** use_skill: loads the full instructions of one skill, so unused skills never fill the prompt. */
-    fun skill(skills: List<Skill>, nonBlocking: Boolean = false): JSONObject {
+    fun skill(skills: List<Skill>): JSONObject {
         val declaration = JSONObject().put("name", USE_SKILL_TOOL)
             .put("description", "Loads the instructions of one skill. Call it only when the request clearly matches a skill listed in the system prompt, then follow what it returns.")
             .put("parameters", JSONObject().put("type", "OBJECT")
                 .put("properties", JSONObject().put("name", JSONObject().put("type", "STRING").put("description", "Skill name.")
                     .put("enum", JSONArray(skills.map { it.name }))))
                 .put("required", JSONArray().put("name")))
-        if (nonBlocking) declaration.put("behavior", "NON_BLOCKING")
         return declaration
     }
 
     /** save_memory / forget_memory: the assistant's personal memory about the user. */
-    fun memory(nonBlocking: Boolean = false): List<JSONObject> {
+    fun memory(): List<JSONObject> {
         fun string(description: String) = JSONObject().put("type", "STRING").put("description", description)
         fun tool(name: String, description: String, properties: JSONObject, required: String): JSONObject {
             val declaration = JSONObject().put("name", name).put("description", description)
                 .put("parameters", JSONObject().put("type", "OBJECT").put("properties", properties)
                     .put("required", JSONArray().put(required)))
-            if (nonBlocking) declaration.put("behavior", "NON_BLOCKING")
-            return declaration
+                return declaration
         }
         return listOf(
             tool(MEMORY_SAVE_TOOL,

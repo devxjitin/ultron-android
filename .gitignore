@@ -32,3 +32,9 @@ phone_ss.png
 android/app/libobjectbox-jni-*.so
 __pycache__/
 *.pyc
+
+# Firebase client config (contains the project API key)
+android/app/google-services.json
+
+# Firebase config must never be committed
+/google-services.json

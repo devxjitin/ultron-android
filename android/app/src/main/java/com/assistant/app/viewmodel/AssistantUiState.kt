@@ -1,16 +1,12 @@
 package com.assistant.app.viewmodel
 
-import android.net.Uri
-import com.assistant.app.network.ChatAttachment
-
 import com.assistant.app.network.GithubDeviceCode
-import com.assistant.app.data.ChatSession
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
 
 /** Which admin page [AssistantUiState.showSettings] opens. */
-enum class AdminPage { SETTINGS, DEVELOPER, ABOUT, KNOWLEDGE, SEARCH, LIBRARY, PERSONALIZATION, USAGE, STORAGE, SKILLS }
+enum class AdminPage { SETTINGS, DEVELOPER, ABOUT, KNOWLEDGE, USAGE, STORAGE, SKILLS }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }
@@ -34,42 +30,12 @@ enum class VoiceState {
     ERROR
 }
 
-/** One message of the typed chat on the home screen. [isError] marks a failed reply (shown in red). */
-data class ChatMessage(
-    val id: Long,
-    val fromUser: Boolean,
-    val text: String,
-    val isError: Boolean = false,
-    /** Files sent with this message (kept in memory for the open chat only). */
-    val attachments: List<ChatAttachment> = emptyList(),
-    /** For a reply still waiting to start: what the assistant is doing, e.g. "Analysing image…". */
-    val status: String? = null,
-    /** Tools the assistant used while writing this reply, in order. */
-    val toolCalls: List<ChatToolCall> = emptyList()
-)
-
-enum class ChatToolState { RUNNING, DONE, FAILED }
-
-data class ChatToolCall(val index: Int, val label: String, val state: ChatToolState)
-
-/** Something another app shared to Ultron (a link or text, and/or files), waiting for the chat to take it. */
-data class IncomingShare(val id: Long, val text: String?, val uris: List<Uri>)
-
 data class AssistantUiState(
-    /** A share from another app, until the home chat has picked it up. */
-    val incomingShare: IncomingShare? = null,
-    /** The typed chat shown on the home screen while no voice session is running. */
-    val chatMessages: List<ChatMessage> = emptyList(),
-    val isChatSending: Boolean = false,
-    /** Saved chat the home chat belongs to (highlighted in the menu); null until its first turn is saved. */
-    val activeChatId: String? = null,
     val voiceState: VoiceState = VoiceState.IDLE,
     val micAmplitude: Float = 0f,
     /** User pressed Mute during a session: mic audio isn't sent, the session stays open. */
     val isMicMuted: Boolean = false,
     val playbackAmplitude: Float = 0f,
-    /** Saved chats (newest first), browsable from the History dialog. */
-    val chatSessions: List<ChatSession> = emptyList(),
     val showConnectors: Boolean = false,
     /** Ids of added connectors whose sign-in stopped working; Connectors shows them with Reconnect. */
     val connectorIssues: Set<String> = emptySet(),
@@ -86,15 +52,6 @@ data class AssistantUiState(
     val usageDays: List<com.assistant.app.data.UsageDay> = emptyList(),
     /** Bytes of temporary files (downloaded updates, previews) the app can clear. */
     val cacheBytes: Long = 0L,
-    /** The unsent chat message and files, kept while the user visits another page. */
-    val chatDraftText: String = "",
-    /** Position in [chatMessages] to scroll to once, after a chat was opened from a search result. */
-    val chatFocusIndex: Int? = null,
-    val chatDraftFiles: List<ChatAttachment> = emptyList(),
-    /** Chats that could not be read and were set aside (shown in Storage so they can be saved or deleted). */
-    val unreadableChats: Int = 0,
-    /** Set while a Google service waits for the user to pick an account and allow access; the activity shows it. */
-    val googleConsent: android.app.PendingIntent? = null,
     val showMemory: Boolean = false,
     /** Facts the assistant remembers about the user, newest last. */
     val memories: List<MemoryItem> = emptyList(),
@@ -107,13 +64,6 @@ data class AssistantUiState(
     val activeTool: String? = null,
     val hasApiKey: Boolean = false,
     val currentApiKey: String = "",
-    /** Azure OpenAI settings for the typed chat; when active, the chat uses it instead of Gemini. */
-    val azure: com.assistant.app.data.AzureConfig = com.assistant.app.data.AzureConfig(),
-    /** NVIDIA NIM settings for the typed chat; at most one of Azure and NIM is switched on. */
-    val nim: com.assistant.app.data.NimConfig = com.assistant.app.data.NimConfig(),
-    /** Chat models the NIM catalog offered the last time "Load models" was tapped. */
-    val nimModels: List<String> = emptyList(),
-    val isLoadingNimModels: Boolean = false,
     val showSettings: Boolean = false,
     /** True when the stored knowledge data cannot be decoded; the admin can reset it. */
     val knowledgeStoreCorrupt: Boolean = false,
