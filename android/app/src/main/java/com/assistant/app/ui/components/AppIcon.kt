@@ -17,12 +17,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import com.assistant.app.R
 
-/** The launcher icon (mark on its indigo-to-midnight gradient) at any size, so the app shows one identity everywhere. */
+/** The launcher icon (mark on its gunmetal gradient) at any size, so the app shows one identity everywhere. */
 @Composable
 fun AppIconTile(size: Dp, modifier: Modifier = Modifier) {
     Box(
         modifier.size(size).clip(RoundedCornerShape(size * 0.24f))
-            .background(Brush.linearGradient(listOf(Color(0xFF5B4BE8), Color(0xFF2A2490), Color(0xFF0A0B1E)))),
+            .background(Brush.linearGradient(listOf(Color(0xFF46505E), Color(0xFF1B2028), Color(0xFF06080B)))),
         contentAlignment = Alignment.Center
     ) {
         // The launcher art keeps a wide safe margin for adaptive-icon masks; zoom in so the mark fills the tile.

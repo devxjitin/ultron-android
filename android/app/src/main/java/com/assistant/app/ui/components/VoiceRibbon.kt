@@ -15,10 +15,10 @@ import kotlin.math.sin
 
 /** The ribbon's gradient end colours for a state; the mic button uses the same so they match. */
 fun ribbonColors(voiceState: VoiceState): Pair<Color, Color> = when (voiceState) {
-    VoiceState.LISTENING -> Color(0xFF4338CA) to Color(0xFF06B6D4)
-    VoiceState.SPEAKING -> Color(0xFF3730A3) to Color(0xFF6366F1)
-    VoiceState.ERROR -> Color(0xFFE5484D) to Color(0xFFFF8A5B)
-    else -> Color(0xFF4F46E5) to Color(0xFF2563EB)
+    VoiceState.LISTENING -> Color(0xFFC4232C) to Color(0xFFFF5A4D)
+    VoiceState.SPEAKING -> Color(0xFF5E7A99) to Color(0xFFA9B8C8)
+    VoiceState.ERROR -> Color(0xFFD9650F) to Color(0xFFFFB347)
+    else -> Color(0xFF7A1218) to Color(0xFFC4232C)
 }
 
 /** A tapered, luminous ribbon, drawn locally and driven by real microphone/playback levels. */

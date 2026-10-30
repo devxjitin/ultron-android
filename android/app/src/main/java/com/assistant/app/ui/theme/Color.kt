@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
  * Every colour the screens use, as one light set and one dark set. The Assistant* names below are read at use time from
  * the palette that is active, so a page never needs to know which theme it is in. Text pairs were checked for contrast
  * (4.5:1 or better for text on every surface it sits on), and [accent] is for text and outlines while [accentFill] is
- * for backgrounds that carry white text, because one indigo cannot be both on a dark page.
+ * for backgrounds that carry white text, because one red cannot be both on a dark page.
  */
 @Immutable
 class AssistantPalette(
@@ -33,46 +33,46 @@ class AssistantPalette(
     val textMuted: Color
 )
 
-// Light: indigo on a cool paper-white page, near-black text.
+// Light: Ultron crimson on a cold steel-grey page, near-black text.
 val LightPalette = AssistantPalette(
     dark = false,
-    background = Color(0xFFF6F7FB),
+    background = Color(0xFFEEF1F4),
     surface = Color(0xFFFFFFFF),
-    surfaceElevated = Color(0xFFEDEFF6),
-    outline = Color(0xFFD9DCE8),
-    fieldBackground = Color(0xFFF0F2F8),
-    selectedBg = Color(0xFFE3E7FF),
-    primary = Color(0xFF3730A3),
-    accent = Color(0xFF4338CA),
-    accentFill = Color(0xFF4F46E5),
-    accentAlt = Color(0xFF2563EB),
-    amber = Color(0xFFF2A12B),
-    error = Color(0xFFD93A40),
-    errorFill = Color(0xFFD93A40),
-    textPrimary = Color(0xFF12141F),
-    textSecondary = Color(0xFF454B66),
-    textMuted = Color(0xFF666D8A)
+    surfaceElevated = Color(0xFFE4E8ED),
+    outline = Color(0xFFCDD4DC),
+    fieldBackground = Color(0xFFE8ECF0),
+    selectedBg = Color(0xFFF9E1E3),
+    primary = Color(0xFF9B1B24),
+    accent = Color(0xFFB3202A),
+    accentFill = Color(0xFFB3202A),
+    accentAlt = Color(0xFF6E1219),
+    amber = Color(0xFF92400E),
+    error = Color(0xFFA8350A),
+    errorFill = Color(0xFFA8350A),
+    textPrimary = Color(0xFF12151A),
+    textSecondary = Color(0xFF444C58),
+    textMuted = Color(0xFF5F6876)
 )
 
-// Dark: the same indigo on a blue-black page, soft off-white text.
+// Dark: the same crimson on a gunmetal page, soft off-white text.
 val DarkPalette = AssistantPalette(
     dark = true,
-    background = Color(0xFF0E1018),
-    surface = Color(0xFF161924),
-    surfaceElevated = Color(0xFF1F2333),
-    outline = Color(0xFF2E3348),
-    fieldBackground = Color(0xFF1A1E2C),
-    selectedBg = Color(0xFF242B52),
-    primary = Color(0xFF4F46E5),
-    accent = Color(0xFF8B9BFF),
-    accentFill = Color(0xFF4F46E5),
-    accentAlt = Color(0xFF2563EB),
-    amber = Color(0xFFF2A12B),
-    error = Color(0xFFFF6B70),
-    errorFill = Color(0xFFC9343A),
-    textPrimary = Color(0xFFEDEFF7),
-    textSecondary = Color(0xFFB9BED3),
-    textMuted = Color(0xFF8D93AD)
+    background = Color(0xFF0C0E12),
+    surface = Color(0xFF14171D),
+    surfaceElevated = Color(0xFF1C2028),
+    outline = Color(0xFF2B313B),
+    fieldBackground = Color(0xFF171B22),
+    selectedBg = Color(0xFF2C1519),
+    primary = Color(0xFFC4232C),
+    accent = Color(0xFFFF5A4D),
+    accentFill = Color(0xFFC4232C),
+    accentAlt = Color(0xFF7A1218),
+    amber = Color(0xFFE8B931),
+    error = Color(0xFFFF9A3D),
+    errorFill = Color(0xFFC2410C),
+    textPrimary = Color(0xFFECEFF3),
+    textSecondary = Color(0xFFB4BCC8),
+    textMuted = Color(0xFF8A93A1)
 )
 
 /** The palette in use. A snapshot state, so every screen that read a colour redraws when the theme changes. */
@@ -92,8 +92,8 @@ val AssistantSelectedBg: Color get() = ActivePalette.current.selectedBg
 val AssistantPrimaryLight: Color get() = ActivePalette.current.primary
 // Accent for text, icons and outlines. Use AssistantAccentFill for a background that carries white text.
 val AssistantAccent: Color get() = ActivePalette.current.accent
-/** Second stop of the accent gradient used on the greeting and the app icon tile. */
-val AssistantGradientEnd: Color get() = if (ActivePalette.current.dark) Color(0xFF22D3EE) else Color(0xFF0891B2)
+/** Second stop of the accent gradient used on the greeting. */
+val AssistantGradientEnd: Color get() = if (ActivePalette.current.dark) Color(0xFFA9B8C8) else Color(0xFF4B5D70)
 val AssistantAccentFill: Color get() = ActivePalette.current.accentFill
 val AssistantAccentAlt: Color get() = ActivePalette.current.accentAlt
 val AssistantAmber: Color get() = ActivePalette.current.amber
