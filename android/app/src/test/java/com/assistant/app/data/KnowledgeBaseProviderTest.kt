@@ -94,12 +94,12 @@ class KnowledgeBaseProviderTest {
         }
     }
 
-    @Test fun `history is role-separated, bounded to five turns and kept out of the system instruction`() {
-        val turns = (1..6).map { ConversationTurn("Question $it", "Answer $it") }
+    @Test fun `history is role-separated, bounded to ten turns and kept out of the system instruction`() {
+        val turns = (1..12).map { ConversationTurn("Question $it", "Answer $it") }
         val history = KnowledgeBaseProvider.liveHistoryTurns(turns)
-        assertEquals(10, history.size)
-        assertEquals(KnowledgeBaseProvider.HistoryTurn("user", "Question 2"), history.first())
-        assertEquals(KnowledgeBaseProvider.HistoryTurn("model", "Answer 6"), history.last())
+        assertEquals(20, history.size)
+        assertEquals(KnowledgeBaseProvider.HistoryTurn("user", "Question 3"), history.first())
+        assertEquals(KnowledgeBaseProvider.HistoryTurn("model", "Answer 12"), history.last())
         assertEquals(listOf("user", "model"), history.take(2).map { it.role })
         val result = instruction("Be a campus guide.")
         assertTrue(result.contains("Your name is Guide."))

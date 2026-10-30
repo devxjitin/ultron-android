@@ -12,29 +12,31 @@ import org.json.JSONObject
 private val Context.dataStore by preferencesDataStore(name = "assistant_conversation")
 
 /**
- * Persists only the last 5 conversation turns on device, so continuity survives
- * an app restart or a fresh Live session without ever growing unbounded.
+ * Persists the last [MAX_TURNS] conversation turns on device, so continuity survives a stopped
+ * session, an app restart or a fresh Live session without ever growing unbounded. Turns older than
+ * [HISTORY_TTL_MS] are dropped when read, so a conversation from hours ago never leaks into a new one.
  */
 class ConversationStore(private val context: Context) {
 
     private val turnsKey = stringPreferencesKey("recent_turns")
 
     companion object {
-        const val MAX_TURNS = 5
+        const val MAX_TURNS = 12
+        const val HISTORY_TTL_MS = 30 * 60 * 1000L
+
+        /** Only the turns spoken within [HISTORY_TTL_MS] of [now]. */
+        fun freshTurns(turns: List<ConversationTurn>, now: Long = System.currentTimeMillis()): List<ConversationTurn> =
+            turns.filter { now - it.timestampMillis in 0..HISTORY_TTL_MS }
     }
 
     val recentTurns: Flow<List<ConversationTurn>> =
-        context.dataStore.data.map { prefs -> decode(prefs[turnsKey]) }
+        context.dataStore.data.map { prefs -> freshTurns(decode(prefs[turnsKey])) }
 
     suspend fun appendTurn(turn: ConversationTurn) {
         context.dataStore.edit { prefs ->
-            val updated = (decode(prefs[turnsKey]) + turn).takeLast(MAX_TURNS)
+            val updated = (freshTurns(decode(prefs[turnsKey])) + turn).takeLast(MAX_TURNS)
             prefs[turnsKey] = encode(updated)
         }
-    }
-
-    suspend fun clear() {
-        context.dataStore.edit { prefs -> prefs.remove(turnsKey) }
     }
 
     private fun encode(turns: List<ConversationTurn>): String {

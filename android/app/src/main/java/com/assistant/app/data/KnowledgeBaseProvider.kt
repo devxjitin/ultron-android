@@ -99,8 +99,10 @@ object KnowledgeBaseProvider {
      * session without prior speech being mixed into the system instruction. Blank sides are
      * skipped (the API rejects empty parts).
      */
+    const val MAX_HISTORY_TURNS = 10
+
     fun liveHistoryTurns(recentTurns: List<ConversationTurn>): List<HistoryTurn> =
-        recentTurns.takeLast(5).flatMap { turn ->
+        recentTurns.takeLast(MAX_HISTORY_TURNS).flatMap { turn ->
             listOfNotNull(
                 turn.userText.trim().takeIf { it.isNotEmpty() }?.let { HistoryTurn("user", it) },
                 turn.assistantText.trim().takeIf { it.isNotEmpty() }?.let { HistoryTurn("model", it) }
