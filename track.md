@@ -433,3 +433,4 @@
 [2026-10-30 15:50] [Claude] [Docs: OTA build 29889256 published, not tested on device]
 [2026-10-30 17:58] [Claude] [Add: GitHub Actions publishes OTA on voice-only push via OIDC role]
 [2026-10-30 17:59] [Claude] [Fix: CI setup-android failed on removed tools package]
+[2026-10-30 18:13] [Claude] [Fix: OIDC trust me ID-based sub; CI published OTA 29889392]
