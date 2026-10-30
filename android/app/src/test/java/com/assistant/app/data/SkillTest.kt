@@ -37,3 +37,17 @@ class SkillTest {
         assertNotNull(skills)
     }
 }
+
+class SkillDraftTest {
+    @Test fun frontmatterFillsNameDescriptionAndInstruction() {
+        val d = SkillParser.draftFromMarkdown("---\nname: Trip-Planner\ndescription: Plan a trip\n---\n# Steps\n1. Ask dates", "x.md")
+        assertEquals(SkillDraft("trip-planner", "Plan a trip", "# Steps\n1. Ask dates"), d)
+    }
+
+    @Test fun plainMarkdownUsesFileNameAndFirstLine() {
+        val d = SkillParser.draftFromMarkdown("# Write emails\nKeep them short.\n", "My Email Skill.md")
+        assertEquals("my-email-skill", d.name)
+        assertEquals("Write emails", d.description)
+        assertEquals("# Write emails\nKeep them short.", d.instruction)
+    }
+}

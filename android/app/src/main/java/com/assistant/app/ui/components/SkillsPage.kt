@@ -1,5 +1,9 @@
 package com.assistant.app.ui.components
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.MAX_SKILL_BODY_CHARS
 import com.assistant.app.data.SkillEntry
+import com.assistant.app.data.SkillParser
+import com.assistant.app.data.draftFromMarkdown
 import com.assistant.app.ui.theme.AlertDialog
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentAlt
@@ -150,14 +157,38 @@ private fun SkillEditor(
     var description by remember(entry) { mutableStateOf(entry?.skill?.description.orEmpty()) }
     var body by remember(entry) { mutableStateOf(entry?.skill?.body.orEmpty()) }
     var error by remember(entry) { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val read = runCatching {
+            val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (c.moveToFirst() && i >= 0) c.getString(i) else null
+            }.orEmpty()
+            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+            fileName to text
+        }.getOrNull()
+        if (read == null || read.second.isBlank()) {
+            error = "Could not read that file. Upload a .md or .txt file with text in it."
+        } else {
+            val draft = SkillParser.draftFromMarkdown(read.second, read.first)
+            name = draft.name; description = draft.description; body = draft.instruction
+            error = null
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (entry == null) "New skill" else if (readOnly) "Built-in skill (locked)" else "Edit skill") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SkillField(name, { name = it.take(48) }, "Name (e.g. trip-planner)", enabled = entry == null, singleLine = true)
-                SkillField(description, { description = it.take(300) }, "When to use it (one line)", enabled = !readOnly)
-                SkillField(body, { body = it.take(MAX_SKILL_BODY_CHARS) }, "Instructions", enabled = !readOnly, minLines = 6)
+                if (!readOnly) {
+                    TextButton(onClick = { picker.launch(arrayOf("text/markdown", "text/plain", "text/x-markdown", "application/octet-stream")) }) {
+                        Text("Upload .md file")
+                    }
+                }
+                SkillField(name, { name = it.take(48) }, "Name", "e.g. trip-planner", enabled = entry == null, singleLine = true)
+                SkillField(description, { description = it.take(300) }, "Description", "when to use it, one line", enabled = !readOnly)
+                SkillField(body, { body = it.take(MAX_SKILL_BODY_CHARS) }, "Instruction", "what to do, step by step", enabled = !readOnly, minLines = 6)
                 error?.let { Text(it, color = AssistantError, fontSize = 13.sp) }
             }
         },
@@ -177,10 +208,11 @@ private fun SkillEditor(
 }
 
 @Composable
-private fun SkillField(value: String, onChange: (String) -> Unit, label: String, enabled: Boolean, singleLine: Boolean = false, minLines: Int = 1) {
+private fun SkillField(value: String, onChange: (String) -> Unit, label: String, hint: String, enabled: Boolean, singleLine: Boolean = false, minLines: Int = 1) {
     TextField(
         value = value, onValueChange = onChange, enabled = enabled, singleLine = singleLine, minLines = minLines,
-        placeholder = { Text(label, color = AssistantTextMuted, fontSize = 14.sp) },
+        label = { Text(label, color = AssistantTextMuted, fontSize = 13.sp) },
+        placeholder = { Text(hint, color = AssistantTextMuted, fontSize = 14.sp) },
         shape = RoundedCornerShape(16.dp),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = AssistantFieldBackground, unfocusedContainerColor = AssistantFieldBackground,

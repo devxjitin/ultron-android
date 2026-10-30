@@ -40,6 +40,35 @@ object SkillParser {
     }
 }
 
+/** The three form fields filled from an uploaded .md file; the user can still correct them before saving. */
+data class SkillDraft(val name: String, val description: String, val instruction: String)
+
+/**
+ * Reads an uploaded .md file into the Name / Description / Instruction fields. Frontmatter `name:` and `description:` are
+ * used when present; otherwise the name comes from the file name and the description from the first plain line.
+ */
+fun SkillParser.draftFromMarkdown(text: String, fileName: String): SkillDraft {
+    val lines = text.replace("\r\n", "\n").trimStart('﻿').lines()
+    val fields = HashMap<String, String>()
+    var bodyStart = 0
+    if (lines.firstOrNull()?.trim() == "---") {
+        val end = lines.drop(1).indexOfFirst { it.trim() == "---" }
+        if (end >= 0) {
+            lines.subList(1, end + 1).forEach { line ->
+                val colon = line.indexOf(':')
+                if (colon > 0) fields[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim().trim('"', '\'')
+            }
+            bodyStart = end + 2
+        }
+    }
+    val body = lines.drop(bodyStart).joinToString("\n").trim()
+    val fromFile = fileName.substringBeforeLast('.').lowercase().replace(Regex("[^a-z0-9_-]+"), "-").trim('-').take(48)
+    val name = (fields["name"]?.trim()?.lowercase()?.replace(Regex("[^a-z0-9_-]+"), "-")?.trim('-')?.take(48)).takeUnless { it.isNullOrEmpty() } ?: fromFile
+    val description = fields["description"]?.takeIf { it.isNotBlank() }
+        ?: body.lines().map { it.trim().trimStart('#', '-', '*', ' ') }.firstOrNull { it.isNotEmpty() }.orEmpty()
+    return SkillDraft(name, description.take(300), body.take(MAX_SKILL_BODY_CHARS))
+}
+
 /** A skill as the Skills page shows it: [builtIn] ones ship with the app and are locked; the user's own can be switched off, edited or deleted. */
 data class SkillEntry(val skill: Skill, val builtIn: Boolean, val enabled: Boolean = true)
 
