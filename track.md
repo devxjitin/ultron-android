@@ -443,3 +443,4 @@
 [2026-10-30 19:20] [Claude] [Update: Phase 1 - Home in sidebar, page transitions, live captions, ribbon level off UI state, barge-in on, owner name in prompt]
 [2026-10-30 19:36] [Claude] [Update: Phase 2 - chat history kept 30 min (12 turns), setup size budget tests, latency how-to]
 [2026-10-30 19:51] [Claude] [Fix: captions scroll with newest text, layout fits above mic, clear after turn ends]
+[2026-10-30 20:10] [Claude] [Remove: live captions and the session layout shrink that came with them]

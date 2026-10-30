@@ -111,9 +111,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Hard cap on one session, counted from the user's mic tap. It then stops and the user
          *  taps the mic to start again; auto-reconnects inside the cap don't extend it. */
         const val MAX_SESSION_MS = 15 * 60 * 1000L
-        private const val CAPTION_MAX_CHARS = 1200
-        /** How long the captions stay after the assistant finishes speaking. */
-        private const val CAPTION_LINGER_MS = 2500L
         /** How long to wait, once the user has finished speaking (local UI heuristic) or a
          *  tool response has been sent back, for the model to produce SOMETHING -- audio,
          *  another tool call, or turnComplete. The Live protocol has no server-side "I'm still
@@ -1666,20 +1663,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     lastLoudAtMillis = SystemClock.elapsedRealtime()
                 }
                 userTextBuffer.append(text)
-                cancelCaptionClear()
-                // A new user line after the assistant spoke starts a fresh caption pair.
-                _uiState.update {
-                    val fresh = it.captionAssistant.isNotEmpty()
-                    it.copy(captionUser = ((if (fresh) "" else it.captionUser) + text).takeLast(CAPTION_MAX_CHARS), captionAssistant = "")
-                }
                 resetIdleTimeout()
             }
 
             override fun onOutputTranscript(text: String) {
                 if (liveClient !== client) return
                 assistantTextBuffer.append(text)
-                cancelCaptionClear()
-                _uiState.update { it.copy(captionAssistant = (it.captionAssistant + text).takeLast(CAPTION_MAX_CHARS)) }
                 resetIdleTimeout()
             }
 
@@ -1954,7 +1943,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         resetIdleTimeout()
         resetSpeechDetection()
-        _uiState.update { it.copy(captionUser = "", captionAssistant = "") }
 
         var player: AudioPlayer? = null
         val createdPlayer = AudioPlayer(
@@ -1967,7 +1955,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // stopped. They must not unmute the current session's mic or change its UI.
                 if (liveClient !== client || audioPlayer !== player) return@playbackIdle
                 client.latency.playbackIdle()
-                scheduleCaptionClear()
                 // Playback has actually finished (or was interrupted) -- safe to unmute now.
                 micStreamer?.setMuted(false)
                 resetSpeechDetection()
@@ -2031,24 +2018,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
         client.latency.event("stream_ready")
-    }
-
-    private var captionClearJob: Job? = null
-
-    private fun cancelCaptionClear() {
-        captionClearJob?.cancel()
-        captionClearJob = null
-    }
-
-    /** Once the exchange is over (playback has drained) the captions fade away after a moment; new speech cancels this.
-     *  While a tool is still running the exchange is not over, so they stay. */
-    private fun scheduleCaptionClear() {
-        captionClearJob?.cancel()
-        captionClearJob = viewModelScope.launch {
-            delay(CAPTION_LINGER_MS)
-            if (awaitingToolContinuation || pendingToolCallIds.isNotEmpty()) return@launch
-            _uiState.update { it.copy(captionUser = "", captionAssistant = "") }
-        }
     }
 
     private fun finalizeTurnIfAny() {
