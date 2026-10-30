@@ -2073,26 +2073,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update {
             it.copy(voiceState = VoiceState.IDLE)
         }
-        // A manual stop ends this conversation -- clear the persisted history so it doesn't
-        // survive into whatever the next session says.
-        clearHistoryAndRewarm()
+        // The history stays on the device for a while (see ConversationStore.HISTORY_TTL_MS), so the
+        // next session can pick the conversation up, e.g. "make that one 7 o'clock".
+        rewarmAfterStop()
     }
 
-    /** Discards any warm session -- it may already have this conversation's history baked into
-     *  its system instruction -- then clears the persisted history and only *afterward* triggers
-     *  a fresh prewarm. Awaiting the clear before rewarming (rather than firing both at once)
-     *  stops the new prewarm from racing ahead of the DataStore write and reading stale
-     *  a stale copy of the history, which would bake the outgoing conversation into the very
-     *  next warm session. */
-    private fun clearHistoryAndRewarm() {
+    /** Discards any warm session -- it was built before this conversation's last turns -- and
+     *  prewarms a new one, which reads the history again and so includes them. */
+    private fun rewarmAfterStop() {
         cancelInFlightPrewarm()
         warmClient?.close()
         warmClient = null
         isPrewarmReady = false
-        viewModelScope.launch {
-            conversationStore.clear()
-            prewarmIfPossible()
-        }
+        viewModelScope.launch { prewarmIfPossible() }
     }
 
     /** Opens a session ahead of time so its (slow) system-instruction ingestion is already done
@@ -2505,11 +2498,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             backgroundSessionAllowed = true
         } else if (_uiState.value.voiceState != VoiceState.IDLE) {
             stopSession()
-        } else {
-            // Already idle, so stopSession()'s own clear won't run here -- but the user may have
-            // backgrounded the app right after their turn finished without tapping Stop, so still
-            // wipe the persisted history rather than leaving it for the next session.
-            viewModelScope.launch { conversationStore.clear() }
         }
     }
 
