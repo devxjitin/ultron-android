@@ -424,3 +424,5 @@
 [2026-10-29 22:11] [Claude] [Docs: OTA build 29888199 published, not tested on device]
 [2026-10-29 22:22] [Claude] [Refactor: removed landscape scene, home now uses a plain dark/light gradient background]
 [2026-10-29 22:25] [Claude] [Docs: OTA build 29888213 published, not tested on device]
+[2026-10-30 09:39] [Claude] [Refactor: Ultron prompt rewrite, Marvel persona, deduped policy, tools hidden]
+[2026-10-30 09:43] [Claude] [WIP: OTA publish failed, aws login expired; build compiles]
