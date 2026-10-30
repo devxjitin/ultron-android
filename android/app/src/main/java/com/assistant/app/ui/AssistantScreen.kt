@@ -2,9 +2,6 @@ package com.assistant.app.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -243,18 +240,9 @@ fun AssistantScreen(
         Box(Modifier.fillMaxSize()) {
             if (tab == NavTab.HOME) HomeBackground(isDarkTheme, Modifier.fillMaxSize())
             if (tab == NavTab.HOME) {
-                // While a session runs the ribbon and top gap shrink to leave room for the captions above the mic button.
-                val topGap by animateDpAsState(
-                    if (compact) 0.dp else availableHeight * (if (sessionActive) 0.04f else 0.13f), tween(300), label = "topGap"
-                )
-                val ribbonHeight by animateDpAsState(
-                    if (compact) 80.dp else if (sessionActive) (availableHeight * 0.2f).coerceIn(110.dp, 190.dp)
-                    else (availableHeight * 0.28f).coerceIn(160.dp, 270.dp),
-                    tween(300), label = "ribbonHeight"
-                )
                 Column(Modifier.fillMaxSize().padding(top = topReserve, bottom = 112.dp)
                     .verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(topGap))
+                    Spacer(Modifier.height(if (compact) 0.dp else availableHeight * 0.13f))
                     Text(uiState.settings.assistantName, color = AssistantTextMuted, style = MaterialTheme.typography.labelLarge,
                         letterSpacing = 1.2.sp)
                     Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
@@ -280,9 +268,8 @@ fun AssistantScreen(
                     }
                     VoiceRibbon(uiState.voiceState, voiceLevel,
                         Modifier.widthIn(max = 900.dp).fillMaxWidth()
-                            .height(ribbonHeight))
+                            .height(if (compact) 80.dp else (availableHeight * 0.28f).coerceIn(160.dp, 270.dp)))
                     StatusLine(uiState, strings, hasMicPermission, micPermissionPermanentlyDenied)
-                    LiveCaptions(uiState)
                     uiState.activeTool?.takeIf { uiState.voiceState != VoiceState.SPEAKING }?.let { ToolChip(it) }
                     Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
                     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
@@ -606,32 +593,4 @@ private fun SessionTimer(sessionStartTimeMs: Long?, compact: Boolean) {
         textAlign = TextAlign.Center,
         modifier = Modifier.padding(horizontal = 28.dp)
     )
-}
-
-/** Live transcript of the current exchange. It has a fixed maximum height and stays scrolled to the newest words, so long answers never push the layout around or get cut off. */
-@Composable
-private fun LiveCaptions(uiState: AssistantUiState) {
-    val active = uiState.voiceState == VoiceState.LISTENING || uiState.voiceState == VoiceState.PROCESSING ||
-        uiState.voiceState == VoiceState.SPEAKING
-    val show = active && (uiState.captionUser.isNotBlank() || uiState.captionAssistant.isNotBlank())
-    AnimatedVisibility(visible = show, enter = fadeIn(tween(200)), exit = fadeOut(tween(300))) {
-        val scroll = rememberScrollState()
-        // Follow the text as it grows: whenever the scrollable height changes, jump to the end.
-        LaunchedEffect(scroll) { snapshotFlow { scroll.maxValue }.collect { scroll.scrollTo(it) } }
-        Column(
-            Modifier.widthIn(max = 620.dp).fillMaxWidth().heightIn(max = 150.dp).verticalScroll(scroll)
-                .padding(horizontal = 28.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            if (uiState.captionUser.isNotBlank()) Text(
-                uiState.captionUser.trim(), color = AssistantTextMuted, style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center
-            )
-            if (uiState.captionAssistant.isNotBlank()) Text(
-                uiState.captionAssistant.trim(), color = com.assistant.app.ui.theme.AssistantTextPrimary,
-                fontSize = 17.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp)
-            )
-        }
-    }
 }

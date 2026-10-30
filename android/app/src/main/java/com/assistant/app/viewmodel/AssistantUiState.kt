@@ -34,9 +34,6 @@ data class AssistantUiState(
     val voiceState: VoiceState = VoiceState.IDLE,
     /** User pressed Mute during a session: mic audio isn't sent, the session stays open. */
     val isMicMuted: Boolean = false,
-    /** What the user said and what the assistant is saying in the current exchange, shown as live captions. */
-    val captionUser: String = "",
-    val captionAssistant: String = "",
     val showConnectors: Boolean = false,
     /** Ids of added connectors whose sign-in stopped working; Connectors shows them with Reconnect. */
     val connectorIssues: Set<String> = emptySet(),
