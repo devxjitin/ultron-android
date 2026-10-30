@@ -157,12 +157,23 @@ private fun deviceInfoPermissions(): List<String> = buildList {
     if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
 }
 
+private fun filesPermissions(): List<String> = when {
+    Build.VERSION.SDK_INT >= 34 -> listOf(
+        Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO,
+        Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+    )
+    Build.VERSION.SDK_INT >= 33 -> listOf(
+        Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO
+    )
+    else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+
 private val PhoneCatalog = listOf(
     phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps and light level.",
         Icons.Outlined.PhoneAndroid, Kind.Local(deviceInfoPermissions())),
     phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
         Icons.Outlined.Tune),
-    phone("alarms", "Alarms & reminders", "Set alarms, timers and reminders.",
+    phone("alarms", "Alarms & reminders", "Set, list, change and cancel alarms, timers and reminders.",
         Icons.Outlined.Alarm),
     phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
         Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
@@ -189,6 +200,8 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS))),
     phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, use the clipboard and show notifications.",
         Icons.Outlined.Apps),
+    phone("files", "Files", "Find images, videos, audio and documents on your phone and open them in your default app.",
+        Icons.Outlined.Folder, Kind.Local(filesPermissions())),
     phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
         Icons.Outlined.Explore, Kind.Local(access = Access.ACCESSIBILITY)),
     phone("screen", "Screen control", "Read what is on screen, tap, type and wait for text. Sends screen text to Gemini.",
@@ -492,7 +505,7 @@ private val InfoById: Map<String, Info> = mapOf(
         "Nothing leaves the phone except the words of the conversation."
     ),
     "alarms" to Info(
-        "Sets alarms and timers in the clock app, sends a reminder notification after the minutes you choose.",
+        "Sets alarms and timers in the clock app, lists, moves and cancels the alarms it set, and sends a reminder notification after the minutes you choose, which you can change or cancel later.",
         "No permission. Reminders appear as notifications, so keep notifications on for Ultron.",
         "Nothing leaves the phone except the words of the conversation."
     ),
@@ -565,6 +578,11 @@ private val InfoById: Map<String, Info> = mapOf(
         "Opens apps by name, the camera, Android settings and an app's info page, reads or writes the clipboard and posts a notification.",
         "No special permission.",
         "Clipboard text you ask the assistant to read is sent to the model."
+    ),
+    "files" to Info(
+        "Searches the images, videos, audio and documents on your phone by name, shows the newest matches, and opens the one you pick in your phone's default app for that kind of file.",
+        "Photos, videos and music permission. Android asks when you add it.",
+        "File names and dates are read on the phone and only used when you ask. The files themselves are opened by your own apps and are not sent anywhere. On newer Android versions, documents outside media folders cannot be searched."
     ),
     "navigation" to Info(
         "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone.",

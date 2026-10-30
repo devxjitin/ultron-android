@@ -842,6 +842,7 @@ private fun GeneralSettingsContent(
             checked = settings.bargeInEnabled, onChange = onBargeInToggled
         )
         DefaultAssistantSection()
+        FileOpenersSection()
     }
 }
 

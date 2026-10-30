@@ -230,6 +230,27 @@ enum class DeviceTool(
             choices = listOf("photo", "video")))
     ),
 
+    SEARCH_FILES(
+        ToolGroup.APPS, "search_files", "Search files", "Find images, videos, audio and documents by name.",
+        "Searches the files on the phone by name and lists the newest matches, each with a number. Leave the query empty to list the newest files of a kind. " +
+            "Call open_file with a number to show one.",
+        listOf(
+            ToolParam("query", ToolParamType.STRING, "Words in the file name or title. Leave out to list the newest.", required = false),
+            ToolParam("kind", ToolParamType.STRING, "What to look for: image, video, audio, document or any. Default any.", required = false,
+                choices = listOf("image", "video", "audio", "document", "any")),
+            ToolParam("limit", ToolParamType.INTEGER, "How many matches to list, 1-10. Default 5.", required = false)
+        )
+    ),
+    OPEN_FILE(
+        ToolGroup.APPS, "open_file", "Open a file", "Show a file in the phone's default app.",
+        "Opens a file in the phone's default app for it (gallery, video player, music player, document viewer). " +
+            "Give the number from search_files, or a name. Use it whenever the user asks to see, show, play or open a file.",
+        listOf(
+            ToolParam("number", ToolParamType.INTEGER, "Number from the latest search_files list.", required = false),
+            ToolParam("name", ToolParamType.STRING, "File name to search for when there is no number.", required = false)
+        )
+    ),
+
     OPEN_APP_SETTINGS(
         ToolGroup.APPS, "open_app_settings", "App settings page", "Open an app's info page (permissions, storage, uninstall).",
         "Opens the system info page of an installed app, where the user can manage its permissions or uninstall it.",
@@ -245,6 +266,10 @@ enum class DeviceTool(
             ToolParam("label", ToolParamType.STRING, "Optional alarm name.", required = false)
         )
     ),
+    LIST_ALARMS(
+        ToolGroup.ALARMS, "list_alarms", "List alarms", "See the alarms set through the assistant.",
+        "Lists the alarms that were set with set_alarm. Alarms made by hand in the clock app are not included."
+    ),
     CANCEL_ALARM(
         ToolGroup.ALARMS, "cancel_alarm", "Cancel alarm", "Switch off an alarm in the clock app.",
         "Switches off (dismisses) a clock alarm without opening any app: give hour and minute for a time, a label for a named alarm, " +
@@ -254,6 +279,17 @@ enum class DeviceTool(
             ToolParam("hour", ToolParamType.INTEGER, "Hour 0-23 of the alarm to cancel.", required = false),
             ToolParam("minute", ToolParamType.INTEGER, "Minute 0-59 of the alarm to cancel. Default 0.", required = false),
             ToolParam("label", ToolParamType.STRING, "Name of the alarm to cancel, when no time is given.", required = false)
+        )
+    ),
+    MODIFY_ALARM(
+        ToolGroup.ALARMS, "modify_alarm", "Change an alarm", "Move an alarm to a new time.",
+        "Changes an alarm: cancels the one at hour:minute and sets it again at new_hour:new_minute. Call list_alarms first if the time is not known.",
+        listOf(
+            ToolParam("hour", ToolParamType.INTEGER, "Current hour 0-23 of the alarm."),
+            ToolParam("minute", ToolParamType.INTEGER, "Current minute 0-59 of the alarm."),
+            ToolParam("new_hour", ToolParamType.INTEGER, "New hour 0-23."),
+            ToolParam("new_minute", ToolParamType.INTEGER, "New minute 0-59."),
+            ToolParam("label", ToolParamType.STRING, "Optional new alarm name. The old name is kept if left out.", required = false)
         )
     ),
     SET_TIMER(
@@ -283,6 +319,16 @@ enum class DeviceTool(
         ToolGroup.ALARMS, "cancel_reminder", "Cancel a reminder", "Cancel a waiting reminder.",
         "Cancels one waiting reminder by its number. Call list_reminders first to find the number.",
         listOf(ToolParam("id", ToolParamType.INTEGER, "Reminder number from list_reminders."))
+    ),
+
+    MODIFY_REMINDER(
+        ToolGroup.ALARMS, "modify_reminder", "Change a reminder", "Change the time or text of a waiting reminder.",
+        "Changes a waiting reminder by its number: a new delay in minutes, a new message, or both. Call list_reminders first to find the number.",
+        listOf(
+            ToolParam("id", ToolParamType.INTEGER, "Reminder number from list_reminders."),
+            ToolParam("minutes", ToolParamType.INTEGER, "New delay in minutes from now, 1-1440.", required = false),
+            ToolParam("message", ToolParamType.STRING, "New text of the reminder.", required = false)
+        )
     ),
 
     DIAL(

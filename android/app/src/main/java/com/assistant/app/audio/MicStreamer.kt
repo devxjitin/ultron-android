@@ -33,6 +33,7 @@ class MicStreamer(
     private val scope = CoroutineScope(Dispatchers.IO)
     private val muted = AtomicBoolean(false)
     private val userMuted = AtomicBoolean(false)
+    private val callPaused = AtomicBoolean(false)
     @Volatile private var gain = sensitivity.gain
 
     fun setSensitivity(sensitivity: MicSensitivity) {
@@ -60,6 +61,12 @@ class MicStreamer(
      *  false whenever assistant playback ends and must not undo the user's choice. */
     fun setUserMuted(value: Boolean) {
         userMuted.set(value)
+    }
+
+    /** Silences the mic while a phone call is ringing or running. Separate from the other two so that neither
+     *  assistant playback ending nor the user's mute choice can switch the mic back on during the call. */
+    fun setCallPaused(value: Boolean) {
+        callPaused.set(value)
     }
 
     /** Returns true only once the mic is actually capturing. The caller must not treat streaming
@@ -114,7 +121,7 @@ class MicStreamer(
                 while (isActive) {
                     val read = record.read(buffer, 0, buffer.size)
                     if (read > 0) {
-                        if (!muted.get() && !userMuted.get()) {
+                        if (!muted.get() && !userMuted.get() && !callPaused.get()) {
                             val chunk = buffer.copyOf(read)
                             applyPcmGain(chunk, gain)
                             val amplitude = rmsAmplitude(chunk)
