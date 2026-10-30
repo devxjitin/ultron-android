@@ -15,7 +15,8 @@ object PhoneConnectors {
             DeviceTool.SCREEN_TIMEOUT, DeviceTool.AUTO_ROTATE, DeviceTool.OPEN_PANEL
         )),
         PhoneConnector("alarms", listOf(
-            DeviceTool.SET_ALARM, DeviceTool.CANCEL_ALARM, DeviceTool.SET_TIMER, DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER
+            DeviceTool.SET_ALARM, DeviceTool.LIST_ALARMS, DeviceTool.CANCEL_ALARM, DeviceTool.MODIFY_ALARM, DeviceTool.SET_TIMER,
+            DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER, DeviceTool.MODIFY_REMINDER
         )),
         PhoneConnector("calendar", listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT)),
         PhoneConnector("contacts", listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY)),
@@ -40,6 +41,7 @@ object PhoneConnectors {
             DeviceTool.GET_CLIPBOARD, DeviceTool.SET_CLIPBOARD, DeviceTool.SHOW_NOTIFICATION,
             DeviceTool.LIST_APPS, DeviceTool.OPEN_URL, DeviceTool.SHARE_TEXT
         )),
+        PhoneConnector("files", listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE)),
         PhoneConnector("navigation", listOf(
             DeviceTool.PRESS_BACK, DeviceTool.RECENT_APPS, DeviceTool.PREVIOUS_APP, DeviceTool.NOTIFICATION_SHADE,
             DeviceTool.QUICK_SETTINGS, DeviceTool.SCROLL, DeviceTool.LOCK_SCREEN, DeviceTool.SCREENSHOT, DeviceTool.HOME_SCREEN,

@@ -83,6 +83,24 @@ object AutomationEngine {
         return "status=ok\nScheduled action #$id cancelled."
     }
 
+    /** Changes the delay and/or text of a waiting reminder, keeping its number. */
+    fun modifyReminder(context: Context, id: Int?, minutes: Int?, message: String?): String {
+        if (id == null || (minutes == null && message == null)) return "status=invalid\nGive the reminder number and a new time or message."
+        if (minutes != null && minutes !in 1..1440) return "status=invalid\nMinutes must be 1-1440."
+        val store = AutomationStore(context)
+        val item = store.schedules().firstOrNull { it.id == id } ?: return "status=not_found\nNo scheduled action #$id."
+        if (item.toolName != DeviceTool.SHOW_NOTIFICATION.functionName) return "status=invalid\n#$id is not a reminder."
+        val args = JSONObject(item.argsJson)
+        if (message != null) args.put("message", message)
+        val updated = item.copy(
+            atMillis = if (minutes != null) System.currentTimeMillis() + minutes * 60_000L else item.atMillis,
+            argsJson = args.toString()
+        )
+        store.saveSchedule(updated)
+        setAlarm(context, updated)
+        return "status=ok\nReminder #$id updated, now due at ${format(updated.atMillis)}. The time can be off by a few minutes."
+    }
+
     /** Re-arms every saved alarm after a reboot (alarms do not survive one). Missed ones run shortly. */
     fun rescheduleAll(context: Context) {
         val store = AutomationStore(context)

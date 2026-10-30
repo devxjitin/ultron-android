@@ -270,6 +270,20 @@ class FirebaseLiveClient(private val model: String) : LiveClient {
         return true
     }
 
+    override fun sendText(text: String): Boolean {
+        val live = session ?: return false
+        scope.launch {
+            try {
+                live.send(text)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "text not sent: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+        return true
+    }
+
     override fun close() {
         closing = true
         latency.close("closed")

@@ -177,6 +177,8 @@ class DeviceToolRunner(
             DeviceTool.FLASHLIGHT -> flashlight(text("state"))
             DeviceTool.MEDIA_CONTROL -> mediaControl(text("command"))
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
+            DeviceTool.SEARCH_FILES -> searchFiles(text("query"), text("kind"), (number("limit") ?: 5).coerceIn(1, 10))
+            DeviceTool.OPEN_FILE -> openFile(number("number"), text("name"))
             DeviceTool.SEARCH_CONTACT -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
@@ -293,6 +295,7 @@ class DeviceToolRunner(
             }
             DeviceTool.LIST_REMINDERS -> AutomationEngine.listScheduled(app)
             DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelScheduled(app, number("id"))
+            DeviceTool.MODIFY_REMINDER -> AutomationEngine.modifyReminder(app, number("id"), number("minutes"), text("message"))
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
             DeviceTool.READ_NOTIFICATIONS -> readNotifications(number("limit") ?: 10)
@@ -490,14 +493,28 @@ class DeviceToolRunner(
             DeviceTool.SET_ALARM -> {
                 val hour = number("hour")?.takeIf { it in 0..23 } ?: return "status=invalid\nHour must be 0-23."
                 val minute = number("minute")?.takeIf { it in 0..59 } ?: return "status=invalid\nMinute must be 0-59."
-                start(Intent(AlarmClock.ACTION_SET_ALARM)
-                    .putExtra(AlarmClock.EXTRA_HOUR, hour)
-                    .putExtra(AlarmClock.EXTRA_MINUTES, minute)
-                    .putExtra(AlarmClock.EXTRA_MESSAGE, text("label") ?: "")
-                    .putExtra(AlarmClock.EXTRA_SKIP_UI, true))
+                setClockAlarm(hour, minute, text("label") ?: "")
                 "status=ok\nAlarm set for %02d:%02d.".format(hour, minute)
             }
+            DeviceTool.LIST_ALARMS -> {
+                val alarms = ClockAlarmStore(app).alarms()
+                if (alarms.isEmpty()) "status=empty\nNo alarms were set through the assistant. Alarms made by hand in the clock app cannot be listed."
+                else "status=ok\n" + alarms.joinToString("\n") {
+                    "%02d:%02d".format(it.hour, it.minute) + if (it.label.isNotEmpty()) " (${it.label})" else ""
+                }
+            }
             DeviceTool.CANCEL_ALARM -> cancelAlarm(number("hour"), number("minute"), text("label"))
+            DeviceTool.MODIFY_ALARM -> {
+                val hour = number("hour")?.takeIf { it in 0..23 } ?: return "status=invalid\nHour must be 0-23."
+                val minute = number("minute")?.takeIf { it in 0..59 } ?: return "status=invalid\nMinute must be 0-59."
+                val newHour = number("new_hour")?.takeIf { it in 0..23 } ?: return "status=invalid\nnew_hour must be 0-23."
+                val newMinute = number("new_minute")?.takeIf { it in 0..59 } ?: return "status=invalid\nnew_minute must be 0-59."
+                val oldLabel = ClockAlarmStore(app).alarms().firstOrNull { it.hour == hour && it.minute == minute }?.label.orEmpty()
+                val cancelled = cancelAlarm(hour, minute, null)
+                if (!cancelled.startsWith("status=ok")) return cancelled
+                setClockAlarm(newHour, newMinute, text("label") ?: oldLabel)
+                "status=ok\nThe clock app was asked to move the alarm from %02d:%02d to %02d:%02d.".format(hour, minute, newHour, newMinute)
+            }
             DeviceTool.SET_TIMER -> {
                 val seconds = number("seconds")?.takeIf { it in 1..86_400 } ?: return "status=invalid\nSeconds must be 1-86400."
                 start(Intent(AlarmClock.ACTION_SET_TIMER)
@@ -780,6 +797,16 @@ class DeviceToolRunner(
         return "status=ok\nAdded \"$title\" to the calendar for $whenText, with a reminder 10 minutes before."
     }
 
+    /** Sets a clock alarm and remembers it, since the clock app cannot list its alarms back. */
+    private fun setClockAlarm(hour: Int, minute: Int, label: String) {
+        start(Intent(AlarmClock.ACTION_SET_ALARM)
+            .putExtra(AlarmClock.EXTRA_HOUR, hour)
+            .putExtra(AlarmClock.EXTRA_MINUTES, minute)
+            .putExtra(AlarmClock.EXTRA_MESSAGE, label)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true))
+        ClockAlarmStore(app).add(ClockAlarm(hour, minute, label))
+    }
+
     /** Asks the clock app to dismiss (switch off) an alarm; Android has no public delete. Android gives no answer back, so the result only says it was asked. */
     private fun cancelAlarm(hour: Int?, minute: Int?, label: String?): String {
         if (hour != null && hour !in 0..23) return "status=invalid\nHour must be 0-23."
@@ -805,6 +832,11 @@ class DeviceToolRunner(
         }
         return try {
             start(intent)
+            val store = ClockAlarmStore(app)
+            when {
+                hour != null -> store.remove(hour, minute ?: 0)
+                !label.isNullOrBlank() -> store.alarms().filter { it.label.equals(label, ignoreCase = true) }.forEach { store.remove(it.hour, it.minute) }
+            }
             "status=ok\nThe clock app was asked to cancel $what. Android does not confirm it; tell the user it was requested."
         } catch (e: ActivityNotFoundException) {
             "status=failed\nNo clock app on this phone can cancel alarms by request. Tell the user to remove it in the clock app."
@@ -1308,6 +1340,85 @@ class DeviceToolRunner(
         return "status=ok\nSent $command."
     }
 
+    private class FoundFile(val uri: android.net.Uri, val mime: String, val name: String)
+
+    /** Asks for whatever media access is missing; null when the files can be read. */
+    private fun fileAccessMissing(): String? {
+        fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT < 33) return missingPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val media = listOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO)
+        if (media.any(::allowed)) return null
+        if (Build.VERSION.SDK_INT >= 34 && allowed(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)) return null
+        val all = if (Build.VERSION.SDK_INT >= 34) media + Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED else media
+        return missingPermission(*all.toTypedArray())
+    }
+
+    private fun queryFiles(query: String?, kind: String?, limit: Int): List<Pair<FoundFile, String>> {
+        val files = MediaStore.Files.getContentUri("external")
+        val where = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        when (kind) {
+            "image" -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}")
+            "video" -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO}")
+            "audio" -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO}")
+            "document" -> where.add(
+                "(${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'text/%' OR ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'application/%')"
+            )
+            else -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} != ${MediaStore.Files.FileColumns.MEDIA_TYPE_NONE}")
+        }
+        // Every word must appear in the file name or title, in any order.
+        query?.split(Regex("\\s+"))?.filter { it.isNotBlank() }?.forEach {
+            where.add("(${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE ? OR ${MediaStore.Files.FileColumns.TITLE} LIKE ?)")
+            args.add("%$it%"); args.add("%$it%")
+        }
+        val format = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+        val found = mutableListOf<Pair<FoundFile, String>>()
+        app.contentResolver.query(
+            files,
+            arrayOf(
+                MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME, MediaStore.Files.FileColumns.MIME_TYPE,
+                MediaStore.Files.FileColumns.SIZE, MediaStore.Files.FileColumns.DATE_ADDED
+            ),
+            where.joinToString(" AND "), args.toTypedArray(), "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            while (cursor.moveToNext() && found.size < limit) {
+                val name = cursor.getString(1).orEmpty()
+                val mime = cursor.getString(2)?.takeIf { it.isNotBlank() } ?: "*/*"
+                val date = java.time.Instant.ofEpochSecond(cursor.getLong(4)).atZone(ZoneId.systemDefault()).format(format)
+                val size = android.text.format.Formatter.formatShortFileSize(app, cursor.getLong(3))
+                found.add(FoundFile(ContentUris.withAppendedId(files, cursor.getLong(0)), mime, name) to "$name ($mime, $size, $date)")
+            }
+        }
+        return found
+    }
+
+    private fun searchFiles(query: String?, kind: String?, limit: Int): String {
+        fileAccessMissing()?.let { return it }
+        val found = queryFiles(query, kind, limit)
+        lastFiles = found.map { it.first }
+        if (found.isEmpty()) return "status=empty\nNo matching files. On Android 13 and newer, documents outside the media folders cannot be searched."
+        return "status=ok\n" + found.mapIndexed { i, it -> "${i + 1}. ${it.second}" }.joinToString("\n") +
+            "\nCall open_file with a number to show one."
+    }
+
+    private fun openFile(number: Int?, name: String?): String {
+        fileAccessMissing()?.let { return it }
+        val file = when {
+            number != null -> lastFiles.getOrNull(number - 1)
+                ?: return "status=invalid\nNo file $number. Call search_files first and use a number from its list."
+            name != null -> queryFiles(name, "any", 1).firstOrNull()?.first ?: return "status=not_found\nNo file matches \"$name\"."
+            else -> return MISSING
+        }
+        // No chooser: Android opens the user's default app for this kind of file, and only asks when none is set.
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(file.uri, file.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        return try {
+            start(FileOpeners.apply(app, view, file.mime))
+            "status=ok\nOpened ${file.name} in the default app."
+        } catch (e: ActivityNotFoundException) {
+            "status=unavailable\nNo app on the phone can open ${file.name}."
+        }
+    }
+
     /** Matches the launcher label exactly first, then by substring. Never returns the app list. */
     private fun openApp(name: String): String {
         val pm = app.packageManager
@@ -1324,18 +1435,21 @@ class DeviceToolRunner(
 
     private companion object {
         const val MAX_IMAGE_BYTES = 8_000_000L
+        /** The latest search_files list, so open_file can take a number from it. */
+        @Volatile var lastFiles: List<FoundFile> = emptyList()
         /** The assistant's voice plays in communication mode, so it follows the call volume. */
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
         const val NO_TELEPHONY = "status=unavailable\nThis phone has no calling or SMS hardware, so that action is not possible."
-        /** Tools that query contacts, calendar, usage stats, notifications or apps. */
+        /** Tools that query contacts, calendar, files, usage stats, notifications or apps. */
         val BLOCKING_TOOLS = setOf(
             DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
-            DeviceTool.READ_CALL_LOG, DeviceTool.READ_SMS, DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING
+            DeviceTool.READ_CALL_LOG, DeviceTool.READ_SMS, DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING,
+            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE
         )
         /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
         private const val SMS_CONFIRM_WAIT_MS = 4_000L
