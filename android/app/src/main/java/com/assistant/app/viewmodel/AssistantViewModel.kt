@@ -514,19 +514,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val today = java.time.LocalDate.now().toString()
         return (_uiState.value.usageDays.firstOrNull { it.day == today }?.tokens ?: 0L) >= budget
     }
-    fun onSettingsTapped() = openAdminPage(AdminPage.SETTINGS)
+    fun onSettingsTapped() = openPage(AppPage.SETTINGS)
 
-    fun onDeveloperTapped() = openAdminPage(AdminPage.DEVELOPER)
+    fun onDeveloperTapped() = openPage(AppPage.DEVELOPER)
 
-    fun onAboutTapped() = openAdminPage(AdminPage.ABOUT)
+    fun onAboutTapped() = openPage(AppPage.ABOUT)
 
-    fun onKnowledgeTapped() = openAdminPage(AdminPage.KNOWLEDGE)
+    fun onKnowledgeTapped() = openPage(AppPage.KNOWLEDGE)
 
-    fun onUsageTapped() = openAdminPage(AdminPage.USAGE)
+    fun onUsageTapped() = openPage(AppPage.USAGE)
 
-    fun onStorageTapped() = openAdminPage(AdminPage.STORAGE)
+    fun onStorageTapped() = openPage(AppPage.STORAGE)
 
-    fun onSkillsTapped() = openAdminPage(AdminPage.SKILLS)
+    fun onSkillsTapped() = openPage(AppPage.SKILLS)
 
     // The voice session carries the skill list in its setup, so a change starts a fresh warm session.
     fun onSkillToggled(name: String, enabled: Boolean) {
@@ -543,59 +543,30 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
 
-    /** Back to the home page -- closes whichever full page (Settings/Knowledge/History) is open. */
+    /** Back to the home page -- closes whichever full page is open. */
     fun onHomeTapped() {
         clearAdminDrafts()
-        _uiState.update { it.copy(showSettings = false, showConnectors = false, showMemory = false) }
+        _uiState.update { it.copy(page = AppPage.HOME) }
     }
 
-    private fun openAdminPage(page: AdminPage) {
-        if (page == AdminPage.STORAGE) {
-            refreshCacheSize()
-        }
+    /** Opens a full page. From another full page it switches directly; from home it first ends any live session,
+     *  because the page covers the status line and Stop control and the mic must not keep streaming behind it. */
+    private fun openPage(page: AppPage) {
+        if (page == AppPage.STORAGE) refreshCacheSize()
         val current = _uiState.value
-        // Already on an admin page (Settings, Knowledge or History): switch pages directly.
-        if (current.showSettings || current.showConnectors || current.showMemory) {
-            _uiState.update { it.copy(showSettings = true, showConnectors = false, showMemory = false, adminPage = page) }
-            return
-        }
-        // The admin page covers the status line and Stop control, so end any live
-        // session first instead of leaving the mic streaming behind admin UI.
-        val state = current.voiceState
-        if (state != VoiceState.IDLE && state != VoiceState.ERROR) {
+        if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
         }
-        requestSettingsAccess(page)
+        _uiState.update { it.copy(page = page) }
     }
 
-    /** The single entry point for opening Settings. Every entry point into Settings (the gear
-     *  icon, and the no-API-key path from a mic tap) goes through this. */
-    private fun requestSettingsAccess(page: AdminPage = AdminPage.SETTINGS) {
-        _uiState.update { it.copy(showSettings = true, adminPage = page) }
-    }
-
-    /** Opens the Connectors page (every connector, connected or not); ends any live session first, like the other full pages. */
+    /** Opens the Connectors page (every connector, connected or not). */
     fun onConnectorsTapped() {
-        val current = _uiState.value
-        if (current.settings.githubLogin.isNotEmpty()) viewModelScope.launch { refreshGithubTools() }
-        if (current.showSettings || current.showMemory) {
-            _uiState.update { it.copy(showSettings = false, showMemory = false, showConnectors = true) }
-            return
-        }
-        if (current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) stopSession()
-        _uiState.update { it.copy(showConnectors = true) }
+        if (_uiState.value.settings.githubLogin.isNotEmpty()) viewModelScope.launch { refreshGithubTools() }
+        openPage(AppPage.CONNECTORS)
     }
 
-    /** Opens the Memory page; ends any live session first, like the other full pages. */
-    fun onMemoryTapped() {
-        val current = _uiState.value
-        if (current.showSettings || current.showConnectors) {
-            _uiState.update { it.copy(showSettings = false, showConnectors = false, showMemory = true) }
-            return
-        }
-        if (current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) stopSession()
-        _uiState.update { it.copy(showMemory = true) }
-    }
+    fun onMemoryTapped() = openPage(AppPage.MEMORY)
 
     fun onMemoryEnabledToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Memory on" else "Memory off") {
@@ -1492,7 +1463,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             // Send the user to Settings so they can add a key.
-            requestSettingsAccess(AdminPage.DEVELOPER)
+            openPage(AppPage.DEVELOPER)
             return
         }
 

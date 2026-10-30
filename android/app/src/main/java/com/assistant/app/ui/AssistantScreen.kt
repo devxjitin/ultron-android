@@ -88,11 +88,13 @@ import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextSecondary
-import com.assistant.app.viewmodel.AdminPage
+import com.assistant.app.viewmodel.AppPage
 import com.assistant.app.viewmodel.AppNotificationType
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.viewmodel.AssistantUiState
 import com.assistant.app.viewmodel.VoiceState
+
+private val SETTINGS_PAGES = setOf(AppPage.SETTINGS, AppPage.KNOWLEDGE, AppPage.DEVELOPER)
 
 @Composable
 fun AssistantScreen(
@@ -163,21 +165,12 @@ fun AssistantScreen(
         val strings = visitorStrings()
         val isDarkTheme = themeMode == ThemeMode.DARK || (themeMode == ThemeMode.SYSTEM && androidx.compose.foundation.isSystemInDarkTheme())
         val compact = availableHeight < 480.dp
-        val currentTab = when {
-            uiState.showSettings ->
-                when (uiState.adminPage) {
-                    AdminPage.KNOWLEDGE -> NavTab.KNOWLEDGE
-                    AdminPage.DEVELOPER -> NavTab.DEVELOPER
-                    AdminPage.ABOUT -> NavTab.ABOUT
-                    AdminPage.SETTINGS -> NavTab.SETTINGS
-                    AdminPage.USAGE -> NavTab.USAGE
-                    AdminPage.STORAGE -> NavTab.STORAGE
-                    AdminPage.SKILLS -> NavTab.SKILLS
-                }
-            uiState.showConnectors -> NavTab.CONNECTORS
-            uiState.showMemory -> NavTab.MEMORY
-            else -> NavTab.HOME
-        }
+        // NavTab and AppPage share their names, so the menu row for a page is found by name.
+        val currentTab = NavTab.valueOf(uiState.page.name)
+        // Settings, Knowledge and Developer are one page. While it fades out the state already points elsewhere,
+        // so it keeps showing the sub-page it was last on instead of jumping to another one mid-animation.
+        val lastSettingsPage = remember { arrayOf(AppPage.SETTINGS) }
+        if (uiState.page in SETTINGS_PAGES) lastSettingsPage[0] = uiState.page
         // Space the pages leave free at the top for the slim top bar.
         val topReserve = AppTopBarHeight
         val sessionActive = uiState.voiceState != VoiceState.IDLE && uiState.voiceState != VoiceState.ERROR
@@ -191,7 +184,7 @@ fun AssistantScreen(
         var pendingNav by remember { mutableStateOf<(() -> Unit)?>(null) }
         val guardedNav: (() -> Unit) -> Unit = { action ->
             when {
-                uiState.showSettings && settingsDirty -> pendingNav = action
+                uiState.page in SETTINGS_PAGES && settingsDirty -> pendingNav = action
                 else -> action()
             }
         }
@@ -356,7 +349,7 @@ fun AssistantScreen(
             if (tab in listOf(NavTab.SETTINGS, NavTab.KNOWLEDGE, NavTab.DEVELOPER)) {
                 SettingsPage(
                     modifier = Modifier.padding(top = topReserve),
-                    page = uiState.adminPage,
+                    page = lastSettingsPage[0],
                     currentApiKey = uiState.currentApiKey,
                     currentEmbeddingApiKey = uiState.currentEmbeddingApiKey,
                     settings = uiState.settings,
