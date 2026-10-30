@@ -431,3 +431,4 @@
 [2026-10-30 15:34] [Claude] [Docs: OTA build 29889240 published, not tested on device]
 [2026-10-30 15:50] [Claude] [Add: skill form Name/Description/Instruction with .md upload]
 [2026-10-30 15:50] [Claude] [Docs: OTA build 29889256 published, not tested on device]
+[2026-10-30 17:58] [Claude] [Add: GitHub Actions publishes OTA on voice-only push via OIDC role]

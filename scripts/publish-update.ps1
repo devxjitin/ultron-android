@@ -3,6 +3,7 @@ Builds the Ultron app and publishes it to the AWS update server, so the phone ca
 Run from the laptop:   .\scripts\publish-update.ps1 -Notes "What changed"
 The phone then shows "Update available" the next time Ultron is opened (or via About > Check for updates).
 Needs: Android SDK 35 + JDK (ANDROID_HOME / JAVA_HOME), and `aws login` done on this laptop.
+CI runs the same script with pwsh on Linux (.github/workflows/publish-ota.yml), so keep it cross-platform.
 #>
 param(
     [string]$Notes = "",
@@ -17,6 +18,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
+$onWindows = $env:OS -eq "Windows_NT"
 
 # Same number goes into the app (as its version code) and into latest.json, so the phone can compare builds.
 $versionCode = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
@@ -41,18 +43,20 @@ if ($liveCode -and $versionCode -le $liveCode) { $versionCode = $liveCode + 1 }
 if ($versionCode -lt $MinVersionCode) { $versionCode = $MinVersionCode }
 
 Write-Host "Building version $VersionName (code $versionCode)..."
-if (-not ((Test-Path "$Sdk\platforms") -and (Test-Path "$Jdk\bin\java.exe"))) {
+$java = Join-Path $Jdk $(if ($onWindows) { "bin/java.exe" } else { "bin/java" })
+if (-not ((Test-Path (Join-Path $Sdk "platforms")) -and (Test-Path $java))) {
     throw "Android SDK not found at $Sdk or JDK not found at $Jdk. Set ANDROID_HOME / JAVA_HOME (SDK: android sdk install platforms/android-36 build-tools/36.0.0)."
 }
 $env:JAVA_HOME = $Jdk; $env:ANDROID_HOME = $Sdk; $env:ANDROID_SDK_ROOT = $Sdk
 # The phone's installed app is signed with the debug key from the earlier builds. A different key makes Android refuse
 # the update ("conflicts with an existing package"), so builds sign with a copy of that same key.
-$keyHome = Join-Path $env:USERPROFILE ".ultron-android"
+$keyHome = Join-Path $HOME ".ultron-android"
 if (Test-Path (Join-Path $keyHome "debug.keystore")) { $env:ANDROID_USER_HOME = $keyHome }
-else { throw "Missing $keyHome\debug.keystore; a different key would break updates on phones that already have the app." }
+else { throw "Missing $keyHome/debug.keystore; a different key would break updates on phones that already have the app." }
+$gradlew = Join-Path $android $(if ($onWindows) { "gradlew.bat" } else { "gradlew" })
 Push-Location $android
-try { .\gradlew.bat assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --console=plain -q; $built = $LASTEXITCODE } finally { Pop-Location }
-$apk = Join-Path $android "app\build\outputs\apk\ota\app-ota.apk"
+try { & $gradlew assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --console=plain -q; $built = $LASTEXITCODE } finally { Pop-Location }
+$apk = Join-Path $android "app/build/outputs/apk/ota/app-ota.apk"
 if ($built -ne 0) { throw "The build failed; nothing was published." }
 
 $key = "apk/ultron-$versionCode.apk"
