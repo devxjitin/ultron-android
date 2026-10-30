@@ -442,3 +442,4 @@
 [2026-10-30 18:59] [Claude] [Remove: 10 purani local branches + ek stale worktree delete]
 [2026-10-30 19:20] [Claude] [Update: Phase 1 - Home in sidebar, page transitions, live captions, ribbon level off UI state, barge-in on, owner name in prompt]
 [2026-10-30 19:36] [Claude] [Update: Phase 2 - chat history kept 30 min (12 turns), setup size budget tests, latency how-to]
+[2026-10-30 19:51] [Claude] [Fix: captions scroll with newest text, layout fits above mic, clear after turn ends]
