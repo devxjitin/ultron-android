@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mark on a brand disc, sized to the splash icon's circular safe zone. -->
+    <path android:pathData="M54,18a36,36 0 1,0 0.001,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24" android:startY="18" android:endX="84" android:endY="90"
+                android:startColor="#5B4BE8" android:centerColor="#2A2490" android:endColor="#0A0B1E" />
+        </aapt:attr>
+    </path>
+    <group android:scaleX="0.62" android:scaleY="0.62" android:pivotX="54" android:pivotY="54">
+        <path android:pathData="M29,26 L46,38 L46,62 A8,8 0 0 0 62,62 L62,38 L79,26 L75,50 L75,62 A21,21 0 0 1 33,62 L33,50 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="54" android:startY="26" android:endX="54" android:endY="83"
+                    android:startColor="#FFFFFF" android:endColor="#C7CCFF" />
+            </aapt:attr>
+        </path>
+        <path android:fillColor="#22D3EE" android:pathData="M47,47.5 L52.6,51 L52.6,53.6 L47,50.2 Z M61,47.5 L55.4,51 L55.4,53.6 L61,50.2 Z" />
+    </group>
+</vector>
