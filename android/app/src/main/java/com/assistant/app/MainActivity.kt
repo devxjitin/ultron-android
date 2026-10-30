@@ -291,8 +291,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    val voiceLevel = viewModel.voiceLevel.collectAsState()
                     AssistantScreen(
                         uiState = uiState,
+                        voiceLevel = { voiceLevel.value },
                         hasMicPermission = micGranted,
                         micPermissionPermanentlyDenied = micPermissionPermanentlyDenied,
                         onMicTapped = { viewModel.onMicTapped() },
@@ -354,6 +356,7 @@ class MainActivity : ComponentActivity() {
                         onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
+                        onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
                         onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, documentPrompt, retrievalLimit ->
                             viewModel.onSaveDeveloperChanges(
                                 name,

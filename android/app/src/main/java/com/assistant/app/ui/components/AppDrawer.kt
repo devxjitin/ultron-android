@@ -87,7 +87,7 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 
 /** Pages reachable from the left menu. */
 enum class NavTab(val label: String, val icon: ImageVector) {
-    HOME("Assistant", AssistantIcons.Home),
+    HOME("Home", AssistantIcons.Home),
     KNOWLEDGE("Knowledge", AssistantIcons.Knowledge),
     MEMORY("Memory", Icons.Outlined.Psychology),
     SKILLS("Skills", Icons.Outlined.Bolt),
@@ -117,7 +117,7 @@ fun AppDrawerContent(
         NavTab.entries.forEach { tab ->
             // Small captions group the working pages, the preferences and the app info.
             when (tab) {
-                NavTab.HOME -> return@forEach // Home has no row: back from any page returns to it.
+                NavTab.HOME -> Unit // Home sits on top, before any caption.
                 NavTab.KNOWLEDGE -> NavSection("Workspace")
                 NavTab.SETTINGS -> NavSection("Preferences")
                 NavTab.DEVELOPER -> NavSection("App")

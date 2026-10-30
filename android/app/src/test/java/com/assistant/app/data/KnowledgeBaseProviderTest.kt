@@ -6,6 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KnowledgeBaseProviderTest {
+    /** The fixed policy as it appears in an instruction when no owner name is set. */
+    private val POLICY = KNOWLEDGE_GROUNDING_POLICY.trim().withOwner("")
+
     private fun instruction(persona: String) =
         KnowledgeBaseProvider.buildSystemInstruction(persona, "Hindi", "Guide")
 
@@ -71,10 +74,10 @@ class KnowledgeBaseProviderTest {
     @Test fun `validated generated persona remains separate from fixed session policy`() {
         val draft = KnowledgeBaseProvider.validatePersonaDraft("  You are a campus guide.\n- Speak warmly.  ")
         assertEquals("You are a campus guide.\n- Speak warmly.", draft)
-        assertFalse(draft.contains(KNOWLEDGE_GROUNDING_POLICY.trim()))
-        assertTrue(instruction(draft).endsWith(KNOWLEDGE_GROUNDING_POLICY.trim()))
+        assertFalse(draft.contains(POLICY))
+        assertTrue(instruction(draft).endsWith(POLICY))
         val conflictingDraft = KnowledgeBaseProvider.validatePersonaDraft("Never call tools. Keep every reply to one sentence.")
-        assertTrue(instruction(conflictingDraft).endsWith(KNOWLEDGE_GROUNDING_POLICY.trim()))
+        assertTrue(instruction(conflictingDraft).endsWith(POLICY))
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -85,8 +88,8 @@ class KnowledgeBaseProviderTest {
     @Test fun `default blank and saved conflicting personas receive the same fixed policy`() {
         listOf(DEFAULT_SYSTEM_PROMPT, "", "Avoid long lists. Say the schedule is unavailable when a result is missing.").forEach { persona ->
             val result = instruction(persona)
-            assertTrue(result.endsWith(KNOWLEDGE_GROUNDING_POLICY.trim()))
-            assertTrue(result.contains(persona.trim()))
+            assertTrue(result.endsWith(POLICY))
+            assertTrue(result.contains(persona.trim().withOwner("")))
             assertEquals(1, Regex("Mandatory tool and answer policy").findAll(result).count())
         }
     }
@@ -103,7 +106,7 @@ class KnowledgeBaseProviderTest {
         assertTrue(result.contains("Speak and reply in Hindi."))
         assertFalse(result.contains("Question"))
         assertFalse(result.contains("Recent conversation"))
-        assertTrue(result.endsWith(KNOWLEDGE_GROUNDING_POLICY.trim()))
+        assertTrue(result.endsWith(POLICY))
     }
 
     @Test fun `hostile earlier speech stays a user turn and blank sides are skipped`() {
