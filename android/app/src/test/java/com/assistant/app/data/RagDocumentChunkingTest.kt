@@ -33,6 +33,14 @@ class RagDocumentChunkingTest {
     }
 
     @Test
+    fun `block split and join keeps the same chunks`() {
+        val text = "# Fees | Annual fee is 10k.\n# Timings | 9 to 4\n\n## Contact\nCall 555.\nOr visit.\n\nLoose paragraph."
+        val blocks = splitKnowledgeBlocks(text)
+        assertEquals(4, blocks.size)
+        assertEquals(chunkMarkdownText(text), chunkMarkdownText(joinKnowledgeBlocks(blocks)))
+    }
+
+    @Test
     fun `heading with following body in the same paragraph keeps that body`() {
         val chunks = chunkMarkdownText("## Contact\nCall reception at 555-0100.")
 
