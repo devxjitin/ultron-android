@@ -445,3 +445,4 @@
 [2026-10-30 19:51] [Claude] [Fix: captions scroll with newest text, layout fits above mic, clear after turn ends]
 [2026-10-30 20:10] [Claude] [Remove: live captions and the session layout shrink that came with them]
 [2026-10-30 20:47] [Claude] [Refactor: Phase 3 - one AppPage for navigation, one default tool set, unused drawer imports removed]
+[2026-10-31 07:22] [Claude] [Add: knowledge edit ab chunk-wise, sirf changed chunks re-embed hote hain]

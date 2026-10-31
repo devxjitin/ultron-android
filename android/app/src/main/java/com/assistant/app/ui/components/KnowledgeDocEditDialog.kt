@@ -6,6 +6,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.assistant.app.ui.theme.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableStateListOf
+import com.assistant.app.data.joinKnowledgeBlocks
+import com.assistant.app.data.splitKnowledgeBlocks
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,6 +41,12 @@ fun KnowledgeDocEditDialog(
 ) {
     var title by remember { mutableStateOf(existing?.title.orEmpty()) }
     var text by remember { mutableStateOf(existing?.text.orEmpty()) }
+    // Existing documents are edited chunk by chunk; unchanged chunks keep their embeddings on save.
+    val originalBlocks = remember(existing?.id) { existing?.let { splitKnowledgeBlocks(it.text) }.orEmpty() }
+    val blocks = remember(existing?.id) { mutableStateListOf<String>().apply { addAll(originalBlocks) } }
+    val chunkMode = existing != null
+    val changedCount = if (chunkMode) blocks.count { it.trim() !in originalBlocks } else 0
+    val savedText = if (chunkMode) joinKnowledgeBlocks(blocks) else text
 
     // [isSaving]/[error] are already scoped to this dialog's own save (the caller only passes a
     // true isSaving/non-null error when it's this document's add/update, not some other document
@@ -70,14 +83,42 @@ fun KnowledgeDocEditDialog(
                     label = { Text("Title") }
                 )
                 androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
-                    enabled = !isSaving,
-                    label = { Text("Content") },
-                    placeholder = { Text("Separate different topics with a blank line so they are easier to find later.") }
-                )
+                if (chunkMode) {
+                    Text(
+                        text = "${blocks.size} chunks, $changedCount changed. Only changed chunks are re-embedded.",
+                        color = AssistantTextSecondary,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+                    )
+                    blocks.forEachIndexed { index, block ->
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = block,
+                            onValueChange = { blocks[index] = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isSaving,
+                            label = {
+                                Text("Chunk ${index + 1}" + if (block.trim() !in originalBlocks) " (edited)" else "")
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { blocks.removeAt(index) }, enabled = !isSaving) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Delete chunk ${index + 1}")
+                                }
+                            }
+                        )
+                    }
+                    TextButton(onClick = { blocks.add("") }, enabled = !isSaving) {
+                        Text("Add chunk", color = AssistantAccent)
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                        enabled = !isSaving,
+                        label = { Text("Content") },
+                        placeholder = { Text("Separate different topics with a blank line so they are easier to find later.") }
+                    )
+                }
                 if (isSaving) {
                     androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
                     CircularProgressIndicator()
@@ -86,8 +127,8 @@ fun KnowledgeDocEditDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(title, text) },
-                enabled = !isSaving && title.isNotBlank() && text.isNotBlank()
+                onClick = { onSave(title, savedText) },
+                enabled = !isSaving && title.isNotBlank() && savedText.isNotBlank()
             ) {
                 Text("Save", color = AssistantAccent)
             }

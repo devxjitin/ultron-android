@@ -130,6 +130,29 @@ internal fun chunkMarkdownText(text: String): List<Pair<String?, String>> {
     }
 }
 
+/** Splits document text into the editable blocks that become chunks: a block starts at a heading or after a
+ *  blank line. Joining them with [joinKnowledgeBlocks] yields text that chunks exactly the same way. */
+fun splitKnowledgeBlocks(text: String): List<String> {
+    val blocks = mutableListOf<String>()
+    val current = mutableListOf<String>()
+    fun flush() {
+        if (current.isNotEmpty()) blocks += current.joinToString("\n")
+        current.clear()
+    }
+    text.lineSequence().forEach { line ->
+        when {
+            line.isBlank() -> flush()
+            headingRegex.matches(line.trim()) -> { flush(); current += line }
+            else -> current += line
+        }
+    }
+    flush()
+    return blocks
+}
+
+fun joinKnowledgeBlocks(blocks: List<String>): String =
+    blocks.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n\n")
+
 internal fun documentEmbeddingText(title: String, heading: String?, body: String): String =
     listOfNotNull(title.takeIf { it.isNotBlank() }, heading?.takeIf { it.isNotBlank() }, body).joinToString("\n")
 
@@ -257,7 +280,7 @@ class RagDocumentStore(private val context: Context) {
         onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): RagDocument {
         val doc = RagDocument(id = UUID.randomUUID().toString(), title = title.trim(), text = text.trim())
-        val newChunks = embedChunks(doc, embeddingClient, onProgress)
+        val newChunks = embedChunks(doc, embeddingClient, onProgress = onProgress)
         chunksMutex.withLock {
             indexCoordinator.mutate { current ->
                 current.copy(documents = current.documents + doc, chunks = current.chunks + newChunks)
@@ -278,7 +301,16 @@ class RagDocumentStore(private val context: Context) {
         onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): RagDocument? {
         val updated = RagDocument(id = id, title = title.trim(), text = text.trim())
-        val newChunks = embedChunks(updated, embeddingClient, onProgress)
+        // Chunks whose embedding input is unchanged keep their stored vector; only edited ones are re-embedded.
+        val (previousDoc, previousChunks) = chunksMutex.withLock {
+            val source = indexCoordinator.snapshot()
+            source.documents.firstOrNull { it.id == id } to source.chunks.filter { it.docId == id }
+        }
+        val reusable = previousDoc?.let { old ->
+            previousChunks.filter { it.embeddingModel == GeminiEmbeddingClient.MODEL }
+                .associateBy { documentEmbeddingText(old.title, it.heading, it.text) }
+        }.orEmpty()
+        val newChunks = embedChunks(updated, embeddingClient, reusable, onProgress)
         var applied = false
         chunksMutex.withLock {
             indexCoordinator.mutate { current ->
@@ -353,24 +385,30 @@ class RagDocumentStore(private val context: Context) {
     private suspend fun embedChunks(
         doc: RagDocument,
         embeddingClient: GeminiEmbeddingClient,
+        reusable: Map<String, RagChunk> = emptyMap(),
         onProgress: (Int, Int) -> Unit
     ): List<RagChunk> {
         val pieces = searchableDocumentChunks(doc.text)
-        onProgress(0, pieces.size)
+        val embeddingTexts = pieces.map { documentEmbeddingText(doc.title, it.first, it.second) }
+        val toEmbed = embeddingTexts.count { it !in reusable }
+        var embedded = 0
+        onProgress(0, toEmbed)
         return pieces.mapIndexed { index, piece ->
-            val result = embeddingClient.embed(
-                documentEmbeddingText(doc.title, piece.first, piece.second),
-                GeminiEmbeddingClient.TaskType.DOCUMENT
-            )
-            onProgress(index + 1, pieces.size)
-            RagChunk(
-                docId = doc.id,
-                chunkIndex = index,
-                text = piece.second,
-                heading = piece.first,
-                embedding = result.embedding,
-                embeddingModel = result.model
-            )
+            val kept = reusable[embeddingTexts[index]]
+            if (kept != null) {
+                kept.copy(chunkIndex = index)
+            } else {
+                val result = embeddingClient.embed(embeddingTexts[index], GeminiEmbeddingClient.TaskType.DOCUMENT)
+                onProgress(++embedded, toEmbed)
+                RagChunk(
+                    docId = doc.id,
+                    chunkIndex = index,
+                    text = piece.second,
+                    heading = piece.first,
+                    embedding = result.embedding,
+                    embeddingModel = result.model
+                )
+            }
         }
     }
 
