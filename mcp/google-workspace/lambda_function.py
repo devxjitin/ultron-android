@@ -94,10 +94,6 @@ def _q(value):
     return urllib.parse.quote(str(value), safe="")
 
 
-def _text(value, limit=MAX_TEXT):
-    return value if len(value) <= limit else value[:limit] + f"\n... [truncated, {len(value)} chars total]"
-
-
 def _window(value, offset=0, limit=MAX_TEXT):
     """A slice of long text; says where to continue when more is left."""
     offset = max(0, int(offset or 0))
