@@ -61,17 +61,32 @@ class SkillRegistryTest {
         assertTrue(SkillRegistry.use("nope", "", listOf(notes)).startsWith("status=not_found"))
     }
 
-    @Test fun disallowedTaskIsNeitherListedNorLoadable() {
-        val visible = SkillRegistry.visible(listOf(SkillEntry(whatsapp, enabled = true, disabledTasks = setOf("send_message"))))
-        assertEquals(listOf("create_contact"), visible.single().tasks.map { it.name })
-        assertTrue("send_message" !in SkillRegistry.use("whatsapp", "", visible))
-        assertTrue(SkillRegistry.use("whatsapp", "send_message", visible).startsWith("status=not_found"))
+    @Test fun taskThatDoesNotExistIsNotLoadable() {
+        assertTrue(SkillRegistry.use("whatsapp", "create_contact", listOf(whatsapp.copy(tasks = listOf(send)))).startsWith("status=not_found"))
     }
 
-    @Test fun switchedOffSkillOrOneWithEveryTaskOffIsHidden() {
-        assertTrue(SkillRegistry.visible(listOf(SkillEntry(whatsapp, enabled = false, disabledTasks = emptySet()))).isEmpty())
-        val allOff = SkillEntry(whatsapp, enabled = true, disabledTasks = setOf("send_message", "create_contact"))
-        assertTrue(SkillRegistry.visible(listOf(allOff)).isEmpty())
+    @Test fun onlySwitchedOnSkillsAreVisible() {
+        val entries = listOf(SkillEntry(whatsapp, builtIn = true, enabled = false), SkillEntry(notes, builtIn = false, enabled = true))
+        assertEquals(listOf("notes"), SkillRegistry.visible(entries).map { it.name })
+    }
+
+    @Test fun onlyTheFeaturesSkillIsLocked() {
+        assertTrue(SkillEntry(SkillGroup("ultron-features", "d", "b", emptyList()), builtIn = true).locked)
+        assertTrue(!SkillEntry(whatsapp, builtIn = true).locked)
+        assertTrue(!SkillEntry(SkillGroup("ultron-features", "d", "b", emptyList()), builtIn = false).locked)
+    }
+}
+
+class SkillDraftTest {
+    @Test fun frontmatterFillsNameDescriptionAndInstruction() {
+        val d = SkillParser.draftFromMarkdown("---\nname: Trip-Planner\ndescription: Plan a trip\n---\n# Steps\n1. Ask dates", "x.md")
+        assertEquals(SkillDraft("trip-planner", "Plan a trip", "# Steps\n1. Ask dates"), d)
+    }
+
+    @Test fun plainMarkdownUsesFileNameAndFirstLine() {
+        val d = SkillParser.draftFromMarkdown("# Write emails\nKeep them short.\n", "My Email Skill.md")
+        assertEquals("my-email-skill", d.name)
+        assertEquals("Write emails", d.description)
     }
 }
 
@@ -87,8 +102,10 @@ class BuiltInSkillAssetsTest {
         }
     }
 
-    @Test fun whatsappShipsItsTasks() {
-        val names = File(root, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }.toSet()
-        assertTrue(names.containsAll(setOf("send_message", "create_contact")))
+    @Test fun whatsappShipsOnlySendMessage() {
+        val names = File(root, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }
+        assertEquals(listOf("send_message"), names)
+        val body = SkillParser.parse(File(root, "whatsapp/tasks/send_message.md").readText())!!.body
+        assertTrue(body.length < MAX_SKILL_BODY_CHARS)
     }
 }

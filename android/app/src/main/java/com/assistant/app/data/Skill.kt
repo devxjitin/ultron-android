@@ -49,16 +49,49 @@ object SkillParser {
     }
 }
 
-/** A skill as the Skills page shows it. [disabledTasks] are the tasks the user disallowed inside an enabled skill. */
-data class SkillEntry(val group: SkillGroup, val enabled: Boolean, val disabledTasks: Set<String>) {
-    val locked: Boolean get() = group.name in LOCKED_SKILLS
+/** The three form fields filled from an uploaded .md file; the user can still correct them before saving. */
+data class SkillDraft(val name: String, val description: String, val instruction: String)
+
+/**
+ * Reads an uploaded .md file into the Name / Description / Instruction fields. Frontmatter `name:` and `description:` are
+ * used when present; otherwise the name comes from the file name and the description from the first plain line.
+ */
+fun SkillParser.draftFromMarkdown(text: String, fileName: String): SkillDraft {
+    val lines = text.replace("\r\n", "\n").trimStart('﻿').lines()
+    val fields = HashMap<String, String>()
+    var bodyStart = 0
+    if (lines.firstOrNull()?.trim() == "---") {
+        val end = lines.drop(1).indexOfFirst { it.trim() == "---" }
+        if (end >= 0) {
+            lines.subList(1, end + 1).forEach { line ->
+                val colon = line.indexOf(':')
+                if (colon > 0) fields[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim().trim('"', '\'')
+            }
+            bodyStart = end + 2
+        }
+    }
+    val body = lines.drop(bodyStart).joinToString("\n").trim()
+    val fromFile = fileName.substringBeforeLast('.').lowercase().replace(Regex("[^a-z0-9_-]+"), "-").trim('-').take(48)
+    val name = (fields["name"]?.trim()?.lowercase()?.replace(Regex("[^a-z0-9_-]+"), "-")?.trim('-')?.take(48)).takeUnless { it.isNullOrEmpty() } ?: fromFile
+    val description = fields["description"]?.takeIf { it.isNotBlank() }
+        ?: body.lines().map { it.trim().trimStart('#', '-', '*', ' ') }.firstOrNull { it.isNotEmpty() }.orEmpty()
+    return SkillDraft(name, description.take(300), body.take(MAX_SKILL_BODY_CHARS))
 }
 
 /**
- * The built-in skills. Users cannot write skills: they can only switch a skill off, or disallow single tasks inside it.
- * Each skill lives in assets/skills/<name>/SKILL.md, with its tasks in assets/skills/<name>/tasks/<task>.md.
- * Only skill names and descriptions go into the system prompt. use_skill with a skill lists its allowed tasks, and use_skill
- * with a task returns just that task's instructions, so disallowed tasks and other skills never reach the model.
+ * A skill as the Skills page shows it: [builtIn] ones ship with the app and cannot be deleted or edited; the user's own can be
+ * switched off, edited or deleted. Every skill except the locked one can be switched off.
+ */
+data class SkillEntry(val group: SkillGroup, val builtIn: Boolean, val enabled: Boolean = true) {
+    val locked: Boolean get() = builtIn && group.name in LOCKED_SKILLS
+}
+
+/**
+ * The skills available to the assistant. Built-in skills live in assets/skills/<name>/SKILL.md, with the tasks of a grouped
+ * skill in assets/skills/<name>/tasks/<task>.md. The user adds their own plain skills on the Skills page, kept in
+ * files/skills/<name>/SKILL.md; those can be edited and deleted, built-in ones cannot. Only skill names and descriptions go
+ * into the system prompt. use_skill with a grouped skill lists its tasks, and use_skill with a task returns just that task's
+ * instructions. The model has no tool that writes skills.
  */
 object SkillRegistry {
     private val _entries = MutableStateFlow<List<SkillEntry>>(emptyList())
@@ -67,66 +100,74 @@ object SkillRegistry {
 
     private var appContext: Context? = null
 
-    /** The skills the model sees: enabled ones, holding only allowed tasks. A skill whose tasks are all disallowed is dropped. */
+    /** The skills that are switched on: these are what the model sees. */
     fun all(): List<SkillGroup> = visible(_entries.value)
 
-    internal fun visible(entries: List<SkillEntry>): List<SkillGroup> = entries.filter { it.enabled }.mapNotNull { entry ->
-        val group = entry.group
-        if (group.tasks.isEmpty()) return@mapNotNull group
-        val allowed = group.tasks.filter { it.name !in entry.disabledTasks }
-        if (allowed.isEmpty()) null else group.copy(tasks = allowed)
-    }
+    internal fun visible(entries: List<SkillEntry>): List<SkillGroup> = entries.filter { it.enabled }.map { it.group }
 
-    /** Keys of what the user switched off: "skill" for a whole skill, "skill/task" for one task. */
     private fun prefs(context: Context) = context.getSharedPreferences("skills", Context.MODE_PRIVATE)
-    private const val DISABLED_KEY = "disabled_builtin"
+    private fun userDir(context: Context) = File(context.filesDir, "skills")
 
     @Synchronized
     fun load(context: Context) {
         val app = context.applicationContext
         appContext = app
-        // Earlier versions let users write their own skills; skills are built in now, so those files are removed.
-        runCatching { File(app.filesDir, "skills").deleteRecursively() }
-        val groups = runCatching { app.assets.list("skills")?.sorted().orEmpty() }.getOrDefault(emptyList()).mapNotNull { dir ->
-            readAsset(app, "skills/$dir/SKILL.md")?.let { text ->
-                val tasks = runCatching { app.assets.list("skills/$dir/tasks")?.sorted().orEmpty() }.getOrDefault(emptyList())
-                    .filter { it.endsWith(".md") }
-                    .mapNotNull { file -> readAsset(app, "skills/$dir/tasks/$file")?.let { SkillParser.parse(it, file.removeSuffix(".md")) } }
-                SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())
-                    ?.let { SkillGroup(it.name, it.description, it.body, tasks) }
-            }
+        val builtIn = LinkedHashMap<String, SkillGroup>()
+        runCatching { app.assets.list("skills")?.sorted().orEmpty() }.getOrDefault(emptyList()).forEach { dir ->
+            val text = readAsset(app, "skills/$dir/SKILL.md") ?: return@forEach
+            val tasks = runCatching { app.assets.list("skills/$dir/tasks")?.sorted().orEmpty() }.getOrDefault(emptyList())
+                .filter { it.endsWith(".md") }
+                .mapNotNull { file -> readAsset(app, "skills/$dir/tasks/$file")?.let { SkillParser.parse(it, file.removeSuffix(".md")) } }
+            SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())?.let { builtIn[it.name] = SkillGroup(it.name, it.description, it.body, tasks) }
         }
-        val off = prefs(app).getStringSet(DISABLED_KEY, emptySet()).orEmpty()
-        _entries.value = groups.map { group ->
-            SkillEntry(
-                group,
-                enabled = group.name in LOCKED_SKILLS || group.name !in off,
-                disabledTasks = group.tasks.map { it.name }.filter { "${group.name}/$it" in off }.toSet()
-            )
-        }
+        val own = userDir(app).listFiles()?.sortedBy { it.name }.orEmpty().mapNotNull { dir ->
+            runCatching { File(dir, "SKILL.md").readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }
+        }.filter { it.name !in builtIn }
+        val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty()
+        _entries.value = builtIn.values.map { SkillEntry(it, builtIn = true, enabled = it.name in LOCKED_SKILLS || it.name !in off) } +
+            own.map { SkillEntry(SkillGroup(it.name, it.description, it.body, emptyList()), builtIn = false, enabled = it.name !in off) }
     }
 
     private fun readAsset(context: Context, path: String): String? =
         runCatching { context.assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
 
-    /** Allows or disallows a whole skill ([task] null) or one of its tasks. Locked skills cannot be switched off. */
+    /** Switches a skill on or off; the locked built-in skill always stays on. */
     @Synchronized
-    fun setEnabled(skill: String, task: String?, enabled: Boolean) {
+    fun setEnabled(name: String, enabled: Boolean) {
         val app = appContext ?: return
-        val entry = _entries.value.firstOrNull { it.group.name == skill } ?: return
-        if (task == null && entry.locked) return
-        if (task != null && entry.group.tasks.none { it.name == task }) return
-        val key = if (task == null) skill else "$skill/$task"
-        val off = prefs(app).getStringSet(DISABLED_KEY, emptySet()).orEmpty().toMutableSet()
-        if (enabled) off.remove(key) else off.add(key)
-        prefs(app).edit().putStringSet(DISABLED_KEY, off).apply()
-        _entries.value = _entries.value.map {
-            when {
-                it.group.name != skill -> it
-                task == null -> it.copy(enabled = enabled)
-                else -> it.copy(disabledTasks = if (enabled) it.disabledTasks - task else it.disabledTasks + task)
-            }
+        val entry = _entries.value.firstOrNull { it.group.name == name } ?: return
+        if (entry.locked) return
+        val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty().toMutableSet()
+        if (enabled) off.remove(name) else off.add(name)
+        prefs(app).edit().putStringSet("disabled", off).apply()
+        _entries.value = _entries.value.map { if (it.group.name == name) it.copy(enabled = enabled) else it }
+    }
+
+    /** Saves one of the user's skills; returns an error for the page to show, or null when saved. */
+    @Synchronized
+    fun save(name: String, description: String, body: String): String? {
+        val app = appContext ?: return "Skills are not ready yet."
+        val skill = SkillParser.parse("---\nname: ${name.trim()}\ndescription: ${description.trim().replace('\n', ' ')}\n---\n${body.trim()}")
+            ?: return "Use a short lowercase name (letters, digits, - or _), a description and instructions."
+        if (_entries.value.any { it.builtIn && it.group.name == skill.name }) return "\"${skill.name}\" is a built-in skill; choose another name."
+        val dir = File(userDir(app), skill.name)
+        val written = runCatching {
+            dir.mkdirs()
+            File(dir, "SKILL.md").writeText("---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n${skill.body}\n")
         }
+        if (written.isFailure) return "Could not save the skill."
+        load(app)
+        return null
+    }
+
+    /** Deletes one of the user's skills; built-in skills cannot be deleted. */
+    @Synchronized
+    fun delete(name: String) {
+        val app = appContext ?: return
+        if (_entries.value.none { it.group.name == name && !it.builtIn }) return
+        File(userDir(app), name).deleteRecursively()
+        prefs(app).edit().putStringSet("disabled", prefs(app).getStringSet("disabled", emptySet()).orEmpty() - name).apply()
+        load(app)
     }
 
     /** The lines added to the system prompt: skill names and descriptions only; empty when there are no skills. */

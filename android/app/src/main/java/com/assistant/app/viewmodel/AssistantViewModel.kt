@@ -522,9 +522,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onSkillsTapped() = openPage(AppPage.SKILLS)
 
     // The voice session carries the skill list in its setup, so a change starts a fresh warm session.
-    /** Allows or disallows a whole skill ([task] null) or one task inside it. */
-    fun onSkillToggled(skill: String, task: String?, enabled: Boolean) {
-        SkillRegistry.setEnabled(skill, task, enabled)
+    fun onSkillToggled(name: String, enabled: Boolean) {
+        SkillRegistry.setEnabled(name, enabled)
+        invalidateWarmSessionAndReprewarm()
+    }
+
+    fun onSkillSaved(name: String, description: String, body: String): String? =
+        SkillRegistry.save(name, description, body).also { if (it == null) invalidateWarmSessionAndReprewarm() }
+
+    fun onSkillDeleted(name: String) {
+        SkillRegistry.delete(name)
         invalidateWarmSessionAndReprewarm()
     }
 
