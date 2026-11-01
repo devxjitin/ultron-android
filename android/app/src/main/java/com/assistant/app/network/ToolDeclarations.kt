@@ -5,8 +5,7 @@ import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.McpToolSpec
-import com.assistant.app.data.BuiltInSkill
-import com.assistant.app.data.SKILL_ACTION_TOOL
+import com.assistant.app.data.SkillGroup
 import com.assistant.app.data.USE_SKILL_TOOL
 import org.json.JSONArray
 import org.json.JSONObject
@@ -63,25 +62,20 @@ object ToolDeclarations {
         return declaration
     }
 
-    /** use_skill: reveals the allowed actions of one skill, so no other skill's actions ever reach the model. */
-    fun useSkill(skills: List<BuiltInSkill>): JSONObject = JSONObject().put("name", USE_SKILL_TOOL)
-        .put("description", "Opens one skill listed in the system prompt and returns the actions you may use in it. Call it before skill_action, only when the request matches that skill.")
-        .put("parameters", JSONObject().put("type", "OBJECT")
-            .put("properties", JSONObject().put("skill", JSONObject().put("type", "STRING").put("description", "Skill id.")
-                .put("enum", JSONArray(skills.map { it.id }))))
-            .put("required", JSONArray().put("skill")))
-
-    /** skill_action: runs one action of a skill that use_skill already opened. The action list itself is never declared here. */
-    fun skillAction(skills: List<BuiltInSkill>): JSONObject {
-        fun string(description: String) = JSONObject().put("type", "STRING").put("description", description)
-        return JSONObject().put("name", SKILL_ACTION_TOOL)
-            .put("description", "Runs one action of a skill you opened with use_skill. Use only an action that use_skill listed.")
+    /**
+     * use_skill: opens one skill. Without a task it lists the skill's allowed tasks; with a task it loads only that task's
+     * instructions, so unused skills and tasks never fill the prompt.
+     */
+    fun skill(skills: List<SkillGroup>): JSONObject {
+        val declaration = JSONObject().put("name", USE_SKILL_TOOL)
+            .put("description", "Opens one skill listed in the system prompt. Call it with only the skill to see its tasks, then again with the skill and one task to load that task's instructions, and follow them. Use it only when the request clearly matches the skill.")
             .put("parameters", JSONObject().put("type", "OBJECT")
                 .put("properties", JSONObject()
-                    .put("skill", string("Skill id.").put("enum", JSONArray(skills.map { it.id })))
-                    .put("action", string("Action name exactly as use_skill listed it."))
-                    .put("arguments", string("The action's arguments as a JSON object in text, for example {\"number\":\"123\"}. Use {} when it takes none.")))
-                .put("required", JSONArray().put("skill").put("action")))
+                    .put("skill", JSONObject().put("type", "STRING").put("description", "Skill name.")
+                        .put("enum", JSONArray(skills.map { it.name })))
+                    .put("task", JSONObject().put("type", "STRING").put("description", "Optional. One task name exactly as the skill listed it.")))
+                .put("required", JSONArray().put("skill")))
+        return declaration
     }
 
     /** save_memory / forget_memory: the assistant's personal memory about the user. */

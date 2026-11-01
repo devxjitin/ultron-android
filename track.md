@@ -453,3 +453,4 @@
 [2026-11-01 13:19] [Claude] [Remove: unused PURPOSE_TITLE (D7), cleanup branch merge]
 
 [2026-11-01 14:21] [Claude] [Refactor: user skills hataye, built-in skills with per-action allow/disallow aur use_skill/skill_action reveal]
+[2026-11-01 14:46] [Claude] [Fix: skills wapas text instructions, connectors alag; built-in grouped skills + WhatsApp]

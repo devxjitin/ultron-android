@@ -13,7 +13,7 @@ import com.assistant.app.data.KnowledgeBaseProvider
 import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
-import com.assistant.app.data.SkillPolicy
+import com.assistant.app.data.SkillRegistry
 import com.assistant.app.util.UserFacingError
 import com.assistant.app.util.newLatencySession
 import okhttp3.Request
@@ -463,18 +463,16 @@ class GeminiLiveClient(
     }
 }
 
-/**
- * Knowledge search and memory are declared directly. Every device and GitHub action sits behind a skill: only use_skill and
- * skill_action are declared, so an action reaches the model only after it opens its skill, and only if the user allows it.
- * Shared by both Live clients.
- */
+/** Knowledge search is always declared; each other tool is added only if its switch is on. Shared by both Live clients. */
 internal fun liveFunctionDeclarations(settings: AssistantSettings): JSONArray {
     val declarations = JSONArray()
     declarations.put(ToolDeclarations.knowledgeSearch())
     if (settings.memoryEnabled) ToolDeclarations.memory().forEach { declarations.put(it) }
-    val skills = SkillPolicy.active(settings)
-    if (skills.isNotEmpty()) declarations.put(ToolDeclarations.useSkill(skills))
-    val withActions = skills.filter { it.actions.isNotEmpty() }
-    if (withActions.isNotEmpty()) declarations.put(ToolDeclarations.skillAction(withActions))
+    SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { declarations.put(ToolDeclarations.skill(it)) }
+    DeviceTool.entries.filter { it in settings.enabledDeviceTools }
+        .forEach { declarations.put(ToolDeclarations.device(it)) }
+    if (settings.githubLogin.isNotEmpty()) {
+        settings.githubTools.filter { it.name in settings.enabledGithubTools }.forEach { declarations.put(ToolDeclarations.mcp(it)) }
+    }
     return declarations
 }
