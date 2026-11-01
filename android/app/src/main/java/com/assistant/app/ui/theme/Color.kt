@@ -92,8 +92,6 @@ val AssistantSelectedBg: Color get() = ActivePalette.current.selectedBg
 val AssistantPrimaryLight: Color get() = ActivePalette.current.primary
 // Accent for text, icons and outlines. Use AssistantAccentFill for a background that carries white text.
 val AssistantAccent: Color get() = ActivePalette.current.accent
-/** Second stop of the accent gradient used on the greeting. */
-val AssistantGradientEnd: Color get() = if (ActivePalette.current.dark) Color(0xFFA9B8C8) else Color(0xFF4B5D70)
 val AssistantAccentFill: Color get() = ActivePalette.current.accentFill
 val AssistantAccentAlt: Color get() = ActivePalette.current.accentAlt
 val AssistantAmber: Color get() = ActivePalette.current.amber
