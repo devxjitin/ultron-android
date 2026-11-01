@@ -459,3 +459,4 @@
 [2026-11-01 22:05] [Claude] [Add: prompt, policy aur skills Firestore se sync (RemoteContent), web/ panel + rules + defaults export]
 [2026-11-01 22:42] [Claude] [Update: web panel redesign, sidebar menu, prompt editors, skills editor, ultron-control.web.app]
 [2026-11-01 23:17] [Claude] [Add: scripts/remote.mjs, Firebase CLI login se remote prompts/skills manage, key ki zarurat nahi]
+[2026-11-01 23:27] [Claude] [Remove: app Developer section se name/greeting/persona/dataset prompt/retrieval hataye, ab sirf API keys; sab web panel se]

@@ -48,7 +48,6 @@ class UsageStore(private val context: Context) {
     companion object {
         const val KEEP_DAYS = 120
         const val PURPOSE_CHAT = "chat"
-        const val PURPOSE_PERSONA = "persona"
         const val PURPOSE_PDF = "pdf"
         const val PURPOSE_SCREEN = "screen"
     }

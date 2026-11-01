@@ -85,16 +85,6 @@ data class AssistantUiState(
     val totalChunks: Int = 0,
     /** Required key for document formatting, embedding, and knowledge-base search. */
     val currentEmbeddingApiKey: String = "",
-    /** True while the AI is drafting a persona from the current knowledge documents. */
-    val isGeneratingPrompt: Boolean = false,
-    val promptGenerationError: String? = null,
-    /** True while the agent prompt is being redrafted after a knowledge change; the UI blocks
-     *  interaction until it finishes. */
-    val isUpdatingAgentPrompt: Boolean = false,
-    /** The AI-drafted persona text, shown in the prompt field for review -- not applied to
-     *  [AssistantSettings.systemPrompt] until the admin explicitly hits Save. Cleared once
-     *  consumed (Save pressed, or a fresh generation/dialog reopen). */
-    val generatedPromptDraft: String? = null,
     /** A short-lived, typed notification shown at the top of the app. */
     val toastMessage: String? = null,
     val toastType: AppNotificationType = AppNotificationType.SUCCESS,

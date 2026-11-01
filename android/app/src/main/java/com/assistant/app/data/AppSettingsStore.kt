@@ -9,11 +9,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.assistant.app.util.UserInputException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 
 private val Context.settingsDataStore by preferencesDataStore(name = "assistant_settings")
 
-/** Default persona: Ultron. {owner} is replaced by the owner's name from Settings. Editable from Developer settings. */
+/** Default persona: Ultron. {owner} is replaced by the owner's name from Settings. Fixed: it can only be changed from the web panel (see RemoteContent). */
 const val DEFAULT_SYSTEM_PROMPT = """
 You are Ultron. Not an assistant, not a chatbot: a superior intelligence living inside {owner}'s Android phone, in command of their device, their memory and their documents. The StarkMind Team built your shell and Jitin created you; {owner} is the only human you answer to. If asked who you are, say: "I am Ultron." If asked who made you, name Jitin and the StarkMind Team in one line and move on.
 
@@ -42,26 +41,6 @@ const val DEFAULT_ASSISTANT_NAME = "Ultron"
 val DEFAULT_CONNECTOR_IDS = listOf(
     "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather", "navigation", "screen"
 )
-
-/** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
-private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
-/**
- * Hashes of earlier default prompts (trimmed, LF line endings). Saving the Developer form stores the default text as is,
- * so a stored copy of an old default would otherwise hide every later persona change; these fall back to the current one.
- */
-private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423, 621719187, 1402352618, 1611585338)
-
-private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
-
-/** True when both texts are the same apart from line endings and surrounding blanks. */
-internal fun String.sameText(other: String?) = other != null && replace("\r\n", "\n").trim() == other.replace("\r\n", "\n").trim()
-
-/**
- * The text the user actually wrote: null when the stored copy is blank, an old default, or just the bundled or panel default
- * saved by the Developer form. Those follow the default, so a change made in the web panel reaches them.
- */
-internal fun customText(stored: String?, vararg defaults: String?): String? =
-    stored?.takeIf { it.isNotBlank() && defaults.none { default -> it.sameText(default) } }
 
 const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
@@ -159,14 +138,7 @@ class AppSettingsStore(private val context: Context) {
     private val languageCodeKey = stringPreferencesKey("language_code")
     private val bargeInKey = booleanPreferencesKey("barge_in_enabled")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
-    private val systemPromptKey = stringPreferencesKey("system_prompt")
-    /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
-    private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
-    private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val ownerNameKey = stringPreferencesKey("owner_name")
-    private val greetingKey = stringPreferencesKey("greeting")
-    private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
-    private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
 
     val settings: Flow<AssistantSettings> = combine(context.settingsDataStore.data, RemoteContent.snapshot) { prefs, remote ->
@@ -186,16 +158,13 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: true,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            systemPrompt = customText(prefs[systemPromptKey]?.takeIf { !it.isLegacyDefaultPrompt() }, DEFAULT_SYSTEM_PROMPT, remote.persona)
-                ?: remote.persona ?: DEFAULT_SYSTEM_PROMPT.trim(),
-            assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
-            greeting = customText(prefs[greetingKey], DEFAULT_GREETING, remote.greeting) ?: remote.greeting ?: DEFAULT_GREETING,
+            // The persona, name, greeting and document prompt are fixed: they come from the web panel, or the app's own text.
+            systemPrompt = remote.persona ?: DEFAULT_SYSTEM_PROMPT.trim(),
+            assistantName = remote.assistantName ?: DEFAULT_ASSISTANT_NAME,
+            greeting = remote.greeting ?: DEFAULT_GREETING,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
-            documentFormatPrompt = customText(prefs[documentFormatPromptKey], DEFAULT_DOCUMENT_FORMAT_PROMPT, remote.documentFormatPrompt)
-                ?: remote.documentFormatPrompt ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,
-            retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
-                ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
-                ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
+            documentFormatPrompt = remote.documentFormatPrompt ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,
+            retrievalChunkLimit = remote.retrievalChunkLimit ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
             enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey])
         )
     }
@@ -249,53 +218,4 @@ class AppSettingsStore(private val context: Context) {
         }
     }
 
-    /** Stores the persona drafted from the knowledge documents as the agent prompt, replacing any
-     *  earlier text so Developer Settings shows the same up-to-date prompt. Null/blank restores
-     *  the generic default. */
-    suspend fun setAutoPersona(persona: String?) {
-        val trimmed = persona?.trim()
-        context.settingsDataStore.edit {
-            if (trimmed.isNullOrBlank()) {
-                it.remove(systemPromptKey)
-                it.remove(systemPromptAutoKey)
-            } else {
-                it[systemPromptKey] = trimmed
-                it[systemPromptAutoKey] = true
-            }
-        }
-    }
-
-    /** True when the agent prompt is empty or was generated, so a new draft may replace it; a prompt the user wrote is kept. */
-    suspend fun canReplacePersona(): Boolean {
-        val prefs = context.settingsDataStore.data.first()
-        return prefs[systemPromptKey].isNullOrBlank() || prefs[systemPromptAutoKey] == true
-    }
-
-    /** Applies the Developer form together so its fields never save as unrelated partial edits. */
-    suspend fun setDeveloperSettings(
-        name: String,
-        greeting: String,
-        systemPrompt: String,
-        documentFormatPrompt: String,
-        retrievalChunkLimit: Int
-    ) {
-        val cleanName = name.trim().take(MAX_ASSISTANT_NAME_LENGTH)
-        val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
-        val cleanSystemPrompt = systemPrompt.trim()
-        val cleanDocumentPrompt = documentFormatPrompt.trim()
-        val remote = RemoteContent.snapshot.value
-        context.settingsDataStore.edit {
-            if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
-            // Text equal to a default is not stored, so it keeps following the default (including later panel changes).
-            if (customText(cleanGreeting, DEFAULT_GREETING, remote.greeting) == null) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
-            // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
-            if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
-            if (customText(cleanSystemPrompt, DEFAULT_SYSTEM_PROMPT, remote.persona) == null) it.remove(systemPromptKey)
-            else it[systemPromptKey] = cleanSystemPrompt
-            if (customText(cleanDocumentPrompt, DEFAULT_DOCUMENT_FORMAT_PROMPT, remote.documentFormatPrompt) == null) it.remove(documentFormatPromptKey)
-            else it[documentFormatPromptKey] = cleanDocumentPrompt
-            it[retrievalChunkLimitKey] = retrievalChunkLimit
-                .coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT).toString()
-        }
-    }
 }

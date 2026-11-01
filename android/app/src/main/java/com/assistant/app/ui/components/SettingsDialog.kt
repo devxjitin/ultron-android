@@ -98,12 +98,7 @@ fun SettingsPage(
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
-    onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
-    isGeneratingPrompt: Boolean,
-    generatedPromptDraft: String?,
-    promptGenerationError: String?,
-    onGeneratePromptFromKnowledgeBase: () -> Unit,
-    onDismissPromptGenerationError: () -> Unit,
+    onSaveDeveloperChanges: (String, String) -> Unit,
     knowledgeDocuments: List<RagDocument>,
     isSavingKnowledgeDocument: Boolean,
     knowledgePreparationStage: KnowledgePreparationStage?,
@@ -143,29 +138,7 @@ fun SettingsPage(
     var confirmingDeleteDocId by remember { mutableStateOf<String?>(null) }
     var confirmingResetKnowledge by remember { mutableStateOf(false) }
     var confirmingUnsavedChanges by remember { mutableStateOf(false) }
-    var nameInput by remember(settings.assistantName) { mutableStateOf(settings.assistantName) }
-    var greetingInput by remember(settings.greeting) { mutableStateOf(settings.greeting) }
-    var promptInput by remember(settings.systemPrompt) { mutableStateOf(settings.systemPrompt) }
-    // A generated draft replaces the field directly only when there are no unsaved edits to lose.
-    var pendingGeneratedDraft by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(generatedPromptDraft) {
-        val draft = generatedPromptDraft ?: return@LaunchedEffect
-        if (promptInput == settings.systemPrompt) promptInput = draft else pendingGeneratedDraft = draft
-    }
-    var documentFormatPromptInput by remember(settings.documentFormatPrompt) {
-        mutableStateOf(settings.documentFormatPrompt)
-    }
-    var retrievalChunkLimitInput by remember(settings.retrievalChunkLimit) {
-        androidx.compose.runtime.mutableIntStateOf(settings.retrievalChunkLimit)
-    }
-    val developerChangesPending =
-        nameInput != settings.assistantName ||
-            greetingInput != settings.greeting ||
-            keyInput != currentApiKey ||
-            embeddingKeyInput != currentEmbeddingApiKey ||
-            promptInput != settings.systemPrompt ||
-            documentFormatPromptInput != settings.documentFormatPrompt ||
-            retrievalChunkLimitInput != settings.retrievalChunkLimit
+    val developerChangesPending = keyInput != currentApiKey || embeddingKeyInput != currentEmbeddingApiKey
 
     val requestDismiss = {
         if (developerChangesPending) {
@@ -212,24 +185,6 @@ fun SettingsPage(
                     onMicSensitivitySelected, onBargeInToggled, onOwnerNameChanged
                 )
                 1 -> Column {
-                    SectionLabel("Identity")
-                    OutlinedTextField(
-                        value = nameInput,
-                        onValueChange = { nameInput = it.take(MAX_ASSISTANT_NAME_LENGTH) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = assistantTextFieldColors()
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = greetingInput,
-                        onValueChange = { greetingInput = it.take(MAX_GREETING_LENGTH) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = assistantTextFieldColors()
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
                     SectionLabel("Gemini API key")
                     OutlinedTextField(
                         value = keyInput,
@@ -291,114 +246,6 @@ fun SettingsPage(
                                 Text("Remove", color = AssistantError)
                             }
                         }
-                    }
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-                    SectionLabel("Voice agent prompt")
-                    Spacer(Modifier.height(8.dp))
-                    androidx.compose.material3.OutlinedButton(
-                        shape = AppButtonShape,
-                        onClick = onGeneratePromptFromKnowledgeBase,
-                        enabled = !isGeneratingPrompt,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isGeneratingPrompt) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = AssistantAccent
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Generating…")
-                        } else {
-                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Generate from knowledge base")
-                        }
-                    }
-                    if (promptGenerationError != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = promptGenerationError,
-                                color = AssistantError,
-                                modifier = Modifier.weight(1f),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                            )
-                            TextButton(onClick = onDismissPromptGenerationError) {
-                                Text("Dismiss", color = AssistantTextMuted)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = promptInput,
-                        onValueChange = { promptInput = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = {
-                            promptInput = RemoteContent.defaultPersona()
-                        }) {
-                            Text("Reset to default", color = AssistantError)
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Retrieval chunks")
-                    var retrievalLimitExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = retrievalLimitExpanded,
-                        onExpandedChange = { retrievalLimitExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = retrievalChunkLimitInput.toString(),
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.fillMaxWidth().menuAnchor(),
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = retrievalLimitExpanded) },
-                            colors = assistantTextFieldColors()
-                        )
-                        DropdownMenu(
-                            expanded = retrievalLimitExpanded,
-                            onDismissRequest = { retrievalLimitExpanded = false },
-                            modifier = Modifier.background(AssistantSurfaceElevated)
-                        ) {
-                            (MIN_RETRIEVAL_CHUNK_LIMIT..MAX_RETRIEVAL_CHUNK_LIMIT).forEach { limit ->
-                                DropdownMenuItem(
-                                    text = { Text("$limit chunks", color = AssistantTextSecondary) },
-                                    onClick = {
-                                        retrievalChunkLimitInput = limit
-                                        retrievalLimitExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Dataset preparation prompt")
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = documentFormatPromptInput,
-                        onValueChange = { documentFormatPromptInput = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(
-                            onClick = { documentFormatPromptInput = "" }
-                        ) { Text("Clear prompt", color = AssistantError) }
                     }
                 }
                 2 -> Column {
@@ -550,15 +397,7 @@ fun SettingsPage(
             Spacer(Modifier.height(12.dp))
             androidx.compose.material3.Button(
                 onClick = {
-                    onSaveDeveloperChanges(
-                        nameInput,
-                        greetingInput,
-                        keyInput,
-                        embeddingKeyInput,
-                        promptInput,
-                        documentFormatPromptInput,
-                        retrievalChunkLimitInput
-                    )
+                    onSaveDeveloperChanges(keyInput, embeddingKeyInput)
                 },
                 enabled = !isSavingDeveloper,
                 modifier = Modifier.fillMaxWidth(),
@@ -572,28 +411,6 @@ fun SettingsPage(
         }
         }
     }
-    }
-
-    pendingGeneratedDraft?.let { draft ->
-        AlertDialog(
-            onDismissRequest = { pendingGeneratedDraft = null },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-            containerColor = AssistantSurfaceElevated,
-            tonalElevation = 6.dp,
-            title = { Text("Replace your edits?") },
-            text = { Text("The Agent prompt has unsaved edits. Replace them with the generated draft?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    promptInput = draft
-                    pendingGeneratedDraft = null
-                }) { Text("Replace", color = AssistantAccent) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingGeneratedDraft = null }) {
-                    Text("Keep mine", color = AssistantTextMuted)
-                }
-            }
-        )
     }
 
     val cancelUnsavedPrompt = {
@@ -610,15 +427,7 @@ fun SettingsPage(
             text = { Text("You have unsaved Developer settings. Save them before leaving?") },
             confirmButton = {
                 TextButton(enabled = !isSavingDeveloper, onClick = {
-                    onSaveDeveloperChanges(
-                        nameInput,
-                        greetingInput,
-                        keyInput,
-                        embeddingKeyInput,
-                        promptInput,
-                        documentFormatPromptInput,
-                        retrievalChunkLimitInput
-                    )
+                    onSaveDeveloperChanges(keyInput, embeddingKeyInput)
                     // Stay on the page: success restarts the app, failure keeps the draft for a retry.
                     cancelUnsavedPrompt()
                 }) {

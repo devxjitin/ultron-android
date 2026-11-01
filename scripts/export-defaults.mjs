@@ -20,6 +20,8 @@ const trimIndent = (text) => {
 
 const settings = kt('AppSettingsStore.kt');
 const greeting = settings.match(/const val DEFAULT_GREETING = "([^"]*)"/)[1];
+const assistantName = settings.match(/const val DEFAULT_ASSISTANT_NAME = "([^"]*)"/)[1];
+const retrievalChunkLimit = Number(settings.match(/const val DEFAULT_RETRIEVAL_CHUNK_LIMIT = (\d+)/)[1]);
 
 const parse = (text) => {
   const m = text.replace(/\r\n/g, '\n').replace(/^﻿/, '').match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
@@ -51,6 +53,8 @@ const out = {
   persona: raw(settings, 'DEFAULT_SYSTEM_PROMPT').trim(),
   policy: raw(kt('KnowledgeBaseProvider.kt'), 'KNOWLEDGE_GROUNDING_POLICY').trim(),
   greeting,
+  assistantName,
+  retrievalChunkLimit,
   documentFormatPrompt: trimIndent(raw(settings, 'DEFAULT_DOCUMENT_FORMAT_PROMPT')).trim(),
   skills,
 };

@@ -5,7 +5,7 @@
 //   node scripts/remote.mjs get-skill <name>
 //   node scripts/remote.mjs put-skill <name> <file.json>        {description, body, published?, minAppVersion?, tasks?}
 //   node scripts/remote.mjs delete-skill <name>
-//   node scripts/remote.mjs get-prompt <persona|policy|greeting|documentFormatPrompt>
+//   node scripts/remote.mjs get-prompt <persona|policy|greeting|documentFormatPrompt|assistantName|retrievalChunkLimit>
 //   node scripts/remote.mjs set-prompt <key> <file.txt>         (an empty file clears it, so the app uses its bundled text)
 //   node scripts/remote.mjs import-bundled [name ...] [--force] (copies web/defaults.json skills; run export-defaults.mjs first)
 import { execSync } from 'node:child_process';
@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 const PROJECT = 'ultron-5350c';
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
-const PROMPT_LIMITS = { persona: 20000, policy: 12000, greeting: 60, documentFormatPrompt: 10000 };
+const PROMPT_LIMITS = { persona: 20000, policy: 12000, greeting: 60, documentFormatPrompt: 10000, assistantName: 24, retrievalChunkLimit: 15 };
 const MAX_BODY = 8000, MAX_DESC = 300;
 
 // firebase-tools keeps the CLI login; borrow its access token for this process only and never print it.
@@ -95,7 +95,7 @@ switch (cmd) {
     const p = await call('GET', '/remote/prompts').catch(() => ({ fields: {} }));
     const prompts = fromFields(p.fields ?? {});
     console.log('Prompts:');
-    for (const k of Object.keys(PROMPT_LIMITS)) console.log(`  ${k}: ${prompts[k] ? `edited, ${prompts[k].length} chars` : 'app default'}`);
+    for (const k of Object.keys(PROMPT_LIMITS)) console.log(`  ${k}: ${prompts[k] != null && prompts[k] !== '' ? `edited (${String(prompts[k]).length} chars)` : 'app default'}`);
     if (prompts.minAppVersion != null) console.log(`  minAppVersion: ${prompts.minAppVersion}`);
     const s = await call('GET', '/remote_skills');
     console.log('Skills:');
@@ -129,10 +129,12 @@ switch (cmd) {
     const [key, file] = rest;
     if (!(key in PROMPT_LIMITS)) throw new Error(`Unknown prompt "${key}". Use one of: ${Object.keys(PROMPT_LIMITS).join(', ')}`);
     const value = readFileSync(file, 'utf8').trim();
-    if (value.length > PROMPT_LIMITS[key]) throw new Error(`${key} is over ${PROMPT_LIMITS[key]} characters.`);
+    const isNumber = key === 'retrievalChunkLimit';
+    if (isNumber && value && !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 15)) throw new Error('retrievalChunkLimit must be a whole number from 1 to 15.');
+    if (!isNumber && value.length > PROMPT_LIMITS[key]) throw new Error(`${key} is over ${PROMPT_LIMITS[key]} characters.`);
     if (key === 'policy' && value && !value.includes('use_skill')) throw new Error('The answer policy must mention use_skill.');
     const mask = `updateMask.fieldPaths=${key}&updateMask.fieldPaths=updatedAt`;
-    await call('PATCH', `/remote/prompts?${mask}`, { fields: { ...(value ? { [key]: { stringValue: value } } : {}), updatedAt: now() } });
+    await call('PATCH', `/remote/prompts?${mask}`, { fields: { ...(value ? { [key]: isNumber ? { integerValue: String(Number(value)) } : { stringValue: value } } : {}), updatedAt: now() } });
     console.log(value ? `Saved ${key} (${value.length} chars).` : `Cleared ${key}; the app uses its bundled text.`);
     break;
   }

@@ -68,22 +68,23 @@ class RemoteContentTest {
     }
 }
 
-class DefaultTextTest {
-    private val bundled = "Bundled persona"
-
-    @Test fun storedDefaultsFollowTheDefault() {
-        assertNull(customText(null, bundled))
-        assertNull(customText("  ", bundled))
-        assertNull(customText("Bundled persona\r\n", bundled, "Panel persona"))
-        assertNull(customText("Panel persona", bundled, "Panel persona"))
+class RemoteSettingsTest {
+    @Test fun readsAssistantNameAndRetrievalLimit() {
+        val s = RemoteSnapshot.from(mapOf("assistantName" to " Ultron ", "retrievalChunkLimit" to 8L), emptyMap(), 10)
+        assertEquals("Ultron", s.assistantName)
+        assertEquals(8, s.retrievalChunkLimit)
     }
 
-    @Test fun userTextAlwaysWins() {
-        assertEquals("My own persona", customText("My own persona", bundled, "Panel persona"))
+    @Test fun outOfRangeOrTooLongSettingsFallBackToDefaults() {
+        val s = RemoteSnapshot.from(
+            mapOf("assistantName" to "n".repeat(MAX_ASSISTANT_NAME_LENGTH + 1), "retrievalChunkLimit" to (MAX_RETRIEVAL_CHUNK_LIMIT + 1)), emptyMap(), 10
+        )
+        assertNull(s.assistantName)
+        assertNull(s.retrievalChunkLimit)
+        assertNull(RemoteSnapshot.from(mapOf("retrievalChunkLimit" to 0), emptyMap(), 10).retrievalChunkLimit)
     }
 
-    @Test fun remotePolicyIsUsedOnlyWhenPresent() {
+    @Test fun bundledPolicyIsUsedUntilThePanelSendsOne() {
         assertTrue(RemoteContent.policy().contains("Mandatory tool and answer policy"))
-        assertEquals(DEFAULT_SYSTEM_PROMPT.trim(), RemoteContent.defaultPersona())
     }
 }

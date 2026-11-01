@@ -15,7 +15,12 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isOwner()
         && short('persona', 20000) && short('policy', 12000)
-        && short('greeting', 60) && short('documentFormatPrompt', 10000);
+        && short('greeting', 60) && short('documentFormatPrompt', 10000)
+        && short('assistantName', 24)
+        && (!('retrievalChunkLimit' in request.resource.data)
+            || (request.resource.data.retrievalChunkLimit is int
+                && request.resource.data.retrievalChunkLimit >= 1
+                && request.resource.data.retrievalChunkLimit <= 15));
     }
 
     match /remote_skills/{name} {

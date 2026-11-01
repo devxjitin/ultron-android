@@ -13,10 +13,14 @@
       desc: 'Who Ultron is and how it speaks. {owner} and {Owner} are replaced with the owner\'s name in the app.' },
     { key: 'policy', title: 'Answer policy', icon: 'shield', max: 12000, tall: true,
       desc: 'Fixed rules for tools, answers, memory and conduct. They apply after the persona and win when the two disagree. The text must still mention use_skill, otherwise the app keeps its own.' },
+    { key: 'assistantName', title: 'Assistant name', icon: 'user', max: 24, single: true,
+      desc: 'The name shown on the home screen and given to the assistant in its prompt.' },
     { key: 'greeting', title: 'Greeting', icon: 'chat', max: 60, single: true,
       desc: 'The headline on the home screen while Ultron is idle.' },
     { key: 'documentFormatPrompt', title: 'Document prompt', icon: 'file', max: 10000,
       desc: 'Instructions used when a PDF is turned into searchable knowledge.' },
+    { key: 'retrievalChunkLimit', title: 'Search results', icon: 'search', number: true, min: 1, max: 15,
+      desc: 'How many pieces of the owner\'s documents Ultron reads for each search. More gives richer answers but costs more tokens.' },
   ];
 
   const ICONS = {
@@ -165,7 +169,7 @@
       icon(iconName), h('span', {}, label), count != null ? h('span', { class: 'count' }, String(count)) : null);
     menu.replaceChildren(
       link('overview', 'Overview', 'home'),
-      h('div', { class: 'menu-group' }, 'Prompts'),
+      h('div', { class: 'menu-group' }, 'Assistant'),
       ...PROMPTS.map((p) => link(p.key, p.title, p.icon)),
       h('div', { class: 'menu-group' }, 'Skills'),
       link('skills', 'Skills', 'skills', Object.keys(state.skillDocs).length));
@@ -210,8 +214,9 @@
 
   // ---- overview ----
   function promptStatus(p) {
-    const v = (state.prompts[p.key] || '').trim();
-    return v ? h('span', { class: 'badge accent' }, `Edited, ${v.length.toLocaleString()} characters`) : h('span', { class: 'badge' }, 'Using app default');
+    const v = String(state.prompts[p.key] ?? '').trim();
+    if (!v) return h('span', { class: 'badge' }, 'Using app default');
+    return h('span', { class: 'badge accent' }, p.number ? `Set to ${v}` : `Edited, ${v.length.toLocaleString()} characters`);
   }
 
   function renderOverview() {
@@ -248,8 +253,10 @@
 
   // ---- prompt editor ----
   function renderPrompt(p) {
-    const saved = (state.prompts[p.key] || '');
-    const input = p.single
+    const saved = String(state.prompts[p.key] ?? '');
+    const input = p.number
+      ? h('input', { class: 'input narrow', type: 'number', min: String(p.min), max: String(p.max), 'aria-label': p.title })
+      : p.single
       ? h('input', { class: 'input', maxlength: String(p.max), spellcheck: 'false', 'aria-label': p.title })
       : h('textarea', { class: 'area' + (p.tall ? ' tall' : ''), spellcheck: 'false', 'aria-label': p.title, rows: p.tall ? '20' : '10' });
     input.value = saved;
@@ -262,17 +269,20 @@
         ? h('span', { class: 'badge accent' }, 'Edited')
         : h('span', { class: 'badge' }, 'Using app default'));
     };
-    const update = counter(input, count, p.max);
+    const update = p.number ? () => {} : counter(input, count, p.max);
     input.addEventListener('input', () => { refresh(); setDirty(input.value.trim() !== saved.trim()); });
 
     const save = h('button', { class: 'btn primary', 'data-needs-dirty': true, disabled: true, onclick: async () => {
       const value = input.value.trim();
-      if (value.length > p.max) return toast(`${p.title} is over ${p.max.toLocaleString()} characters.`, 'err');
+      if (p.number) {
+        const n = Number(value);
+        if (value && !(Number.isInteger(n) && n >= p.min && n <= p.max)) return toast(`${p.title} must be a whole number from ${p.min} to ${p.max}.`, 'err');
+      } else if (value.length > p.max) return toast(`${p.title} is over ${p.max.toLocaleString()} characters.`, 'err');
       if (p.key === 'policy' && value && !value.includes('use_skill')) return toast('The answer policy must mention use_skill.', 'err');
       save.disabled = true;
       try {
-        await db.collection('remote').doc('prompts').set({ [p.key]: value || FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        if (value) state.prompts[p.key] = value; else delete state.prompts[p.key];
+        await db.collection('remote').doc('prompts').set({ [p.key]: value ? (p.number ? Number(value) : value) : FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        if (value) state.prompts[p.key] = p.number ? Number(value) : value; else delete state.prompts[p.key];
         renderPrompt(p);
         toast(value ? `${p.title} saved. Apps pick it up at their next session.` : `${p.title} cleared. Apps use their bundled text.`);
       } catch (e) { save.disabled = false; toast('Save failed. ' + e.message, 'err'); }
@@ -280,9 +290,9 @@
 
     const tools = h('div', { class: 'editor-tools' },
       bundled != null ? h('button', { class: 'btn secondary sm', onclick: () => {
-        if (input.value.trim() && !confirm('Replace the text with the bundled version?')) return;
+        if (input.value.trim() && !confirm('Replace the current value with the bundled one?')) return;
         input.value = bundled; input.dispatchEvent(new Event('input'));
-      } }, 'Load bundled text') : null,
+      } }, p.number ? 'Load bundled value' : 'Load bundled text') : null,
       h('button', { class: 'btn ghost sm', onclick: () => {
         if (input.value.trim() && !confirm('Clear the text so the app uses its own default?')) return;
         input.value = ''; input.dispatchEvent(new Event('input'));
@@ -295,7 +305,7 @@
         h('div', { class: 'card-pad stack' },
           h('div', { class: 'row', style: 'justify-content:space-between;align-items:center' }, status, count),
           input,
-          p.key === 'persona' ? h('div', { class: 'help' }, 'A person who edits the persona in the app\'s Developer settings keeps their own text. This one is only the default.') : null),
+          h('div', { class: 'help' }, 'Fixed for everyone. The app has no setting for this, so it can only be changed here.')),
         h('div', { class: 'editor-foot' }, tools, h('span', { class: 'dirty', 'data-dirty-flag': true, hidden: true }, 'Unsaved changes'))));
     update();
     setDirty(false);
