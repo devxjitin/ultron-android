@@ -31,11 +31,14 @@ import com.assistant.app.data.GITHUB_OAUTH_SCOPE
 import com.assistant.app.data.GITHUB_MCP_URL
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
-import com.assistant.app.data.SkillRegistry
+import com.assistant.app.data.SKILL_ACTION_TOOL
+import com.assistant.app.data.SkillGuide
+import com.assistant.app.data.SkillPolicy
+import com.assistant.app.data.SkillResolution
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
 import com.assistant.app.data.memoriesForPrompt
-import com.assistant.app.data.GITHUB_TOOL_PREFIX
+import com.assistant.app.data.GITHUB_SKILL_ID
 import com.assistant.app.network.AppUpdater
 import com.assistant.app.network.McpException
 import com.assistant.app.network.GithubClient
@@ -276,7 +279,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun isSessionActive(state: VoiceState) = state != VoiceState.IDLE && state != VoiceState.ERROR
 
     init {
-        SkillRegistry.load(application)
+        SkillGuide.load(application)
         // The notification mirrors the session: "listening" (with a Stop button) while one is
         // active, "ready" otherwise. A reconnect passes through RESETTING, so it never flickers.
         AppForegroundService.onStopRequested = { stopSession() }
@@ -522,17 +525,58 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onSkillsTapped() = openPage(AppPage.SKILLS)
 
     // The voice session carries the skill list in its setup, so a change starts a fresh warm session.
-    fun onSkillToggled(name: String, enabled: Boolean) {
-        SkillRegistry.setEnabled(name, enabled)
-        invalidateWarmSessionAndReprewarm()
+    /** Switches a whole built-in skill on or off. Switching on keeps the actions the user disallowed, unless every one was. */
+    fun onSkillToggled(skillId: String, enabled: Boolean) {
+        val skill = SkillPolicy.catalog(_uiState.value.settings).firstOrNull { it.id == skillId } ?: return
+        launchPersist("") {
+            val device = skill.actions.mapNotNull { it.deviceTool }
+            if (device.isNotEmpty()) {
+                device.forEach { settingsStore.setDeviceToolEnabled(it, enabled) }
+                val disallowed = _uiState.value.settings.disallowedSkillActions
+                if (enabled && skill.actions.all { it.key in disallowed }) settingsStore.setSkillActionsAllowed(skill.actions.map { it.key }, true)
+            }
+            invalidateWarmSessionAndReprewarm()
+        }
     }
 
-    fun onSkillSaved(name: String, description: String, body: String): String? =
-        SkillRegistry.save(name, description, body).also { if (it == null) invalidateWarmSessionAndReprewarm() }
+    /** Allows or disallows one action of a built-in skill. */
+    fun onSkillActionToggled(actionKey: String, allowed: Boolean) {
+        launchPersist("") {
+            settingsStore.setSkillActionsAllowed(listOf(actionKey), allowed)
+            invalidateWarmSessionAndReprewarm()
+        }
+    }
 
-    fun onSkillDeleted(name: String) {
-        SkillRegistry.delete(name)
-        invalidateWarmSessionAndReprewarm()
+    /** Skills the model opened with use_skill in the current Live session; skill_action refuses any other. */
+    private val unlockedSkills: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** use_skill: reveals the allowed actions of one skill and remembers that the model opened it. */
+    private fun openSkill(skillId: String): String {
+        val settings = _uiState.value.settings
+        val id = skillId.trim().lowercase()
+        val text = SkillPolicy.open(settings, id)
+        if (text.startsWith("status=ok")) unlockedSkills.add(id)
+        return text
+    }
+
+    /** skill_action: runs one action if its skill is open and the user allows it, through the same runners as before. */
+    private suspend fun runSkillAction(args: JSONObject): String {
+        val settings = _uiState.value.settings
+        val skill = args.optString("skill")
+        val action = args.optString("action")
+        return when (val resolved = SkillPolicy.resolve(settings, unlockedSkills, skill, action)) {
+            is SkillResolution.Refused -> resolved.message
+            is SkillResolution.Device -> {
+                val arguments = SkillPolicy.parseArguments(args.optString("arguments"))
+                    ?: return "status=invalid\nThe arguments were not a valid JSON object. Send them as JSON text such as {\"name\":\"value\"}."
+                runToolSafely(resolved.tool.functionName) { runDeviceTool(resolved.tool, arguments) }
+            }
+            is SkillResolution.Github -> {
+                val arguments = SkillPolicy.parseArguments(args.optString("arguments"))
+                    ?: return "status=invalid\nThe arguments were not a valid JSON object. Send them as JSON text such as {\"name\":\"value\"}."
+                runToolSafely(resolved.name) { runGithubTool(resolved.name, arguments) }
+            }
+        }
     }
 
 
@@ -696,14 +740,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** What the home screen shows while a tool runs, e.g. "Set alarm" or "GitHub: search repositories". */
-    private fun toolDisplayName(functionName: String): String = when {
-        functionName == "search_knowledge_base" -> "Searching knowledge"
-        functionName == MEMORY_SAVE_TOOL -> "Saving to memory"
-        functionName == MEMORY_FORGET_TOOL -> "Forgetting a memory"
-        functionName == USE_SKILL_TOOL -> "Loading a skill"
-        functionName.startsWith(GITHUB_TOOL_PREFIX) ->
-            "GitHub: " + functionName.removePrefix(GITHUB_TOOL_PREFIX).replace('_', ' ')
-        else -> DeviceTool.fromFunctionName(functionName)?.label ?: functionName.replace('_', ' ')
+    private fun toolDisplayName(functionName: String, args: JSONObject? = null): String = when (functionName) {
+        "search_knowledge_base" -> "Searching knowledge"
+        MEMORY_SAVE_TOOL -> "Saving to memory"
+        MEMORY_FORGET_TOOL -> "Forgetting a memory"
+        USE_SKILL_TOOL -> "Opening a skill"
+        SKILL_ACTION_TOOL -> {
+            val action = args?.optString("action").orEmpty()
+            if (args?.optString("skill") == GITHUB_SKILL_ID) "GitHub: " + action.replace('_', ' ')
+            else DeviceTool.fromFunctionName(action)?.label ?: action.replace('_', ' ').ifBlank { "Running an action" }
+        }
+        else -> functionName.replace('_', ' ')
     }
 
     private fun announceTool(label: String) {
@@ -1516,6 +1563,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
                 if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
+                skills = SkillPolicy.active(settings),
                 ownerName = settings.ownerName
             )
             connectLiveSession(
@@ -1546,6 +1594,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isWarm: Boolean = false,
         resumeHandle: String? = null
     ) {
+        // A new session has not opened any skill yet.
+        unlockedSkills.clear()
         val client: LiveClient =
             if (usesFirebase()) FirebaseLiveClient(settings.liveModel) else GeminiLiveClient(apiKey, settings.liveModel)
         client.latency.event("session_origin", mapOf("mode" to when {
@@ -1693,18 +1743,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val batch = ToolBatch(fresh.map { it.id }).also { toolBatches.add(it) }
                 fresh.forEach { call ->
                     val trace = client.latency.turn()?.tool()
-                    announceTool(toolDisplayName(call.name))
+                    announceTool(toolDisplayName(call.name, call.args))
                     val job = toolSearchScope?.launch {
                         val searchStartedAt = SystemClock.elapsedRealtime()
-                        val deviceTool = DeviceTool.fromFunctionName(call.name)
-                        val resultText = if (deviceTool != null) {
-                            runDeviceTool(deviceTool, call.args)
-                        } else if (call.name == MEMORY_SAVE_TOOL || call.name == MEMORY_FORGET_TOOL) {
+                        val resultText = if (call.name == MEMORY_SAVE_TOOL || call.name == MEMORY_FORGET_TOOL) {
                             runToolSafely(call.name) { runMemoryTool(call.name, call.args) }
                         } else if (call.name == USE_SKILL_TOOL) {
-                            SkillRegistry.use(call.args.optString("name"))
-                        } else if (call.name.startsWith(GITHUB_TOOL_PREFIX)) {
-                            runToolSafely(call.name) { runGithubTool(call.name.removePrefix(GITHUB_TOOL_PREFIX), call.args) }
+                            openSkill(call.args.optString("skill"))
+                        } else if (call.name == SKILL_ACTION_TOOL) {
+                            runSkillAction(call.args)
                         } else if (call.name != "search_knowledge_base") {
                             "status=unknown_tool\nThere is no tool named ${call.name}. Do not call it again; tell the user you cannot do that with the tools you have."
                         } else try {
@@ -1755,6 +1802,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                         // A placed phone call takes over the speaker and mic. The voice session ends so
                         // its reply does not play into the call and its audio mode does not fight the call's.
+                        val deviceTool = if (call.name == SKILL_ACTION_TOOL) DeviceTool.fromFunctionName(call.args.optString("action")) else null
                         if (deviceTool in CALL_TOOLS && resultText.startsWith("status=ok") && liveClient === client) {
                             stopSession()
                             showToast("Call started. Tap the mic to talk to Ultron again.", AppNotificationType.INFO)
@@ -1767,14 +1815,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, resultText)
                             batch.traces[call.id] = trace to searchStartedAt
                             pendingToolJobs.remove(call.id)
-                            clearToolLater(toolDisplayName(call.name))
+                            clearToolLater(toolDisplayName(call.name, call.args))
                             flushToolBatch(client, batch)
                         }
                     }
                     if (job == null) {
                         pendingToolCallIds.remove(call.id)
                         trace?.failure()
-                        clearToolLater(toolDisplayName(call.name))
+                        clearToolLater(toolDisplayName(call.name, call.args))
                         flushToolBatch(client, batch)
                     } else {
                         pendingToolJobs[call.id] = job
@@ -2085,6 +2133,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
                     if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
+                    skills = SkillPolicy.active(settings),
                     ownerName = settings.ownerName
                 )
 

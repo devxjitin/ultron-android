@@ -62,7 +62,6 @@ import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.components.AboutPage
 import com.assistant.app.ui.components.StoragePage
 import com.assistant.app.ui.components.SkillsPage
-import com.assistant.app.data.SkillRegistry
 import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
@@ -121,8 +120,7 @@ fun AssistantScreen(
     onStorageTapped: () -> Unit = {},
     onSkillsTapped: () -> Unit = {},
     onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
-    onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
-    onSkillDeleted: (String) -> Unit = {},
+    onSkillActionToggled: (String, Boolean) -> Unit = { _, _ -> },
     onClearCache: () -> Unit = {},
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
@@ -312,10 +310,7 @@ fun AssistantScreen(
             if (tab in listOf(NavTab.SKILLS, NavTab.USAGE, NavTab.STORAGE, NavTab.ABOUT)) {
                 val pageModifier = Modifier.padding(top = topReserve)
                 when (tab) {
-                    NavTab.SKILLS -> {
-                        val skills by SkillRegistry.entries.collectAsState()
-                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
-                    }
+                    NavTab.SKILLS -> SkillsPage(uiState.settings, onSkillToggled, onSkillActionToggled, pageModifier)
                     NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                     NavTab.STORAGE -> StoragePage(
                         memoryCount = uiState.memories.size,

@@ -68,16 +68,21 @@ const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
  * connector uses all of its tools. Older versions let single tools be switched on or off, so a connector can have been left
  * with only one tool on; that counts as installed and gets the rest of its tools, instead of staying half-working.
  */
-fun effectiveDeviceTools(overrides: Set<String>?): Set<DeviceTool> {
+fun effectiveDeviceTools(overrides: Set<String>?, disallowedActions: Set<String> = emptySet()): Set<DeviceTool> {
     // Never configured (fresh install): start with the safe connectors so the assistant can do something useful at once.
     // Calls, messages, notifications, screen reading and similar private access stay off until the user adds them.
-    if (overrides == null) return DEFAULT_CONNECTOR_IDS.flatMap { PhoneConnectors.tools(it) }.toSet()
-    val on = overrides.orEmpty().mapNotNull {
-        val parts = it.split("=", limit = 2)
-        if (parts.size == 2 && parts[1] == "1") parts[0] else null
-    }.toSet()
-    return PhoneConnectors.all.filter { connector -> connector.tools.any { it.functionName in on } }
-        .flatMap { it.tools }.toSet()
+    val installed = if (overrides == null) {
+        DEFAULT_CONNECTOR_IDS.flatMap { PhoneConnectors.tools(it) }.toSet()
+    } else {
+        val on = overrides.mapNotNull {
+            val parts = it.split("=", limit = 2)
+            if (parts.size == 2 && parts[1] == "1") parts[0] else null
+        }.toSet()
+        PhoneConnectors.all.filter { connector -> connector.tools.any { it.functionName in on } }
+            .flatMap { it.tools }.toSet()
+    }
+    // Actions the user disallowed on the Skills page stay off even though their skill is on.
+    return installed.filterNot { it.functionName in disallowedActions }.toSet()
 }
 
 val DEFAULT_DOCUMENT_FORMAT_PROMPT = """
@@ -134,6 +139,8 @@ data class AssistantSettings(
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
+    /** Skill actions the user disallowed: a device tool's function name, or "github:<tool>". */
+    val disallowedSkillActions: Set<String> = emptySet(),
     /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
     /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
 )
@@ -158,6 +165,7 @@ class AppSettingsStore(private val context: Context) {
     private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
     private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
+    private val disallowedActionsKey = stringSetPreferencesKey("skill_actions_disallowed")
 
     val settings: Flow<AssistantSettings> = context.settingsDataStore.data.map { prefs ->
         AssistantSettings(
@@ -169,7 +177,9 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultVoice,
             githubLogin = prefs[githubLoginKey].orEmpty(),
             githubTools = decodeMcpTools(prefs[githubToolsKey]),
-            enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey])),
+            enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey]))
+                .filterNot { "github:$it" in prefs[disallowedActionsKey].orEmpty() }.toSet(),
+            disallowedSkillActions = prefs[disallowedActionsKey].orEmpty(),
             micSensitivity = MicSensitivity.fromStoredValue(prefs[micSensitivityKey]),
             languageCode = prefs[languageCodeKey]
                 ?.takeIf(AssistantOptions::isApprovedLanguage)
@@ -185,7 +195,7 @@ class AppSettingsStore(private val context: Context) {
             retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
                 ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
                 ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
-            enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey])
+            enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey], prefs[disallowedActionsKey].orEmpty())
         )
     }
 
@@ -235,6 +245,15 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit { prefs ->
             val others = (prefs[toolOverridesKey] ?: emptySet()).filterNot { it.startsWith(tool.functionName + "=") }
             prefs[toolOverridesKey] = (others + "${tool.functionName}=${if (enabled) 1 else 0}").toSet()
+        }
+    }
+
+    /** Allows or disallows single skill actions, by [SkillAction.key]. */
+    suspend fun setSkillActionsAllowed(keys: Collection<String>, allowed: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            val current = prefs[disallowedActionsKey].orEmpty()
+            val next = if (allowed) current - keys.toSet() else current + keys
+            if (next.isEmpty()) prefs.remove(disallowedActionsKey) else prefs[disallowedActionsKey] = next
         }
     }
 

@@ -121,7 +121,7 @@ object KnowledgeBaseProvider {
         voiceGender: String? = null,
         memories: List<String> = emptyList(),
         style: String = "",
-        skills: List<Skill> = SkillRegistry.all(),
+        skills: List<BuiltInSkill> = emptyList(),
         ownerName: String = ""
     ): String {
         return buildString {
@@ -151,7 +151,7 @@ object KnowledgeBaseProvider {
                 memories.forEach { append("\n- ").append(it) }
             }
             append("\n\n").append(KNOWLEDGE_GROUNDING_POLICY.trim().withOwner(ownerName))
-            SkillRegistry.promptSection(skills).takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
+            SkillPolicy.promptSection(skills).takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
         }
     }
 }

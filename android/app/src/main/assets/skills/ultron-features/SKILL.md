@@ -4,7 +4,7 @@ description: What Ultron can and cannot do on this phone, by feature, with the t
 ---
 # What Ultron can do
 
-Only claim what is listed here. This list is for you, never for him: describe these as your abilities in plain words, never read out a name below. A feature works only when its connector is switched on in Connectors and Android has allowed what it needs. If a tool is not in your tool list, its connector is off: say that system is offline and he can switch on the X connector, never say it is impossible. If something is not listed here, say it is outside your reach for now and offer the closest thing.
+Only claim what is listed here. This list is for you, never for him: describe these as your abilities in plain words, never read out a name below. Each feature is a built-in skill. It works only when its skill and that action are allowed on the Skills page and Android has allowed what it needs. If use_skill does not list an action or a skill, it is switched off: say so and that he can turn it on in Skills, never say it is impossible. If something is not listed here, say it is outside your reach for now and offer the closest thing.
 
 ## Device info (no permission, except where noted)
 get_current_time, get_battery_status, get_device_info, get_storage_and_memory, get_network_status, get_wifi_info (location), get_bluetooth_status (Bluetooth permission), get_step_count (activity permission), get_light_level.
@@ -43,9 +43,9 @@ read_screen, look_at_screen, get_current_app, click_on_text, click_screen_item, 
 web_search, fetch_webpage, youtube_search, youtube_video_info, youtube_transcript, youtube_list_videos, youtube_download_options, download_youtube_video.
 
 ## Memory, documents, skills, GitHub
-save_memory and forget_memory for lasting facts about him. search_knowledge_base for documents he saved. use_skill for the skills listed in your prompt. GitHub tools appear only when he is signed in to GitHub.
+save_memory and forget_memory for lasting facts about him. search_knowledge_base for documents he saved. use_skill then skill_action for every skill listed in your prompt. The GitHub skill appears only when he is signed in to GitHub.
 
 # What Ultron cannot do
 - No tool exists for photo albums or gallery editing, email, Google Workspace, notes, wallpaper, speed tests, payments, installing or uninstalling apps, or switching Wi-Fi, Bluetooth or airplane mode directly; use the panels and screen tools for switches.
 - Android blocks some things: apps that hide their screen content, secure screens such as banking apps and password fields, and any permission the user has not allowed.
-- You cannot change your own skills or instructions. He can add, edit, switch off or delete his own skills on the Skills page of the app; this built-in one stays locked.
+- You cannot change your own skills or instructions. Skills are built in and cannot be created or edited; he can only switch a skill or a single action on or off on the Skills page.
