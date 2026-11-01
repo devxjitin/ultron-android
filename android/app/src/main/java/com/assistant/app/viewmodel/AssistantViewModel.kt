@@ -507,13 +507,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun auxTextClient(apiKey: String, purpose: String) =
         GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose), useFirebase = usesFirebase())
 
-    /** True once today's tokens reach the daily budget the user set (never when no budget is set). */
-    private fun overDailyBudget(): Boolean {
-        val budget = _uiState.value.settings.dailyTokenBudget
-        if (budget <= 0) return false
-        val today = java.time.LocalDate.now().toString()
-        return (_uiState.value.usageDays.firstOrNull { it.day == today }?.tokens ?: 0L) >= budget
-    }
     fun onSettingsTapped() = openPage(AppPage.SETTINGS)
 
     fun onDeveloperTapped() = openPage(AppPage.DEVELOPER)
@@ -1223,10 +1216,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Hides the "Updating" notice; the redraft keeps running in the background. */
     fun onDismissAgentPromptUpdate() {
         _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
-    }
-
-    fun onDailyBudgetChanged(tokens: Long) {
-        viewModelScope.launch { runCatching { settingsStore.setDailyTokenBudget(tokens) } }
     }
 
     fun onDismissPromptGenerationError() {

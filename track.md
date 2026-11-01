@@ -446,3 +446,8 @@
 [2026-10-30 20:10] [Claude] [Remove: live captions and the session layout shrink that came with them]
 [2026-10-30 20:47] [Claude] [Refactor: Phase 3 - one AppPage for navigation, one default tool set, unused drawer imports removed]
 [2026-10-31 07:22] [Claude] [Add: knowledge edit ab chunk-wise, sirf changed chunks re-embed hote hain]
+[2026-11-01 13:09] [Claude] [Docs: dead-code-report.md banaya, koi code change nahi]
+[2026-11-01 13:12] [Claude] [Remove: dead code D1,D3,D4,D5,D9, branch chore/dead-code-cleanup-2026-11-01]
+[2026-11-01 13:13] [Claude] [Remove: dead code D2 AutomationStore.removeRule]
+[2026-11-01 13:17] [Claude] [Remove: daily token budget setting aur Usage UI (D6)]
+[2026-11-01 13:19] [Claude] [Remove: unused PURPOSE_TITLE (D7), cleanup branch merge]

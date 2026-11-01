@@ -151,17 +151,6 @@ object AutomationEngine {
         return "status=ok\nRule #$id: when $event, run ${tool.functionName}. It works while the assistant app is running."
     }
 
-    fun listRules(context: Context): String {
-        val rules = AutomationStore(context).rules()
-        if (rules.isEmpty()) return "status=empty\nThere are no automation rules."
-        return "status=ok\n" + rules.joinToString("\n") { "#${it.id}: when ${it.event}, run ${it.toolName} ${it.argsJson}" }
-    }
-
-    fun deleteRule(context: Context, id: Int?): String {
-        if (id == null) return "status=invalid\nA required value was missing."
-        return if (AutomationStore(context).removeRule(id)) "status=ok\nRule #$id deleted." else "status=not_found\nNo rule #$id."
-    }
-
     /** Called when a phone event fires; runs every matching rule. */
     fun onEvent(context: Context, event: String) {
         val now = System.currentTimeMillis()

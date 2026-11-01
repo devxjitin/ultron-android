@@ -136,8 +136,6 @@ data class AssistantSettings(
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
     /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
     /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
-    /** Tokens per day after which the app stops starting chats and automatic model work; 0 means no limit. */
-    val dailyTokenBudget: Long = 0L
 )
 
 /** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
@@ -160,7 +158,6 @@ class AppSettingsStore(private val context: Context) {
     private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
     private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
-    private val dailyBudgetKey = stringPreferencesKey("daily_token_budget")
 
     val settings: Flow<AssistantSettings> = context.settingsDataStore.data.map { prefs ->
         AssistantSettings(
@@ -188,8 +185,7 @@ class AppSettingsStore(private val context: Context) {
             retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
                 ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
                 ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
-            enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey]),
-            dailyTokenBudget = prefs[dailyBudgetKey]?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+            enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey])
         )
     }
 
@@ -224,10 +220,6 @@ class AppSettingsStore(private val context: Context) {
 
     suspend fun setMemoryEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[memoryEnabledKey] = enabled }
-    }
-
-    suspend fun setDailyTokenBudget(tokens: Long) {
-        context.settingsDataStore.edit { if (tokens <= 0) it.remove(dailyBudgetKey) else it[dailyBudgetKey] = tokens.toString() }
     }
 
     suspend fun setOwnerName(name: String) {

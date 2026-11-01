@@ -1434,7 +1434,6 @@ class DeviceToolRunner(
     }
 
     private companion object {
-        const val MAX_IMAGE_BYTES = 8_000_000L
         /** The latest search_files list, so open_file can take a number from it. */
         @Volatile var lastFiles: List<FoundFile> = emptyList()
         /** The assistant's voice plays in communication mode, so it follows the call volume. */

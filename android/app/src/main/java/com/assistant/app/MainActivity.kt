@@ -324,7 +324,6 @@ class MainActivity : ComponentActivity() {
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
-                        onDailyBudgetChanged = { viewModel.onDailyBudgetChanged(it) },
                         onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
                         onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },

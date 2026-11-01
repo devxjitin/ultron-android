@@ -54,9 +54,7 @@ private fun UsageDay.value(metric: UsageMetric): Double = when (metric) {
 @Composable
 fun UsagePage(
     days: List<UsageDay>,
-    modifier: Modifier = Modifier,
-    dailyTokenBudget: Long = 0L,
-    onDailyBudgetChange: (Long) -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     var rangeIndex by rememberSaveable { mutableIntStateOf(UsageRange.WEEK.ordinal) }
     var metricIndex by rememberSaveable { mutableIntStateOf(UsageMetric.TOKENS.ordinal) }
@@ -156,14 +154,6 @@ fun UsagePage(
             }
         }
 
-        PageLabel("Limits")
-        Text("Daily token limit", color = AssistantTextSecondary, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-        ChoiceDropdown(
-            options = BUDGET_CHOICES.map { (label, tokens) -> tokens.toString() to label },
-            selectedId = dailyTokenBudget.toString(),
-            onSelect = { id -> onDailyBudgetChange(id.toLong()) }
-        )
-
         Text(
             "Counted on this phone only and never sent anywhere. Model use is counted in tokens, per model; voice is measured in time.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 16.dp, start = 4.dp)
@@ -196,8 +186,6 @@ private fun StatTile(title: String, value: String, caption: String, modifier: Mo
         Text(caption, color = AssistantTextMuted, fontSize = 12.sp, maxLines = 1)
     }
 }
-
-private val BUDGET_CHOICES = listOf("Off" to 0L, "50K" to 50_000L, "200K" to 200_000L, "1M" to 1_000_000L)
 
 private fun rupees(amount: Double): String =
     if (amount < 10) String.format(Locale.US, "₹%.2f", amount) else String.format(Locale.US, "₹%.0f", amount)
