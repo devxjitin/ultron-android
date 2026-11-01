@@ -44,12 +44,13 @@ Ultron is an Android voice assistant. Tap the mic and you are in a live, interru
 long-term memory, a private knowledge base you fill with your own documents, and a set of tools that let the assistant act,
 either on the phone itself or in the cloud services you connect.
 
-The project has three parts:
+The project has four parts:
 
 | Part | Where | What it is |
 |---|---|---|
 | **Android app** | [`android/`](android) | The assistant itself, written in Kotlin with Jetpack Compose. |
 | **Cloud connectors** | [`mcp/`](mcp) | Small stateless AWS Lambda servers (web extract, update service). |
+| **Web panel** | [`web/`](web) | Firebase Hosting page where the owner edits the persona, answer policy, greeting and skills the app loads from Firestore (`remote/prompts`, `remote_skills/*`), so text changes need no app update. Rules are in `firestore.rules`; `scripts/remote.mjs` does the same from the terminal. |
 | **Release tooling** | [`scripts/`](scripts) | A PowerShell script that builds a small release and publishes it for over-the-air updates, plus a latency-log summary script. |
 
 ---
@@ -134,7 +135,6 @@ Add your own documents (typed text or PDF) and ask about them by voice.
 - PDFs are converted by a model into paragraph-sized, titled chunks, then embedded with **`gemini-embedding-2`** (768-dimension vectors).
 - Search is **hybrid**: vector similarity and BM25 keyword rankings are merged with *reciprocal rank fusion*, and neighbouring chunks are added for context.
 - Chunks and vectors are stored on the device in **ObjectBox**, with a consistency checker and a migration path when the embedding model changes.
-- One tap can draft the assistant's persona from your documents.
 
 ### Memory
 

@@ -460,3 +460,8 @@
 [2026-11-01 22:42] [Claude] [Update: web panel redesign, sidebar menu, prompt editors, skills editor, ultron-control.web.app]
 [2026-11-01 23:17] [Claude] [Add: scripts/remote.mjs, Firebase CLI login se remote prompts/skills manage, key ki zarurat nahi]
 [2026-11-01 23:27] [Claude] [Remove: app Developer section se name/greeting/persona/dataset prompt/retrieval hataye, ab sirf API keys; sab web panel se]
+[2026-11-01 23:48] [Claude] [Fix: mic tap ke waqt remote snapshot se warm session atakta tha, ab fresh session start]
+[2026-11-01 23:48] [Claude] [Update: OTA workflow ab web/, rules, mcp/, infra/ badalne par APK publish nahi karta]
+[2026-11-01 23:48] [Claude] [Update: firestore.rules me key whitelist, type checks aur alag delete rule]
+[2026-11-01 23:48] [Claude] [Remove: dead generateText, orphan KDoc, unused SettingsDialog imports, Bing test rename]
+[2026-11-01 23:48] [Claude] [Docs: README me web panel add, removed persona-draft line hatayi, keystore naam comment]

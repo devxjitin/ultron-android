@@ -8,12 +8,21 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
     function short(field, max) {
-      return !(field in request.resource.data) || request.resource.data[field].size() <= max;
+      return !(field in request.resource.data)
+        || (request.resource.data[field] is string && request.resource.data[field].size() <= max);
+    }
+    function validBuild() {
+      return !('minAppVersion' in request.resource.data)
+        || (request.resource.data.minAppVersion is int && request.resource.data.minAppVersion >= 0);
     }
 
     match /remote/prompts {
       allow read: if true;
-      allow write: if isOwner()
+      allow delete: if isOwner();
+      allow create, update: if isOwner()
+        && request.resource.data.keys().hasOnly(['persona', 'policy', 'greeting', 'documentFormatPrompt', 'assistantName',
+                                                 'retrievalChunkLimit', 'minAppVersion', 'updatedAt'])
+        && validBuild()
         && short('persona', 20000) && short('policy', 12000)
         && short('greeting', 60) && short('documentFormatPrompt', 10000)
         && short('assistantName', 24)
@@ -25,8 +34,14 @@ service cloud.firestore {
 
     match /remote_skills/{name} {
       allow read: if true;
-      allow write: if isOwner()
+      allow delete: if isOwner();
+      allow create, update: if isOwner()
         && name.matches('[a-z0-9][a-z0-9_-]{0,47}')
+        && request.resource.data.keys().hasOnly(['description', 'body', 'published', 'tasks', 'minAppVersion', 'updatedAt'])
+        && validBuild()
+        && (!('published' in request.resource.data) || request.resource.data.published is bool)
+        && (!('tasks' in request.resource.data)
+            || (request.resource.data.tasks is map && request.resource.data.tasks.size() <= 20))
         && short('description', 300) && short('body', 8000);
     }
 

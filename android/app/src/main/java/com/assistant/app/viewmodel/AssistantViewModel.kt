@@ -1338,12 +1338,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  reflects their choice. Discard it and open a new one with the fresh settings instead of
      *  leaving a stale one to be silently promoted on the next mic tap. */
     private fun invalidateWarmSessionAndReprewarm() {
+        // The mic was tapped while this warm session was still connecting: the user is waiting on it, so open a fresh
+        // session right away. prewarmIfPossible only runs from IDLE and would leave the screen stuck on "Connecting".
+        val userWaiting = activateWarmOnReady && _uiState.value.voiceState == VoiceState.CONNECTING
         cancelInFlightPrewarm()
         warmClient?.close()
         warmClient = null
         isPrewarmReady = false
         activateWarmOnReady = false
-        prewarmIfPossible()
+        if (userWaiting) startSession() else prewarmIfPossible()
     }
 
     /** True when the device has a validated internet connection; assumes online if the check fails. */

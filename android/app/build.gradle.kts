@@ -37,9 +37,9 @@ val appVersionName: String = (project.findProperty("appVersionName") as String?)
 
 // Release signing config, also read from local.properties (gitignored) so the keystore
 // path and passwords never end up in source control. Add these to android/local.properties:
-// RELEASE_STORE_FILE=keystore/nivi-release.jks
+// RELEASE_STORE_FILE=keystore/ultron-release.jks
 // RELEASE_STORE_PASSWORD=...
-// RELEASE_KEY_ALIAS=nivi-release
+// RELEASE_KEY_ALIAS=ultron-release
 // RELEASE_KEY_PASSWORD=...
 val releaseStoreFile = localProperties.getProperty("RELEASE_STORE_FILE", "")
 val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD", "")

@@ -108,8 +108,7 @@ data class AssistantSettings(
     val bargeInEnabled: Boolean = true,
     /** When on, the assistant saves lasting facts about the user and recalls them in later sessions. */
     val memoryEnabled: Boolean = true,
-    /** The agent's persona/instructions, editable from Settings so an admin can customize
-     *  the assistant per deployment without a rebuild. */
+    /** The agent's persona/instructions, loaded from the web panel (see RemoteContent) or the bundled default. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
     /** Name shown on the home screen and given to the assistant in its prompt. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
@@ -123,8 +122,6 @@ data class AssistantSettings(
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
-    /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
-    /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
 )
 
 /** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
