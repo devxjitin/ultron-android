@@ -21,7 +21,6 @@ data class RemoteSnapshot(
     val policy: String? = null,
     val greeting: String? = null,
     val documentFormatPrompt: String? = null,
-    val assistantName: String? = null,
     val retrievalChunkLimit: Int? = null,
     val skills: List<SkillGroup> = emptyList(),
     val hiddenSkills: Set<String> = emptySet()
@@ -49,7 +48,6 @@ data class RemoteSnapshot(
                 policy = policy,
                 greeting = field("greeting", MAX_GREETING_LENGTH),
                 documentFormatPrompt = field("documentFormatPrompt", MAX_REMOTE_DOCUMENT_PROMPT_CHARS),
-                assistantName = field("assistantName", MAX_ASSISTANT_NAME_LENGTH),
                 retrievalChunkLimit = (prompts?.get("retrievalChunkLimit") as? Number)?.toInt()
                     ?.takeIf { promptsOk && it in MIN_RETRIEVAL_CHUNK_LIMIT..MAX_RETRIEVAL_CHUNK_LIMIT },
                 skills = skills,

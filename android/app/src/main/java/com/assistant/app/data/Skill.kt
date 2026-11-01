@@ -131,10 +131,11 @@ object SkillRegistry {
 
     /**
      * Applies the web panel's skills to the bundled ones: a remote skill replaces a bundled one of the same name or adds a new
-     * one, and an unpublished name is dropped. The locked skill can be reworded but never hidden.
+     * one, and an unpublished name is dropped. The locked skill is never replaced or hidden: its tool list is checked against
+     * the code at build time, so a copy in the panel could only go stale.
      */
     internal fun mergeRemote(skills: MutableMap<String, SkillGroup>, remote: RemoteSnapshot) {
-        remote.skills.forEach { skills[it.name] = it }
+        remote.skills.filter { it.name !in LOCKED_SKILLS }.forEach { skills[it.name] = it }
         remote.hiddenSkills.filter { it !in LOCKED_SKILLS }.forEach { skills.remove(it) }
     }
 

@@ -439,9 +439,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** The runtime-entered key wins; the compile-time local.properties value is only a fallback. */
-    private fun resolveApiKey(): String =
-        apiKeyStore.getApiKey() ?: BuildConfig.GEMINI_API_KEY
+    /** The key the user typed in Developer settings; blank when Gemini goes through Firebase instead. */
+    private fun resolveApiKey(): String = apiKeyStore.getApiKey().orEmpty()
 
     /** Gemini goes through Firebase AI Logic unless the user typed their own key in Developer settings. */
     private fun usesFirebase(): Boolean =
@@ -1013,9 +1012,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onClearApiKey() {
         apiKeyStore.clearApiKey()
-        val fallback = BuildConfig.GEMINI_API_KEY
         _uiState.update {
-            it.copy(hasApiKey = hasGeminiAccess(), currentApiKey = fallback)
+            it.copy(hasApiKey = hasGeminiAccess(), currentApiKey = "")
         }
         showToast("API key removed")
         invalidateWarmSessionAndReprewarm()

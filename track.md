@@ -465,3 +465,8 @@
 [2026-11-01 23:48] [Claude] [Update: firestore.rules me key whitelist, type checks aur alag delete rule]
 [2026-11-01 23:48] [Claude] [Remove: dead generateText, orphan KDoc, unused SettingsDialog imports, Bing test rename]
 [2026-11-01 23:48] [Claude] [Docs: README me web panel add, removed persona-draft line hatayi, keystore naam comment]
+[2026-11-02 00:10] [Claude] [Remove: baked GEMINI_API_KEY APK se hataya, ab Firebase ya user ki apni key]
+[2026-11-02 00:10] [Claude] [Update: assistant name "Ultron" fixed, web panel/rules/scripts se assistantName hataya]
+[2026-11-02 00:10] [Claude] [Update: ultron-features locked, remote override band, test me code se do-taraf tool check]
+[2026-11-02 00:10] [Claude] [Fix: Firestore ka duplicate prompt/skill text clear kiya, rules deploy, panel wording sahi]
+[2026-11-02 00:10] [Claude] [Revert: keystore comment wapas nivi-release, wo asli file ka naam hai]

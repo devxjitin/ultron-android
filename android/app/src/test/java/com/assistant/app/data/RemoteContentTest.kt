@@ -52,34 +52,36 @@ class RemoteContentTest {
         assertEquals(setOf("gone"), s.hiddenSkills)
     }
 
-    @Test fun remoteSkillReplacesBundledAndLockedSkillIsNeverHidden() {
+    @Test fun remoteSkillReplacesBundledAndLockedSkillIsNeverHiddenOrReplaced() {
         val bundled = linkedMapOf(
             "whatsapp" to SkillGroup("whatsapp", "old", "old body", emptyList()),
             "ultron-features" to SkillGroup("ultron-features", "d", "b", emptyList()),
             "other" to SkillGroup("other", "d", "b", emptyList())
         )
         val remote = RemoteSnapshot(
-            skills = listOf(SkillGroup("whatsapp", "new", "new body", emptyList()), SkillGroup("fresh", "d", "b", emptyList())),
+            skills = listOf(
+                SkillGroup("whatsapp", "new", "new body", emptyList()), SkillGroup("fresh", "d", "b", emptyList()),
+                SkillGroup("ultron-features", "stale copy", "stale", emptyList())
+            ),
             hiddenSkills = setOf("other", "ultron-features")
         )
         SkillRegistry.mergeRemote(bundled, remote)
         assertEquals("new", bundled["whatsapp"]?.description)
+        assertEquals("d", bundled["ultron-features"]?.description)
         assertEquals(setOf("whatsapp", "ultron-features", "fresh"), bundled.keys)
     }
 }
 
 class RemoteSettingsTest {
-    @Test fun readsAssistantNameAndRetrievalLimit() {
-        val s = RemoteSnapshot.from(mapOf("assistantName" to " Ultron ", "retrievalChunkLimit" to 8L), emptyMap(), 10)
-        assertEquals("Ultron", s.assistantName)
+    @Test fun readsRetrievalLimit() {
+        val s = RemoteSnapshot.from(mapOf("retrievalChunkLimit" to 8L), emptyMap(), 10)
         assertEquals(8, s.retrievalChunkLimit)
     }
 
     @Test fun outOfRangeOrTooLongSettingsFallBackToDefaults() {
         val s = RemoteSnapshot.from(
-            mapOf("assistantName" to "n".repeat(MAX_ASSISTANT_NAME_LENGTH + 1), "retrievalChunkLimit" to (MAX_RETRIEVAL_CHUNK_LIMIT + 1)), emptyMap(), 10
+            mapOf("retrievalChunkLimit" to (MAX_RETRIEVAL_CHUNK_LIMIT + 1)), emptyMap(), 10
         )
-        assertNull(s.assistantName)
         assertNull(s.retrievalChunkLimit)
         assertNull(RemoteSnapshot.from(mapOf("retrievalChunkLimit" to 0), emptyMap(), 10).retrievalChunkLimit)
     }

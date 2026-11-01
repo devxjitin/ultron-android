@@ -110,7 +110,7 @@ data class AssistantSettings(
     val memoryEnabled: Boolean = true,
     /** The agent's persona/instructions, loaded from the web panel (see RemoteContent) or the bundled default. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
-    /** Name shown on the home screen and given to the assistant in its prompt. */
+    /** Name shown on the home screen and given to the assistant in its prompt. Always [DEFAULT_ASSISTANT_NAME]. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
     /** The home-screen headline shown while idle. */
     val greeting: String = DEFAULT_GREETING,
@@ -155,9 +155,9 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: true,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            // The persona, name, greeting and document prompt are fixed: they come from the web panel, or the app's own text.
+            // The persona, greeting and document prompt are fixed: they come from the web panel, or the app's own text. The name is always Ultron.
             systemPrompt = remote.persona ?: DEFAULT_SYSTEM_PROMPT.trim(),
-            assistantName = remote.assistantName ?: DEFAULT_ASSISTANT_NAME,
+            assistantName = DEFAULT_ASSISTANT_NAME,
             greeting = remote.greeting ?: DEFAULT_GREETING,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
             documentFormatPrompt = remote.documentFormatPrompt ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,

@@ -16,6 +16,13 @@ class FeaturesSkillTest {
         assertTrue("skill body would be cut at $MAX_SKILL_BODY_CHARS characters", text.length < MAX_SKILL_BODY_CHARS)
     }
 
+    @Test fun `names no tool that the code does not have`() {
+        val known = DeviceTool.entries.map { it.functionName }.toSet() + setOf("save_memory", "forget_memory", "use_skill", "search_knowledge_base")
+        val mentioned = Regex("\\b[a-z]+(?:_[a-z]+)+\\b").findAll(skillFile.readText()).map { it.value }.toSet()
+        val stale = mentioned.filter { it !in known }
+        assertTrue("tools in the features skill that no longer exist: $stale", stale.isEmpty())
+    }
+
     @Test fun `names every device tool`() {
         val text = skillFile.readText()
         val missing = DeviceTool.entries.map { it.functionName }.filter { it !in text }

@@ -240,7 +240,7 @@ cd ultron-android/android
 cp local.properties.example local.properties
 ```
 
-Open `android/local.properties` and set at least `GEMINI_API_KEY`, plus `sdk.dir` if `ANDROID_HOME` is not set. Every other
+Open `android/local.properties` and set `sdk.dir` if `ANDROID_HOME` is not set. Every other
 key is optional; see the [configuration reference](#configuration-reference). The file is git-ignored and must never be committed.
 
 ### 2. Build
@@ -282,7 +282,6 @@ All build-time values live in `android/local.properties` and are exposed to the 
 | Key | Required | Purpose |
 |---|---|---|
 | `sdk.dir` | if `ANDROID_HOME` is unset | Path to the Android SDK. |
-| `GEMINI_API_KEY` | recommended | Default Gemini key. Can also be entered in the app under Developer. |
 | `GITHUB_CLIENT_ID` | optional | Public client id of a GitHub OAuth App (device flow) for *Sign in with GitHub*. |
 | `UPDATE_URL` | optional | Update server URL, enables in-app updates. |
 

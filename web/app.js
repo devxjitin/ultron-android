@@ -7,14 +7,14 @@
   const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
   const MAX_BODY = 8000;
   const MAX_DESC = 300;
+  // The app always uses its own copy of this skill, because its tool list is checked against the code at build time.
+  const LOCKED_SKILL = 'ultron-features';
 
   const PROMPTS = [
     { key: 'persona', title: 'Persona', icon: 'user', max: 20000, tall: true,
       desc: 'Who Ultron is and how it speaks. {owner} and {Owner} are replaced with the owner\'s name in the app.' },
     { key: 'policy', title: 'Answer policy', icon: 'shield', max: 12000, tall: true,
       desc: 'Fixed rules for tools, answers, memory and conduct. They apply after the persona and win when the two disagree. The text must still mention use_skill, otherwise the app keeps its own.' },
-    { key: 'assistantName', title: 'Assistant name', icon: 'user', max: 24, single: true,
-      desc: 'The name shown on the home screen and given to the assistant in its prompt.' },
     { key: 'greeting', title: 'Greeting', icon: 'chat', max: 60, single: true,
       desc: 'The headline on the home screen while Ultron is idle.' },
     { key: 'documentFormatPrompt', title: 'Document prompt', icon: 'file', max: 10000,
@@ -248,7 +248,7 @@
       h('div', { class: 'section-title' }, 'Compatibility'),
       h('div', { class: 'card card-pad' },
         field('Minimum app build for these prompts', h('div', { class: 'row' }, minIn, saveMin),
-          'Apps with an older build ignore the prompts and keep their bundled text. Leave empty to apply to every build.')));
+          'Apps with an older build ignore the prompts and keep their bundled text. The build number is on the About page of the app, under Build (a large number such as 29000000). Leave empty to apply to every build.')));
   }
 
   // ---- prompt editor ----
@@ -305,7 +305,7 @@
         h('div', { class: 'card-pad stack' },
           h('div', { class: 'row', style: 'justify-content:space-between;align-items:center' }, status, count),
           input,
-          h('div', { class: 'help' }, 'Fixed for everyone. The app has no setting for this, so it can only be changed here.')),
+          h('div', { class: 'help' }, 'Shared by every phone. The app has no setting for this, so it can only be changed here. Leave it empty to use the text bundled in the app.')),
         h('div', { class: 'editor-foot' }, tools, h('span', { class: 'dirty', 'data-dirty-flag': true, hidden: true }, 'Unsaved changes'))));
     update();
     setDirty(false);
@@ -330,7 +330,7 @@
   // Copies the skills bundled in the app into Firestore, so they can be edited here from then on.
   async function importBundledSkills() {
     const bundled = state.defaults.skills || {};
-    const names = Object.keys(bundled).filter((n) => !state.skillDocs[n]);
+    const names = Object.keys(bundled).filter((n) => !state.skillDocs[n] && n !== LOCKED_SKILL);
     if (!names.length) return toast('Every bundled skill is already here.');
     if (!confirm(`Import ${names.join(', ')}? The app will load them from here instead of its own copy.`)) return;
     const batch = db.batch();
@@ -461,6 +461,7 @@
 
     function validate(s) {
       if (!NAME_RE.test(s.name)) return 'Use a short lowercase name with letters, digits, - or _.';
+      if (s.name === LOCKED_SKILL) return 'This skill is built into the app and cannot be replaced from here.';
       if (!s.description) return 'Add a description.';
       if (s.description.length > MAX_DESC) return `The description is over ${MAX_DESC} characters.`;
       if (s.body.length > MAX_BODY) return `The instructions are over ${MAX_BODY.toLocaleString()} characters.`;

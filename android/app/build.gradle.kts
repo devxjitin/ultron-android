@@ -12,15 +12,12 @@ plugins {
 // falls back to the on-device Gemini key.
 if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
 
-// Optional compile-time default API key, read from local.properties (gitignored, never
-// committed). The app also lets the key be entered/changed at runtime from Settings, which
-// takes priority -- this is just a convenience fallback for development.
-// Add: GEMINI_API_KEY=your_key_here  to android/local.properties
+// Build-time values come from local.properties (gitignored, never committed). The Gemini API key is not one of
+// them: the app uses Firebase AI Logic, or a key the user types in Developer settings.
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) load(file.inputStream())
 }
-val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
@@ -37,9 +34,9 @@ val appVersionName: String = (project.findProperty("appVersionName") as String?)
 
 // Release signing config, also read from local.properties (gitignored) so the keystore
 // path and passwords never end up in source control. Add these to android/local.properties:
-// RELEASE_STORE_FILE=keystore/ultron-release.jks
+// RELEASE_STORE_FILE=keystore/nivi-release.jks
 // RELEASE_STORE_PASSWORD=...
-// RELEASE_KEY_ALIAS=ultron-release
+// RELEASE_KEY_ALIAS=nivi-release
 // RELEASE_KEY_PASSWORD=...
 val releaseStoreFile = localProperties.getProperty("RELEASE_STORE_FILE", "")
 val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD", "")
@@ -61,7 +58,6 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")

@@ -20,7 +20,6 @@ const trimIndent = (text) => {
 
 const settings = kt('AppSettingsStore.kt');
 const greeting = settings.match(/const val DEFAULT_GREETING = "([^"]*)"/)[1];
-const assistantName = settings.match(/const val DEFAULT_ASSISTANT_NAME = "([^"]*)"/)[1];
 const retrievalChunkLimit = Number(settings.match(/const val DEFAULT_RETRIEVAL_CHUNK_LIMIT = (\d+)/)[1]);
 
 const parse = (text) => {
@@ -37,6 +36,7 @@ const root = 'android/app/src/main/assets/skills';
 const skills = {};
 for (const dir of readdirSync(root).sort()) {
   if (!statSync(join(root, dir)).isDirectory()) continue;
+  if (dir === 'ultron-features') continue; // locked: the app always uses its own copy
   const main = parse(readFileSync(join(root, dir, 'SKILL.md'), 'utf8'));
   const tasks = {};
   const taskDir = join(root, dir, 'tasks');
@@ -53,7 +53,6 @@ const out = {
   persona: raw(settings, 'DEFAULT_SYSTEM_PROMPT').trim(),
   policy: raw(kt('KnowledgeBaseProvider.kt'), 'KNOWLEDGE_GROUNDING_POLICY').trim(),
   greeting,
-  assistantName,
   retrievalChunkLimit,
   documentFormatPrompt: trimIndent(raw(settings, 'DEFAULT_DOCUMENT_FORMAT_PROMPT')).trim(),
   skills,

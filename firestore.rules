@@ -20,12 +20,11 @@ service cloud.firestore {
       allow read: if true;
       allow delete: if isOwner();
       allow create, update: if isOwner()
-        && request.resource.data.keys().hasOnly(['persona', 'policy', 'greeting', 'documentFormatPrompt', 'assistantName',
+        && request.resource.data.keys().hasOnly(['persona', 'policy', 'greeting', 'documentFormatPrompt',
                                                  'retrievalChunkLimit', 'minAppVersion', 'updatedAt'])
         && validBuild()
         && short('persona', 20000) && short('policy', 12000)
         && short('greeting', 60) && short('documentFormatPrompt', 10000)
-        && short('assistantName', 24)
         && (!('retrievalChunkLimit' in request.resource.data)
             || (request.resource.data.retrievalChunkLimit is int
                 && request.resource.data.retrievalChunkLimit >= 1
@@ -37,6 +36,7 @@ service cloud.firestore {
       allow delete: if isOwner();
       allow create, update: if isOwner()
         && name.matches('[a-z0-9][a-z0-9_-]{0,47}')
+        && name != 'ultron-features'
         && request.resource.data.keys().hasOnly(['description', 'body', 'published', 'tasks', 'minAppVersion', 'updatedAt'])
         && validBuild()
         && (!('published' in request.resource.data) || request.resource.data.published is bool)

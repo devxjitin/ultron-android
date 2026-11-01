@@ -5,7 +5,7 @@
 //   node scripts/remote.mjs get-skill <name>
 //   node scripts/remote.mjs put-skill <name> <file.json>        {description, body, published?, minAppVersion?, tasks?}
 //   node scripts/remote.mjs delete-skill <name>
-//   node scripts/remote.mjs get-prompt <persona|policy|greeting|documentFormatPrompt|assistantName|retrievalChunkLimit>
+//   node scripts/remote.mjs get-prompt <persona|policy|greeting|documentFormatPrompt|retrievalChunkLimit>
 //   node scripts/remote.mjs set-prompt <key> <file.txt>         (an empty file clears it, so the app uses its bundled text)
 //   node scripts/remote.mjs import-bundled [name ...] [--force] (copies web/defaults.json skills; run export-defaults.mjs first)
 import { execSync } from 'node:child_process';
@@ -15,8 +15,9 @@ import { readFileSync } from 'node:fs';
 const PROJECT = 'ultron-5350c';
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
-const PROMPT_LIMITS = { persona: 20000, policy: 12000, greeting: 60, documentFormatPrompt: 10000, assistantName: 24, retrievalChunkLimit: 15 };
+const PROMPT_LIMITS = { persona: 20000, policy: 12000, greeting: 60, documentFormatPrompt: 10000, retrievalChunkLimit: 15 };
 const MAX_BODY = 8000, MAX_DESC = 300;
+const LOCKED_SKILL = 'ultron-features'; // the app always uses its own copy
 
 // firebase-tools keeps the CLI login; borrow its access token for this process only and never print it.
 const globalRoot = execSync('npm root -g').toString().trim();
@@ -67,6 +68,7 @@ const now = () => ({ timestampValue: new Date().toISOString() });
 
 function validateSkill(name, s) {
   if (!NAME_RE.test(name)) throw new Error(`Bad skill name "${name}". Use lowercase letters, digits, - or _.`);
+  if (name === LOCKED_SKILL) throw new Error(`${name} is built into the app and cannot be replaced from here.`);
   if (!s.description || s.description.length > MAX_DESC) throw new Error(`${name}: description must be 1-${MAX_DESC} characters.`);
   if ((s.body ?? '').length > MAX_BODY) throw new Error(`${name}: body is over ${MAX_BODY} characters.`);
   const tasks = Object.entries(s.tasks ?? {});
@@ -141,7 +143,7 @@ switch (cmd) {
   case 'import-bundled': {
     const bundled = JSON.parse(readFileSync('web/defaults.json', 'utf8')).skills;
     const existing = new Set(((await call('GET', '/remote_skills')).documents ?? []).map((d) => d.name.split('/').pop()));
-    const names = (rest.length ? rest : Object.keys(bundled)).filter((n) => flags.has('--force') || !existing.has(n));
+    const names = (rest.length ? rest : Object.keys(bundled)).filter((n) => n !== LOCKED_SKILL && flags.has('--force') || !existing.has(n));
     for (const n of names) {
       if (!bundled[n]) throw new Error(`No bundled skill named ${n}.`);
       await putSkill(n, bundled[n]);
