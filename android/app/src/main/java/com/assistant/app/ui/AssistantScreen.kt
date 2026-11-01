@@ -127,7 +127,6 @@ fun AssistantScreen(
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
-    onDailyBudgetChanged: (Long) -> Unit = {},
     onDismissAgentPromptUpdate: () -> Unit = {},
     onAddMemory: (String) -> Unit = {},
     onUpdateMemory: (String, String) -> Unit = { _, _ -> },
@@ -317,10 +316,7 @@ fun AssistantScreen(
                         val skills by SkillRegistry.entries.collectAsState()
                         SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
                     }
-                    NavTab.USAGE -> UsagePage(
-                        uiState.usageDays, pageModifier,
-                        dailyTokenBudget = uiState.settings.dailyTokenBudget, onDailyBudgetChange = onDailyBudgetChanged
-                    )
+                    NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                     NavTab.STORAGE -> StoragePage(
                         memoryCount = uiState.memories.size,
                         knowledgeCount = uiState.knowledgeDocuments.size,
