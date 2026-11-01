@@ -120,12 +120,22 @@ object SkillRegistry {
                 .mapNotNull { file -> readAsset(app, "skills/$dir/tasks/$file")?.let { SkillParser.parse(it, file.removeSuffix(".md")) } }
             SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())?.let { builtIn[it.name] = SkillGroup(it.name, it.description, it.body, tasks) }
         }
+        mergeRemote(builtIn, RemoteContent.snapshot.value)
         val own = userDir(app).listFiles()?.sortedBy { it.name }.orEmpty().mapNotNull { dir ->
             runCatching { File(dir, "SKILL.md").readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }
         }.filter { it.name !in builtIn }
         val off = prefs(app).getStringSet("disabled", emptySet()).orEmpty()
         _entries.value = builtIn.values.map { SkillEntry(it, builtIn = true, enabled = it.name in LOCKED_SKILLS || it.name !in off) } +
             own.map { SkillEntry(SkillGroup(it.name, it.description, it.body, emptyList()), builtIn = false, enabled = it.name !in off) }
+    }
+
+    /**
+     * Applies the web panel's skills to the bundled ones: a remote skill replaces a bundled one of the same name or adds a new
+     * one, and an unpublished name is dropped. The locked skill can be reworded but never hidden.
+     */
+    internal fun mergeRemote(skills: MutableMap<String, SkillGroup>, remote: RemoteSnapshot) {
+        remote.skills.forEach { skills[it.name] = it }
+        remote.hiddenSkills.filter { it !in LOCKED_SKILLS }.forEach { skills.remove(it) }
     }
 
     private fun readAsset(context: Context, path: String): String? =

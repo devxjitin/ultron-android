@@ -31,6 +31,7 @@ import com.assistant.app.data.GITHUB_OAUTH_SCOPE
 import com.assistant.app.data.GITHUB_MCP_URL
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
+import com.assistant.app.data.RemoteContent
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
@@ -76,6 +77,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -277,6 +279,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         SkillRegistry.load(application)
+        // Prompt and skill text edited in the web panel: reload skills and refresh the warm session when it changes.
+        RemoteContent.start(application, BuildConfig.VERSION_CODE)
+        viewModelScope.launch {
+            RemoteContent.snapshot.drop(1).collect {
+                SkillRegistry.load(application)
+                invalidateWarmSessionAndReprewarm()
+            }
+        }
         // The notification mirrors the session: "listening" (with a Stop button) while one is
         // active, "ready" otherwise. A reconnect passes through RESETTING, so it never flickers.
         AppForegroundService.onStopRequested = { stopSession() }

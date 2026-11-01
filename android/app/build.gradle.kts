@@ -173,6 +173,8 @@ dependencies {
     // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-ai")
+    // Prompt and skill text edited in the Ultron web panel, so it can change without an app update.
+    implementation("com.google.firebase:firebase-firestore")
     // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 

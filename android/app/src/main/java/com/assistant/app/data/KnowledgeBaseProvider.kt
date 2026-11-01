@@ -122,7 +122,8 @@ object KnowledgeBaseProvider {
         memories: List<String> = emptyList(),
         style: String = "",
         skills: List<SkillGroup> = SkillRegistry.all(),
-        ownerName: String = ""
+        ownerName: String = "",
+        policy: String = RemoteContent.policy()
     ): String {
         return buildString {
             append(persona.trim().withOwner(ownerName))
@@ -150,7 +151,7 @@ object KnowledgeBaseProvider {
                 append("\n\nWhat you remember about {owner} (private notes from earlier; use them naturally when relevant):")
                 memories.forEach { append("\n- ").append(it) }
             }
-            append("\n\n").append(KNOWLEDGE_GROUNDING_POLICY.trim().withOwner(ownerName))
+            append("\n\n").append(policy.trim().withOwner(ownerName))
             SkillRegistry.promptSection(skills).takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
         }
     }

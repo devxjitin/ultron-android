@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only the owner can edit what the app reads; the text is bundled in the APK anyway, so reads are open.
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == 'devxjitin@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function short(field, max) {
+      return !(field in request.resource.data) || request.resource.data[field].size() <= max;
+    }
+
+    match /remote/prompts {
+      allow read: if true;
+      allow write: if isOwner()
+        && short('persona', 20000) && short('policy', 12000)
+        && short('greeting', 60) && short('documentFormatPrompt', 10000);
+    }
+
+    match /remote_skills/{name} {
+      allow read: if true;
+      allow write: if isOwner()
+        && name.matches('[a-z0-9][a-z0-9_-]{0,47}')
+        && short('description', 300) && short('body', 8000);
+    }
+
+    match /{other=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -8,8 +8,8 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.assistant.app.util.UserInputException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "assistant_settings")
 
@@ -52,6 +52,16 @@ private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
 private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423, 621719187, 1402352618, 1611585338)
 
 private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
+
+/** True when both texts are the same apart from line endings and surrounding blanks. */
+internal fun String.sameText(other: String?) = other != null && replace("\r\n", "\n").trim() == other.replace("\r\n", "\n").trim()
+
+/**
+ * The text the user actually wrote: null when the stored copy is blank, an old default, or just the bundled or panel default
+ * saved by the Developer form. Those follow the default, so a change made in the web panel reaches them.
+ */
+internal fun customText(stored: String?, vararg defaults: String?): String? =
+    stored?.takeIf { it.isNotBlank() && defaults.none { default -> it.sameText(default) } }
 
 const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
@@ -159,7 +169,7 @@ class AppSettingsStore(private val context: Context) {
     private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
 
-    val settings: Flow<AssistantSettings> = context.settingsDataStore.data.map { prefs ->
+    val settings: Flow<AssistantSettings> = combine(context.settingsDataStore.data, RemoteContent.snapshot) { prefs, remote ->
         AssistantSettings(
             liveModel = prefs[liveModelKey]
                 ?.takeIf(AssistantOptions::isApprovedLiveModel)
@@ -176,12 +186,13 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: true,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
+            systemPrompt = customText(prefs[systemPromptKey]?.takeIf { !it.isLegacyDefaultPrompt() }, DEFAULT_SYSTEM_PROMPT, remote.persona)
+                ?: remote.persona ?: DEFAULT_SYSTEM_PROMPT.trim(),
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
-            greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_GREETING,
+            greeting = customText(prefs[greetingKey], DEFAULT_GREETING, remote.greeting) ?: remote.greeting ?: DEFAULT_GREETING,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
-            documentFormatPrompt = prefs[documentFormatPromptKey]?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,
+            documentFormatPrompt = customText(prefs[documentFormatPromptKey], DEFAULT_DOCUMENT_FORMAT_PROMPT, remote.documentFormatPrompt)
+                ?: remote.documentFormatPrompt ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,
             retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
                 ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
                 ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
@@ -272,13 +283,16 @@ class AppSettingsStore(private val context: Context) {
         val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
         val cleanSystemPrompt = systemPrompt.trim()
         val cleanDocumentPrompt = documentFormatPrompt.trim()
+        val remote = RemoteContent.snapshot.value
         context.settingsDataStore.edit {
             if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
-            if (cleanGreeting.isBlank()) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
+            // Text equal to a default is not stored, so it keeps following the default (including later panel changes).
+            if (customText(cleanGreeting, DEFAULT_GREETING, remote.greeting) == null) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
             // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
             if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
-            if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
-            if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)
+            if (customText(cleanSystemPrompt, DEFAULT_SYSTEM_PROMPT, remote.persona) == null) it.remove(systemPromptKey)
+            else it[systemPromptKey] = cleanSystemPrompt
+            if (customText(cleanDocumentPrompt, DEFAULT_DOCUMENT_FORMAT_PROMPT, remote.documentFormatPrompt) == null) it.remove(documentFormatPromptKey)
             else it[documentFormatPromptKey] = cleanDocumentPrompt
             it[retrievalChunkLimitKey] = retrievalChunkLimit
                 .coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT).toString()
