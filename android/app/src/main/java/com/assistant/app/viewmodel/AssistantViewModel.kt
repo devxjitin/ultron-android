@@ -31,7 +31,6 @@ import com.assistant.app.data.GITHUB_OAUTH_SCOPE
 import com.assistant.app.data.GITHUB_MCP_URL
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
-import com.assistant.app.data.RemoteContent
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
@@ -77,7 +76,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -158,6 +156,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Latest server handle for the active conversation, used only to resume it after an
      *  automatic reconnect; cleared whenever the user starts or stops a session. */
     private var sessionResumptionHandle: String? = null
+    private var personaRefreshJob: Job? = null
     private var prewarmJob: Job? = null
     private var isForeground = false
     /** True while a session keeps running after the app left the screen. */
@@ -278,14 +277,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         SkillRegistry.load(application)
-        // Prompt and skill text edited in the web panel: reload skills and refresh the warm session when it changes.
-        RemoteContent.start(application, BuildConfig.VERSION_CODE)
-        viewModelScope.launch {
-            RemoteContent.snapshot.drop(1).collect {
-                SkillRegistry.load(application)
-                invalidateWarmSessionAndReprewarm()
-            }
-        }
         // The notification mirrors the session: "listening" (with a Stop button) while one is
         // active, "ready" otherwise. A reconnect passes through RESETTING, so it never flickers.
         AppForegroundService.onStopRequested = { stopSession() }
@@ -429,6 +420,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 knowledgeDocMutex.withLock { ragDocumentStore.resetKnowledge() }
                 collectKnowledgeDocuments()
+                refreshAutoPersona()
                 showToast("Knowledge reset")
             } catch (e: CancellationException) {
                 throw e
@@ -439,8 +431,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** The key the user typed in Developer settings; blank when Gemini goes through Firebase instead. */
-    private fun resolveApiKey(): String = apiKeyStore.getApiKey().orEmpty()
+    /** The runtime-entered key wins; the compile-time local.properties value is only a fallback. */
+    private fun resolveApiKey(): String =
+        apiKeyStore.getApiKey() ?: BuildConfig.GEMINI_API_KEY
 
     /** Gemini goes through Firebase AI Logic unless the user typed their own key in Developer settings. */
     private fun usesFirebase(): Boolean =
@@ -500,7 +493,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun clearAdminDrafts() {
-        _uiState.update { it.copy(knowledgeDocumentError = null) }
+        _uiState.update { it.copy(generatedPromptDraft = null,
+            knowledgeDocumentError = null, promptGenerationError = null) }
     }
 
     private fun auxiliaryUsage(purpose: String): (Int, Int) -> Unit = { inputTokens, outputTokens ->
@@ -1012,8 +1006,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onClearApiKey() {
         apiKeyStore.clearApiKey()
+        val fallback = BuildConfig.GEMINI_API_KEY
         _uiState.update {
-            it.copy(hasApiKey = hasGeminiAccess(), currentApiKey = "")
+            it.copy(hasApiKey = hasGeminiAccess(), currentApiKey = fallback)
         }
         showToast("API key removed")
         invalidateWarmSessionAndReprewarm()
@@ -1090,7 +1085,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return deviceToolRunner.run(tool, args)
     }
 
-    fun onSaveDeveloperChanges(apiKey: String, embeddingApiKey: String) {
+    fun onSaveDeveloperChanges(
+        name: String,
+        greeting: String,
+        apiKey: String,
+        embeddingApiKey: String,
+        systemPrompt: String,
+        documentFormatPrompt: String,
+        retrievalChunkLimit: Int
+    ) {
         if (_uiState.value.isSavingDeveloperSettings) return
         val current = _uiState.value
         val cleanApiKey = apiKey.trim()
@@ -1103,7 +1106,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    saveDeveloperConfiguration(apiKeyStore, apiKeyChange, embeddingKeyChange) {}
+                    saveDeveloperConfiguration(apiKeyStore, apiKeyChange, embeddingKeyChange) {
+                        settingsStore.setDeveloperSettings(
+                            name = name,
+                            greeting = greeting,
+                            systemPrompt = systemPrompt,
+                            documentFormatPrompt = documentFormatPrompt,
+                            retrievalChunkLimit = retrievalChunkLimit
+                        )
+                    }
                 }
                 // Only now that everything is persisted does the UI/runtime state change.
                 if (embeddingKeyChange != null) {
@@ -1116,6 +1127,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         hasApiKey = cleanApiKey.isNotBlank() || it.hasApiKey,
                         currentApiKey = cleanApiKey.ifBlank { it.currentApiKey },
                         currentEmbeddingApiKey = cleanEmbeddingApiKey.ifBlank { it.currentEmbeddingApiKey },
+                        generatedPromptDraft = null,
                         errorMessage = null,
                         voiceState = if (it.voiceState == VoiceState.ERROR) VoiceState.IDLE else it.voiceState,
                         restartRequestId = it.restartRequestId + 1
@@ -1138,6 +1150,76 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
         }
+    }
+
+    /** Drafts editable identity/tone from the admin's knowledge documents.
+     * The result is shown for review; Developer Save commits it. Fixed grounding policy is
+     * composed separately when a session opens, regardless of generated draft content. */
+    fun onGeneratePromptFromKnowledgeBase() {
+        val docs = _uiState.value.knowledgeDocuments
+        if (docs.isEmpty()) {
+            _uiState.update { it.copy(promptGenerationError = "Add at least one knowledge document first.") }
+            return
+        }
+        val apiKey = resolveApiKey()
+        if (!hasGeminiAccess()) {
+            _uiState.update { it.copy(promptGenerationError = "No Gemini API key set yet.") }
+            return
+        }
+        _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
+        viewModelScope.launch {
+            try {
+                val instruction = KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
+                val draft = KnowledgeBaseProvider.validatePersonaDraft(
+                    auxTextClient(apiKey, UsageStore.PURPOSE_PERSONA).generateText(instruction)
+                )
+                _uiState.update { it.copy(isGeneratingPrompt = false, generatedPromptDraft = draft) }
+                showToast("Agent prompt drafted. Review and save.")
+            } catch (e: CancellationException) {
+                _uiState.update { it.copy(isGeneratingPrompt = false) }
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isGeneratingPrompt = false,
+                        promptGenerationError = UserFacingError.forThrowable("Prompt generation failed", e)
+                    )
+                }
+            }
+        }
+    }
+
+    /** Clears a generated persona once no knowledge documents remain. The persona is never redrafted
+     *  automatically; the admin does that from Developer. Failures are only logged. */
+    private fun refreshAutoPersona() {
+        personaRefreshJob?.cancel()
+        _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
+        personaRefreshJob = viewModelScope.launch {
+            try {
+                // A prompt the user wrote is theirs; only a generated (or empty) one is redrafted.
+                if (!settingsStore.canReplacePersona()) return@launch
+                val docs = ragDocumentStore.documents.first()
+                if (docs.isEmpty()) {
+                    settingsStore.setAutoPersona(null)
+                    invalidateWarmSessionAndReprewarm()
+                }
+            } catch (e: CancellationException) {
+                // A newer refresh owns the flag now.
+                throw e
+            } catch (e: Exception) {
+                Log.e("AssistantError", "Auto persona refresh failed", e)
+            }
+            _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
+        }
+    }
+
+    /** Hides the "Updating" notice; the redraft keeps running in the background. */
+    fun onDismissAgentPromptUpdate() {
+        _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
+    }
+
+    fun onDismissPromptGenerationError() {
+        _uiState.update { it.copy(promptGenerationError = null) }
     }
 
     fun onAddKnowledgeDocument(title: String, text: String) {
@@ -1167,6 +1249,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             totalChunks = 0
                         )
                     }
+                    refreshAutoPersona()
                     showToast("Document added")
                 } catch (e: CancellationException) {
                     throw e
@@ -1226,6 +1309,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             totalChunks = 0
                         )
                     }
+                    refreshAutoPersona()
                     showToast("Document imported")
                 } catch (e: CancellationException) {
                     throw e
@@ -1274,6 +1358,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                     }
                     if (result != null) {
+                        refreshAutoPersona()
                         showToast("Document updated")
                     } else {
                         showToast("Document was deleted before the update finished")
@@ -1301,6 +1386,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 knowledgeDocMutex.withLock { ragDocumentStore.deleteDocument(id) }
+                refreshAutoPersona()
                 showToast("Document deleted")
             } catch (e: CancellationException) {
                 throw e
@@ -1336,15 +1422,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  reflects their choice. Discard it and open a new one with the fresh settings instead of
      *  leaving a stale one to be silently promoted on the next mic tap. */
     private fun invalidateWarmSessionAndReprewarm() {
-        // The mic was tapped while this warm session was still connecting: the user is waiting on it, so open a fresh
-        // session right away. prewarmIfPossible only runs from IDLE and would leave the screen stuck on "Connecting".
-        val userWaiting = activateWarmOnReady && _uiState.value.voiceState == VoiceState.CONNECTING
         cancelInFlightPrewarm()
         warmClient?.close()
         warmClient = null
         isPrewarmReady = false
         activateWarmOnReady = false
-        if (userWaiting) startSession() else prewarmIfPossible()
+        prewarmIfPossible()
     }
 
     /** True when the device has a validated internet connection; assumes online if the check fails. */

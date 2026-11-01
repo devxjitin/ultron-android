@@ -324,6 +324,7 @@ class MainActivity : ComponentActivity() {
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
+                        onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
                         onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
@@ -355,9 +356,19 @@ class MainActivity : ComponentActivity() {
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
                         onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
-                        onSaveDeveloperChanges = { apiKey, embeddingApiKey ->
-                            viewModel.onSaveDeveloperChanges(apiKey, embeddingApiKey)
+                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, documentPrompt, retrievalLimit ->
+                            viewModel.onSaveDeveloperChanges(
+                                name,
+                                greeting,
+                                apiKey,
+                                embeddingApiKey,
+                                systemPrompt,
+                                documentPrompt,
+                                retrievalLimit
+                            )
                         },
+                        onGeneratePromptFromKnowledgeBase = { viewModel.onGeneratePromptFromKnowledgeBase() },
+                        onDismissPromptGenerationError = { viewModel.onDismissPromptGenerationError() },
                         onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
                         onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
                         onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },

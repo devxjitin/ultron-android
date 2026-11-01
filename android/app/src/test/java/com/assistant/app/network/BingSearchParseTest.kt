@@ -5,7 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 // Result text goes through android.text.Html, which plain unit tests cannot run, so only the pure parts are covered.
-class DuckDuckGoSearchParseTest {
+class BingSearchParseTest {
     @Test
     fun ignoresPageWithoutResults() {
         assertEquals(emptyList<SearchHit>(), DuckDuckGoClient.parseBing("<html>nothing</html>"))

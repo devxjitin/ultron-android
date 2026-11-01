@@ -38,6 +38,3 @@ android/app/google-services.json
 
 # Firebase config must never be committed
 /google-services.json
-
-# Firebase CLI deploy cache
-.firebase/

@@ -8,20 +8,7 @@ name: Publish OTA
 on:
   push:
     branches: [main]
-    # Only the web panel, Firebase config, AWS backend and scripts changed: the APK is identical, so no OTA build.
-    paths-ignore:
-      - track.md
-      - README.md
-      - "docs/**"
-      - "web/**"
-      - firestore.rules
-      - firebase.json
-      - .firebaserc
-      - "mcp/**"
-      - "infra/**"
-      - "scripts/remote.mjs"
-      - "scripts/export-defaults.mjs"
-      - "scripts/summarize_latency.py"
+    paths-ignore: [track.md, README.md, "docs/**"]
   workflow_dispatch:
     inputs:
       notes:

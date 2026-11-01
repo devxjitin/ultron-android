@@ -12,12 +12,15 @@ plugins {
 // falls back to the on-device Gemini key.
 if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
 
-// Build-time values come from local.properties (gitignored, never committed). The Gemini API key is not one of
-// them: the app uses Firebase AI Logic, or a key the user types in Developer settings.
+// Optional compile-time default API key, read from local.properties (gitignored, never
+// committed). The app also lets the key be entered/changed at runtime from Settings, which
+// takes priority -- this is just a convenience fallback for development.
+// Add: GEMINI_API_KEY=your_key_here  to android/local.properties
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) load(file.inputStream())
 }
+val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
@@ -58,6 +61,7 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
@@ -169,8 +173,6 @@ dependencies {
     // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-ai")
-    // Prompt and skill text edited in the Ultron web panel, so it can change without an app update.
-    implementation("com.google.firebase:firebase-firestore")
     // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
