@@ -160,3 +160,7 @@ body:not([data-state="ready"]) .shell, body:not([data-state="ready"]) .toasts:em
 .toast.err { background: var(--danger); color: #fff; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* no visible scrollbars anywhere; scrolling still works */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
