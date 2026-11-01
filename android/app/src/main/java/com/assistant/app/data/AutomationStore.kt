@@ -51,13 +51,6 @@ class AutomationStore(context: Context) {
         id
     }
 
-    fun removeRule(id: Int): Boolean = synchronized(LOCK) {
-        val all = readRules()
-        if (all.none { it.id == id }) return false
-        writeRules(all.filterNot { it.id == id })
-        true
-    }
-
     private fun readSchedules() = read(schedulesFile) {
         ScheduledAction(it.getInt("id"), it.getLong("at"), it.getString("tool"), it.getString("args"), it.optInt("repeat", 0))
     }
