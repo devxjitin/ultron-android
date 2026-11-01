@@ -20,7 +20,7 @@ If either input is missing or unclear, ask before touching the phone.
    - If a popup, update prompt, or backup banner appears, dismiss it with the least-committal option (Not now / Close). Never accept permissions or terms on the user's behalf.
 
 2. **Find the contact (only if the correct chat is not already open).**
-   - First look at the **Chats** list (recent chats). If a row's name matches the contact, tap that row.
+   - First look at the **Chats** list (recent chats). If a row's name matches the contact, tap that row using the **Opening a chat row** rule below.
    - If not visible, tap the **Search** (magnifier) icon at the top, type the **first name only**, and read the results.
      - Prefer a match under **Chats** over one under **Contacts** (it is an existing conversation).
      - Ignore group chats unless the user asked for a group.
@@ -30,7 +30,8 @@ If either input is missing or unclear, ask before touching the phone.
    - Several people with the same first name (e.g. "Rahul Sharma", "Rahul Office"): stop and ask the user which one. Do not guess.
    - No match: retry once with a different spelling or the last name if known; if still nothing, tell the user the contact was not found. Do not message a similar-looking name.
 
-4. **Open and verify the chat.** If the intended chat was already open and verified in step 1, skip this step. Otherwise tap the **row of the matching chat/contact** (on the name, not blindly the screen centre). Take a screenshot and **verify the header at the top shows the intended contact's name**. If it doesn't, go back and fix it.
+4. **Open and verify the chat.** If the intended chat was already open and verified in step 1, skip this step. Otherwise tap the matching chat/contact row using the **Opening a chat row** rule below. Take a screenshot and **verify the header at the top shows the intended contact's name**. If it doesn't, go back and fix it.
+   - **If a profile photo or contact-info screen opened instead of the chat** (large photo, "Message / Audio / Video" buttons, a photo preview): you hit the profile picture by mistake. Press Back once, then tap again on the middle of the row.
 
 5. **Type the message.** Tap the **"Message" text box** at the bottom, wait for the keyboard, and type the message text. Take a screenshot and verify the text in the box is exactly what the user asked for.
    - Do not tap the emoji, attach (paperclip), camera, or mic icons by mistake.
@@ -40,6 +41,14 @@ If either input is missing or unclear, ask before touching the phone.
 7. **Confirm delivery.** Take a screenshot and check that the message appears as the newest bubble with a clock → single tick → double tick. A clock icon for a long time means no network; report that rather than claiming success.
 
 8. **Report back** in one short sentence: e.g. "Sent 'I'll be late' to Rahul Sharma on WhatsApp."
+
+## Opening a chat row (never tap the profile picture)
+Every row in the Chats list and in search results has a round **profile picture (DP)** at the far left. Tapping the DP opens a photo preview or the contact-info popup, not the chat. This has gone wrong before, so follow this every time:
+- Look at the row's bounds. The DP sits in roughly the **left 20%** of the row. The **name and last-message text** sit to its right and take up the **middle** of the row.
+- Tap the **horizontal middle of the row**, on the contact name or the last-message line (about 40-60% of the row width, vertically centred on the name). Never tap the leftmost circle, and never tap the far right where the time and unread badge are.
+- If the screen tool gives element bounds, use the centre of the whole row or of the name text element, not the avatar/image element.
+- If you only have a screenshot, estimate the row's left and right edges, then tap the point about halfway between them.
+- Right after tapping, check the screen. If the chat did not open (photo preview, info card, or nothing changed), go back and retry once on the middle of the row before doing anything else.
 
 ## Rules and edge cases
 - **Right person is more important than speed.** Always verify the chat header (step 4) before typing.
