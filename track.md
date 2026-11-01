@@ -458,3 +458,4 @@
 [2026-11-01 21:50] [Claude] [Fix: WhatsApp send_message chat row ke beech me tap kare, DP par nahi]
 [2026-11-01 22:05] [Claude] [Add: prompt, policy aur skills Firestore se sync (RemoteContent), web/ panel + rules + defaults export]
 [2026-11-01 22:42] [Claude] [Update: web panel redesign, sidebar menu, prompt editors, skills editor, ultron-control.web.app]
+[2026-11-01 23:17] [Claude] [Add: scripts/remote.mjs, Firebase CLI login se remote prompts/skills manage, key ki zarurat nahi]
