@@ -492,3 +492,4 @@
 [2026-11-02 16:40] [Claude] [Update: prompts/v2 publish kiya (naya greeting), config/active v2, remote prompt test]
 [2026-11-02 17:55] [Claude] [Fix: saved default greeting/prompt remote content ko override kar rahe the]
 [2026-11-02 18:40] [Claude] [Docs: remote prompt v2 phone par verify hua, Phase 3 core complete]
+[2026-11-02 19:05] [Claude] [Update: config/active wapas v1 par (rollback test greeting)]
