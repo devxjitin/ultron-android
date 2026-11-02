@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devxjitin.dev/contracts/prompt.schema.json",
+  "title": "Ultron prompt version (Firestore prompts/{versionId})",
+  "type": "object",
+  "required": ["persona", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "persona": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "policy": { "type": "string", "maxLength": 20000 },
+    "greeting": { "type": "string", "maxLength": 2000 },
+    "documentFormatPrompt": { "type": "string", "maxLength": 20000 },
+    "status": { "enum": ["draft", "published"] },
+    "minAppVersion": { "type": "integer", "minimum": 0 },
+    "note": { "type": "string", "maxLength": 1000 },
+    "createdBy": { "type": "string" },
+    "createdAt": {}
+  }
+}

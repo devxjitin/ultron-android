@@ -2,6 +2,7 @@ package com.assistant.app
 
 import android.app.Application
 import android.util.Log
+import com.assistant.app.data.RemoteConfigRepository
 import com.assistant.app.network.FirebaseGemini
 import com.google.firebase.auth.FirebaseAuth
 
@@ -15,6 +16,7 @@ class UltronApp : Application() {
         super.onCreate()
         if (!FirebaseGemini.isAvailable(this)) return
         runCatching { AppCheckInstaller.install() }.onFailure { Log.w(TAG, "App Check setup failed", it) }
+        RemoteConfigRepository.refresh()
         runCatching {
             val auth = FirebaseAuth.getInstance()
             if (auth.currentUser == null) {

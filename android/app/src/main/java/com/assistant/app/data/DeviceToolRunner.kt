@@ -11,6 +11,7 @@ import android.app.PendingIntent
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -108,6 +109,9 @@ class DeviceToolRunner(
     }
 
     suspend fun run(tool: DeviceTool, args: JSONObject): String = try {
+        if (RemoteConfigRepository.current.isToolDisabled(tool.functionName)) {
+            return "status=unavailable\nThis action is switched off right now."
+        }
         // Content providers, usage stats and local files can be slow, so they never run on the main thread.
         if (tool in BLOCKING_TOOLS) withContext(Dispatchers.IO) { execute(tool, args) } else execute(tool, args)
     } catch (e: ActivityNotFoundException) {
@@ -1223,6 +1227,7 @@ class DeviceToolRunner(
      * Places a call through Telecom, which shows its own call screen. Starting the call activity directly is blocked
      * while Ultron is in the background (a voice session running behind another app), and the call then never started.
      */
+    @SuppressLint("MissingPermission") // The caller checks CALL_PHONE before reaching this.
     private fun placeCall(number: String) {
 
         val telecom = app.getSystemService(TelecomManager::class.java)
