@@ -6,7 +6,7 @@ import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
 
 /** The page on screen. Exactly one is shown at a time; HOME is the voice screen. */
-enum class AppPage { HOME, KNOWLEDGE, MEMORY, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
+enum class AppPage { HOME, KNOWLEDGE, MEMORY, CONNECTORS, SETTINGS, USAGE, STORAGE, ABOUT }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }
@@ -60,7 +60,6 @@ data class AssistantUiState(
     /** Name of the tool the assistant is running right now (or just ran), shown on the home screen. */
     val activeTool: String? = null,
     val hasApiKey: Boolean = false,
-    val currentApiKey: String = "",
     /** True when the stored knowledge data cannot be decoded; the admin can reset it. */
     val knowledgeStoreCorrupt: Boolean = false,
     val settings: AssistantSettings = AssistantSettings(),
@@ -83,26 +82,10 @@ data class AssistantUiState(
      *  apart from "0 of N done". */
     val uploadedChunks: Int = 0,
     val totalChunks: Int = 0,
-    /** Required key for document formatting, embedding, and knowledge-base search. */
-    val currentEmbeddingApiKey: String = "",
-    /** True while the AI is drafting a persona from the current knowledge documents. */
-    val isGeneratingPrompt: Boolean = false,
-    val promptGenerationError: String? = null,
-    /** True while the agent prompt is being redrafted after a knowledge change; the UI blocks
-     *  interaction until it finishes. */
-    val isUpdatingAgentPrompt: Boolean = false,
-    /** The AI-drafted persona text, shown in the prompt field for review -- not applied to
-     *  [AssistantSettings.systemPrompt] until the admin explicitly hits Save. Cleared once
-     *  consumed (Save pressed, or a fresh generation/dialog reopen). */
-    val generatedPromptDraft: String? = null,
     /** A short-lived, typed notification shown at the top of the app. */
     val toastMessage: String? = null,
     val toastType: AppNotificationType = AppNotificationType.SUCCESS,
     val toastId: Int = 0,
-    /** Increments only after Developer settings are safely persisted, requesting an app restart. */
-    val restartRequestId: Int = 0,
-    /** True while a Developer Save is in flight; blocks duplicate submissions. */
-    val isSavingDeveloperSettings: Boolean = false,
     /** Window brightness override (1-100) set by the brightness tool; null follows the system. */
     val appBrightnessPercent: Int? = null,
     /** Bumps each time a tool needs Android permissions; the activity shows the dialog for [requestedPermissions]. */

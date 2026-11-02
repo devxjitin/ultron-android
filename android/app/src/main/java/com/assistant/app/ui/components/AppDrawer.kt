@@ -18,8 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
@@ -56,12 +54,10 @@ enum class NavTab(val label: String, val icon: ImageVector) {
     HOME("Home", AssistantIcons.Home),
     KNOWLEDGE("Knowledge", AssistantIcons.Knowledge),
     MEMORY("Memory", Icons.Outlined.Psychology),
-    SKILLS("Skills", Icons.Outlined.Bolt),
     CONNECTORS("Connectors", Icons.Outlined.Extension),
     SETTINGS("Settings", AssistantIcons.Settings),
     USAGE("Usage", Icons.Outlined.BarChart),
     STORAGE("Storage", Icons.Outlined.Storage),
-    DEVELOPER("Developer", Icons.Outlined.Code),
     ABOUT("About", Icons.Outlined.Info)
 }
 
@@ -86,7 +82,7 @@ fun AppDrawerContent(
                 NavTab.HOME -> Unit // Home sits on top, before any caption.
                 NavTab.KNOWLEDGE -> NavSection("Workspace")
                 NavTab.SETTINGS -> NavSection("Preferences")
-                NavTab.DEVELOPER -> NavSection("App")
+                NavTab.USAGE -> NavSection("App")
                 else -> Unit
             }
             NavRow(tab, tab == selected) { onSelect(tab) }

@@ -1,7 +1,6 @@
 package com.assistant.app.ui.components
 
 import androidx.activity.compose.BackHandler
-import com.assistant.app.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,9 +64,6 @@ import com.assistant.app.data.AssistantOptions
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.MAX_ASSISTANT_NAME_LENGTH
-import com.assistant.app.data.MAX_GREETING_LENGTH
-import com.assistant.app.data.MAX_RETRIEVAL_CHUNK_LIMIT
-import com.assistant.app.data.MIN_RETRIEVAL_CHUNK_LIMIT
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.data.RagDocument
 import com.assistant.app.viewmodel.ADD_DOCUMENT_TARGET_ID
@@ -80,29 +76,15 @@ import com.assistant.app.ui.theme.AssistantSurfaceElevated
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-// Label to page-branch index (branch 2, Knowledge, has its own bottom-bar tab instead).
-
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsPage(
-    currentApiKey: String,
-    currentEmbeddingApiKey: String,
     settings: AssistantSettings,
-    onClearApiKey: () -> Unit,
-    onClearEmbeddingApiKey: () -> Unit,
-    onLiveModelSelected: (String) -> Unit,
     onVoiceSelected: (String) -> Unit,
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
-    onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
-    isGeneratingPrompt: Boolean,
-    generatedPromptDraft: String?,
-    promptGenerationError: String?,
-    onGeneratePromptFromKnowledgeBase: () -> Unit,
-    onDismissPromptGenerationError: () -> Unit,
     knowledgeDocuments: List<RagDocument>,
     isSavingKnowledgeDocument: Boolean,
     knowledgePreparationStage: KnowledgePreparationStage?,
@@ -123,72 +105,13 @@ fun SettingsPage(
     page: AppPage,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Reports whether the Developer draft has unsaved edits, so navigation outside this page can guard it. */
-    onDirtyChanged: (Boolean) -> Unit = {},
-    /** An exit requested from outside this page (e.g. bottom nav); runs only after Save/Discard. */
-    pendingNavigation: (() -> Unit)? = null,
-    onPendingNavigationHandled: () -> Unit = {},
-    /** True while a Developer Save is running; Save is disabled so it can't be submitted twice. */
-    isSavingDeveloper: Boolean = false,
 ) {
-    var keyInput by remember(currentApiKey) { mutableStateOf(currentApiKey) }
-    var keyVisible by remember { mutableStateOf(false) }
-    var embeddingKeyInput by remember(currentEmbeddingApiKey) { mutableStateOf(currentEmbeddingApiKey) }
-    var embeddingKeyVisible by remember { mutableStateOf(false) }
-    var confirmingRemove by remember { mutableStateOf(false) }
-    var confirmingRemoveEmbeddingKey by remember { mutableStateOf(false) }
     var editingDocument by remember { mutableStateOf<RagDocument?>(null) }
     var showAddDocumentDialog by remember { mutableStateOf(false) }
     var confirmingDeleteDocId by remember { mutableStateOf<String?>(null) }
     var confirmingResetKnowledge by remember { mutableStateOf(false) }
-    var confirmingUnsavedChanges by remember { mutableStateOf(false) }
-    var nameInput by remember(settings.assistantName) { mutableStateOf(settings.assistantName) }
-    var greetingInput by remember(settings.greeting) { mutableStateOf(settings.greeting) }
-    var promptInput by remember(settings.systemPrompt) { mutableStateOf(settings.systemPrompt) }
-    // A generated draft replaces the field directly only when there are no unsaved edits to lose.
-    var pendingGeneratedDraft by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(generatedPromptDraft) {
-        val draft = generatedPromptDraft ?: return@LaunchedEffect
-        if (promptInput == settings.systemPrompt) promptInput = draft else pendingGeneratedDraft = draft
-    }
-    var documentFormatPromptInput by remember(settings.documentFormatPrompt) {
-        mutableStateOf(settings.documentFormatPrompt)
-    }
-    var retrievalChunkLimitInput by remember(settings.retrievalChunkLimit) {
-        androidx.compose.runtime.mutableIntStateOf(settings.retrievalChunkLimit)
-    }
-    val developerChangesPending =
-        nameInput != settings.assistantName ||
-            greetingInput != settings.greeting ||
-            keyInput != currentApiKey ||
-            embeddingKeyInput != currentEmbeddingApiKey ||
-            promptInput != settings.systemPrompt ||
-            documentFormatPromptInput != settings.documentFormatPrompt ||
-            retrievalChunkLimitInput != settings.retrievalChunkLimit
-
-    val requestDismiss = {
-        if (developerChangesPending) {
-            confirmingUnsavedChanges = true
-        } else {
-            onDismiss()
-        }
-    }
-    BackHandler(onBack = requestDismiss)
-    LaunchedEffect(developerChangesPending) { onDirtyChanged(developerChangesPending) }
-    DisposableEffect(Unit) { onDispose { onDirtyChanged(false) } }
-    // Leave via the outside destination if one was requested, otherwise just close the page.
-    val leaveAfterConfirm = {
-        confirmingUnsavedChanges = false
-        val destination = pendingNavigation
-        onPendingNavigationHandled()
-        if (destination != null) destination() else onDismiss()
-    }
-    val activeBranch = when (page) {
-        AppPage.SETTINGS -> 0
-        AppPage.DEVELOPER -> 1
-        AppPage.KNOWLEDGE -> 2
-        else -> 3
-    }
+    BackHandler(onBack = onDismiss)
+    val activeBranch = if (page == AppPage.KNOWLEDGE) 1 else 0
     // Scoped to this page only: slightly smaller text than the app-wide typography.
     val base = androidx.compose.material3.MaterialTheme.typography
     val compactTypography = base.copy(
@@ -207,200 +130,10 @@ fun SettingsPage(
         Column(modifier = Modifier.weight(1f).verticalScroll(contentScrollState)) {
             when (activeBranch) {
                 0 -> GeneralSettingsContent(
-                    settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
+                    settings, onVoiceSelected, onLanguageSelected,
                     onMicSensitivitySelected, onBargeInToggled, onOwnerNameChanged
                 )
                 1 -> Column {
-                    SectionLabel("Identity")
-                    OutlinedTextField(
-                        value = nameInput,
-                        onValueChange = { nameInput = it.take(MAX_ASSISTANT_NAME_LENGTH) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = assistantTextFieldColors()
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = greetingInput,
-                        onValueChange = { greetingInput = it.take(MAX_GREETING_LENGTH) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = assistantTextFieldColors()
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Gemini API key")
-                    OutlinedTextField(
-                        value = keyInput,
-                        onValueChange = { keyInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("AIza...") },
-                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { keyVisible = !keyVisible }) {
-                                Icon(
-                                    imageVector = if (keyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = if (keyVisible) "Hide key" else "Show key"
-                                )
-                            }
-                        },
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        if (currentApiKey.isNotBlank()) {
-                            TextButton(onClick = { confirmingRemove = true }) {
-                                Text("Remove", color = AssistantError)
-                            }
-                        }
-                    }
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-                    SectionLabel("Knowledge API key (required)")
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = embeddingKeyInput,
-                        onValueChange = { embeddingKeyInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("AIza...") },
-                        visualTransformation = if (embeddingKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { embeddingKeyVisible = !embeddingKeyVisible }) {
-                                Icon(
-                                    imageVector = if (embeddingKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = if (embeddingKeyVisible) "Hide key" else "Show key"
-                                )
-                            }
-                        },
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        if (currentEmbeddingApiKey.isNotBlank()) {
-                            TextButton(onClick = { confirmingRemoveEmbeddingKey = true }) {
-                                Text("Remove", color = AssistantError)
-                            }
-                        }
-                    }
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-                    SectionLabel("Voice agent prompt")
-                    Spacer(Modifier.height(8.dp))
-                    androidx.compose.material3.OutlinedButton(
-                        shape = AppButtonShape,
-                        onClick = onGeneratePromptFromKnowledgeBase,
-                        enabled = !isGeneratingPrompt,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isGeneratingPrompt) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = AssistantAccent
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Generating…")
-                        } else {
-                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Generate from knowledge base")
-                        }
-                    }
-                    if (promptGenerationError != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = promptGenerationError,
-                                color = AssistantError,
-                                modifier = Modifier.weight(1f),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                            )
-                            TextButton(onClick = onDismissPromptGenerationError) {
-                                Text("Dismiss", color = AssistantTextMuted)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = promptInput,
-                        onValueChange = { promptInput = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = {
-                            promptInput = com.assistant.app.data.ContentRepository.persona
-                        }) {
-                            Text("Reset to default", color = AssistantError)
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Retrieval chunks")
-                    var retrievalLimitExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = retrievalLimitExpanded,
-                        onExpandedChange = { retrievalLimitExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = retrievalChunkLimitInput.toString(),
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.fillMaxWidth().menuAnchor(),
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = retrievalLimitExpanded) },
-                            colors = assistantTextFieldColors()
-                        )
-                        DropdownMenu(
-                            expanded = retrievalLimitExpanded,
-                            onDismissRequest = { retrievalLimitExpanded = false },
-                            modifier = Modifier.background(AssistantSurfaceElevated)
-                        ) {
-                            (MIN_RETRIEVAL_CHUNK_LIMIT..MAX_RETRIEVAL_CHUNK_LIMIT).forEach { limit ->
-                                DropdownMenuItem(
-                                    text = { Text("$limit chunks", color = AssistantTextSecondary) },
-                                    onClick = {
-                                        retrievalChunkLimitInput = limit
-                                        retrievalLimitExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Dataset preparation prompt")
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = documentFormatPromptInput,
-                        onValueChange = { documentFormatPromptInput = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
-                        colors = assistantTextFieldColors()
-                    )
-                    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(
-                            onClick = { documentFormatPromptInput = "" }
-                        ) { Text("Clear prompt", color = AssistantError) }
-                    }
-                }
-                2 -> Column {
                     SectionLabel("Knowledge documents")
                     Spacer(Modifier.height(8.dp))
                     FlowRow(
@@ -545,152 +278,8 @@ fun SettingsPage(
                 }
             }
         }
-        if (activeBranch == 1 && developerChangesPending) {
-            Spacer(Modifier.height(12.dp))
-            androidx.compose.material3.Button(
-                onClick = {
-                    onSaveDeveloperChanges(
-                        nameInput,
-                        greetingInput,
-                        keyInput,
-                        embeddingKeyInput,
-                        promptInput,
-                        documentFormatPromptInput,
-                        retrievalChunkLimitInput
-                    )
-                },
-                enabled = !isSavingDeveloper,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AssistantAccentFill,
-                    contentColor = androidx.compose.ui.graphics.Color.White
-                ),
-                shape = AppButtonShape,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp)
-            ) { Text("Save changes") }
-        }
         }
     }
-    }
-
-    pendingGeneratedDraft?.let { draft ->
-        AlertDialog(
-            onDismissRequest = { pendingGeneratedDraft = null },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-            containerColor = AssistantSurfaceElevated,
-            tonalElevation = 6.dp,
-            title = { Text("Replace your edits?") },
-            text = { Text("The Agent prompt has unsaved edits. Replace them with the generated draft?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    promptInput = draft
-                    pendingGeneratedDraft = null
-                }) { Text("Replace", color = AssistantAccent) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingGeneratedDraft = null }) {
-                    Text("Keep mine", color = AssistantTextMuted)
-                }
-            }
-        )
-    }
-
-    val cancelUnsavedPrompt = {
-        confirmingUnsavedChanges = false
-        onPendingNavigationHandled()
-    }
-    if (confirmingUnsavedChanges || pendingNavigation != null) {
-        AlertDialog(
-            onDismissRequest = cancelUnsavedPrompt,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-            containerColor = AssistantSurfaceElevated,
-            tonalElevation = 6.dp,
-            title = { Text("Save changes?") },
-            text = { Text("You have unsaved Developer settings. Save them before leaving?") },
-            confirmButton = {
-                TextButton(enabled = !isSavingDeveloper, onClick = {
-                    onSaveDeveloperChanges(
-                        nameInput,
-                        greetingInput,
-                        keyInput,
-                        embeddingKeyInput,
-                        promptInput,
-                        documentFormatPromptInput,
-                        retrievalChunkLimitInput
-                    )
-                    // Stay on the page: success restarts the app, failure keeps the draft for a retry.
-                    cancelUnsavedPrompt()
-                }) {
-                    Text("Save changes", color = AssistantAccent)
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = leaveAfterConfirm) {
-                        Text("Discard", color = AssistantError)
-                    }
-                    TextButton(onClick = cancelUnsavedPrompt) {
-                        Text("Cancel")
-                    }
-                }
-            }
-        )
-    }
-
-    if (confirmingRemove) {
-        AlertDialog(
-            onDismissRequest = { confirmingRemove = false },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-            containerColor = AssistantSurfaceElevated,
-            tonalElevation = 6.dp,
-            title = { Text("Remove API key?") },
-            text = {
-                Text(
-                    if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
-                        "The assistant will fall back to its built-in key. The active conversation, if any, isn't affected either way."
-                    } else {
-                        "The assistant won't be able to connect until a new key is entered. The active conversation, if any, isn't affected."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onClearApiKey()
-                    confirmingRemove = false
-                }) {
-                    Text("Remove", color = AssistantError)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingRemove = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (confirmingRemoveEmbeddingKey) {
-        AlertDialog(
-            onDismissRequest = { confirmingRemoveEmbeddingKey = false },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-            containerColor = AssistantSurfaceElevated,
-            tonalElevation = 6.dp,
-            title = { Text("Remove knowledge API key?") },
-            text = { Text("Knowledge features will use the main Gemini API key instead.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onClearEmbeddingApiKey()
-                    confirmingRemoveEmbeddingKey = false
-                }) {
-                    Text("Remove", color = AssistantError)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingRemoveEmbeddingKey = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 
     if (showAddDocumentDialog) {
@@ -796,7 +385,6 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun GeneralSettingsContent(
     settings: AssistantSettings,
-    onLiveModelSelected: (String) -> Unit,
     onVoiceSelected: (String) -> Unit,
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
@@ -809,13 +397,6 @@ private fun GeneralSettingsContent(
         MicSensitivity.HIGH to "Picks up quiet voices"
     )
     Column {
-        SettingsHeading("Model")
-        SettingsDropdown(
-            value = AssistantOptions.liveModels.firstOrNull { it.id == settings.liveModel }?.label ?: settings.liveModel,
-            options = AssistantOptions.liveModels.map { it.id to it.label },
-            selectedId = settings.liveModel,
-            onSelect = onLiveModelSelected
-        )
         SettingsHeading("Voice")
         SettingsDropdown(
             value = AssistantOptions.voices.firstOrNull { it.name == settings.voiceName }

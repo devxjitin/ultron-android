@@ -72,6 +72,6 @@ class KnowledgeToolResponseTest {
             assertFalse(it, it.contains("reception", ignoreCase = true))
         }
         assertTrue(KnowledgeToolResponse.failed(SearchFailureCategory.TIMEOUT).contains("reason=timeout"))
-        assertTrue(KnowledgeToolResponse.failed(SearchFailureCategory.CONFIG).contains("Developer settings"))
+        assertTrue(KnowledgeToolResponse.failed(SearchFailureCategory.CONFIG).contains("not set up"))
     }
 }

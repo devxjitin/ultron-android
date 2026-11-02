@@ -495,3 +495,4 @@
 [2026-11-02 19:05] [Claude] [Update: config/active wapas v1 par (rollback test greeting)]
 [2026-11-02 19:50] [Claude] [Add: Phase 4 admin console (Vite+React), hosting ultron-control, reCAPTCHA App Check, audit rules]
 [2026-11-02 20:40] [Claude] [Update: publish-ota ab console/rules/contracts/infra/mcp changes par OTA nahi banata]
+[2026-11-02 20:05] [Claude] [Remove: console, remote content, Skills/Developer pages; app me sirf connectors editable]

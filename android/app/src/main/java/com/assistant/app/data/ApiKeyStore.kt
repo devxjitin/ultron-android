@@ -7,16 +7,14 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 
 /**
- * Persists the Gemini API key the user enters in-app, encrypted at rest, so it never has to be
- * baked into the APK. This is the primary source for the key; the BuildConfig value from
- * local.properties (if any) is only used as a fallback when nothing has been saved here yet.
+ * Holds the GitHub connector token, encrypted at rest. Gemini keys are not stored here: they come from the build.
  *
  * Opening the encrypted preferences touches the Android Keystore, which can be slow and can fail
  * (e.g. after a restore or OS update). A failure leaves the store unavailable: reads return null
  * and writes return false, instead of crashing the caller. Callers should first use it off the
  * main thread.
  */
-class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) : ApiKeyStorage {
+class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) {
 
     constructor(context: Context) : this({
         val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
@@ -37,21 +35,6 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
             null
         }
     }
-
-    override fun getApiKey(): String? = read(KEY_API_KEY)
-
-    /** Writes synchronously and reports whether the value was actually committed. */
-    override fun setApiKey(key: String): Boolean = write { it.putString(KEY_API_KEY, key.trim()) }
-
-    override fun clearApiKey(): Boolean = write { it.remove(KEY_API_KEY) }
-
-    /** Required key for document formatting, embedding, and knowledge-base search. */
-    override fun getEmbeddingApiKey(): String? = read(KEY_EMBEDDING_API_KEY)
-
-    override fun setEmbeddingApiKey(key: String): Boolean =
-        write { it.putString(KEY_EMBEDDING_API_KEY, key.trim()) }
-
-    override fun clearEmbeddingApiKey(): Boolean = write { it.remove(KEY_EMBEDDING_API_KEY) }
 
     /** Fine-grained, read-only token for the GitHub connector. */
     fun getGithubToken(): String? = read(KEY_GITHUB_TOKEN)
@@ -78,8 +61,6 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
     }
 
     private companion object {
-        const val KEY_API_KEY = "gemini_api_key"
-        const val KEY_EMBEDDING_API_KEY = "gemini_embedding_api_key"
         const val KEY_GITHUB_TOKEN = "github_token"
     }
 }

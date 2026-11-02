@@ -109,9 +109,6 @@ class DeviceToolRunner(
     }
 
     suspend fun run(tool: DeviceTool, args: JSONObject): String = try {
-        if (RemoteConfigRepository.current.isToolDisabled(tool.functionName)) {
-            return "status=unavailable\nThis action is switched off right now."
-        }
         // Content providers, usage stats and local files can be slow, so they never run on the main thread.
         if (tool in BLOCKING_TOOLS) withContext(Dispatchers.IO) { execute(tool, args) } else execute(tool, args)
     } catch (e: ActivityNotFoundException) {
