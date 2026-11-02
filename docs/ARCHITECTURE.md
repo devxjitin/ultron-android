@@ -484,7 +484,7 @@ DNS name.com par hi rakho (free hai). Records:
 | **0. Security** (ho gaya, section 13) | S1 root se IAM Identity Center, S6 API key restriction, S7 Firestore cleanup, Budgets alarm, `google-workspace-mcp` aur unused Function URLs band | 1 din |
 | **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore (naya package optional) | 1 hafta |
 | **2. Backend (core done)** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
-| **3. Remote content** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
+| **3. Remote content (started, section 17)** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
 | **4. Console** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
 | **5. App refactor** | Hilt, modules, `VoiceSessionService`, `ToolRegistry`, `ConnectorRegistry`, `PermissionBroker`, onboarding | 2-3 hafte (feature by feature, har step par tests) |
 | **6. Website launch** | `devxjitin.dev` landing, download page (SHA-256, signing fingerprint), privacy policy, terms, Play Protect aur "unknown app" FAQ, in-app updater test, Android developer verification rules check | 1-2 hafte |
@@ -570,3 +570,16 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | App Check token verification Lambda me | **Baaki.** Abhi sirf Firebase JWT check hota hai |
 
 **Phase 2 core complete.** `embed` route aur App Check verification Lambda me Phase 3 ke saath hoga. Purani Function URLs tab band hongi jab sab phones naye build par aa jayein.
+
+---
+
+## 17. Phase 3 status (branch `phase3-remote-content`, 2026-11-02)
+
+| Item | Status |
+|---|---|
+| `contracts/` | Ban gaya. `remote-config.schema.json`, `prompt.schema.json`, `config-active.schema.json` (JSON Schema 2020-12) |
+| Remote Config template | `remoteconfig.template.json` repo me, defaults bundled defaults ke barabar. **Console me publish baaki** (`firebase deploy --only remoteconfig`) |
+| Firestore rules | Naye rules likhe (config/prompts/skills/connectors/announcements/users/releases/auditLog, admin custom claim, published-only read, validation). **Deploy baaki**, abhi live rules deny-all hi hain |
+| Rules tests | `rules-tests/` (emulator, 8 tests) aur contract tests (2 pass local). Emulator ko JDK 21 chahiye, local me 17 hai, to rules tests CI ke `firestore-rules` job me chalenge |
+| Android | `RemoteSettings` (defensive parse, range clamp, bundled defaults), `RemoteConfigRepository` (hourly fetch, `UltronApp` se refresh), `tools_disabled` kill switch `DeviceToolRunner` me. 7 unit tests pass, `compileOtaKotlin` pass |
+| Baaki | Viewmodel ke timeouts aur model list ko `RemoteSettings` se jodna, `min_supported_version` force-update screen, `ContentRepository` (Firestore prompts/skills, `config/active` listener), admin custom claim set karna, Firestore enforce App Check |
