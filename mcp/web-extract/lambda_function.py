@@ -23,6 +23,8 @@ import socket
 import ssl
 import urllib.parse
 
+import appcheck
+
 PROTOCOL_VERSION = "2025-03-26"
 USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
 MAX_PAGE_BYTES = 3_000_000
@@ -272,6 +274,10 @@ def lambda_handler(event, context):
         return _resp(404, {"error": "not found"})
     if event["requestContext"]["http"]["method"] != "POST":
         return _resp(405, {"error": "use POST"})
+    if os.environ.get("JWT_AUTH") == "1":
+        refused = appcheck.check(event)
+        if refused:
+            return refused
     raw = event.get("body") or ""
     if len(raw) > MAX_BODY_CHARS:
         return _resp(413, {"error": "request too large"})

@@ -75,7 +75,9 @@ object AppUpdater {
     private fun latestRequests(): List<Request> = buildList {
         if (ApiClient.isConfigured) {
             ApiClient.authHeader()?.let { auth ->
-                add(Request.Builder().url(ApiClient.url("/v1/releases/latest")).header("Authorization", auth).build())
+                add(Request.Builder().url(ApiClient.url("/v1/releases/latest")).header("Authorization", auth)
+                    .apply { ApiClient.appCheckToken()?.let { header(ApiClient.APP_CHECK_HEADER, it) } }
+                    .build())
             }
         }
         if (BuildConfig.UPDATE_URL.isNotBlank()) add(Request.Builder().url(BuildConfig.UPDATE_URL).build())

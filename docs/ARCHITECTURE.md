@@ -716,6 +716,15 @@ nahi kiya (AWS login nahi hai), deploy se pehle ye karna hai. Aur HTTP API ka de
 lagta hai, stage par shared nahi, to P6 ka "webhook ko starve karna" wala asar mere likhne se kam ho sakta hai. Web-extract
 ka chhota limit phir bhi abuse ke liye sahi hai.
 
+**Teesra code fix (branch `app-check-verify`, T4, deploy nahi hua).** `web-extract` aur `releases` Lambda ab
+`X-Firebase-AppCheck` token verify karte hain (`mcp/*/appcheck.py`, sirf standard library, RS256 signature Google ki
+JWKS se, issuer/audience/expiry). App `ApiClient` se token bhejti hai. **Mode `log` par default hai**, yaani missing ya
+bad token sirf CloudWatch me likha jaata hai, request chalti hai, kyunki purane phones header bhejte hi nahi. Rollout:
+deploy, kuch din log dekho (`App Check missing token` kam hote jaana chahiye), sab phones update hone par stack parameter
+`AppCheckMode=enforce`. **Verify nahi hua:** verifier ko asli Google token se nahi chalaya (sirf apni test key ke saath
+12 tests), to enforce se pehle log me `bad signature` ya `wrong audience` na dikhe ye zaroor dekho. Anonymous users ko
+rokna aur billing route par check abhi nahi hai. Billing ko JWT hi kaafi hai kyunki Razorpay se khud verify hota hai.
+
 Jo sahi hai. Webhook HMAC + `compare_digest`, verify aur webhook dono Razorpay se dobara padhte hain, `notes.uid` se
 ownership check, Google account zaroori (anonymous nahi khareed sakta), secrets SSM SecureString me, DynamoDB PITR aur
 encryption on.

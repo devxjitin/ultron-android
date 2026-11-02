@@ -2,6 +2,7 @@ package com.assistant.app.network
 
 import com.assistant.app.BuildConfig
 import com.google.android.gms.tasks.Tasks
+import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.auth.FirebaseAuth
 import java.util.concurrent.TimeUnit
 
@@ -29,6 +30,23 @@ object ApiClient {
         token?.takeIf { it.isNotBlank() }?.let { "Bearer $it" }
     }.getOrNull()
 
+    /**
+     * The App Check token that proves the request comes from the genuine app, or null when none could be fetched (the
+     * server then decides whether to refuse). Blocks, so call it off the main thread; the SDK caches the token.
+     */
+    fun appCheckToken(): String? = runCatching {
+        Tasks.await(FirebaseAppCheck.getInstance().getAppCheckToken(false), TOKEN_WAIT_SECONDS, TimeUnit.SECONDS).token
+            .takeIf { it.isNotBlank() }
+    }.getOrNull()
+
     /** Headers for [McpClient]; empty when the caller is not signed in, so the request is refused rather than leaked. */
-    fun authHeaders(): Map<String, String> = authHeader()?.let { mapOf("Authorization" to it) }.orEmpty()
+    fun authHeaders(): Map<String, String> {
+        val auth = authHeader() ?: return emptyMap()
+        return buildMap {
+            put("Authorization", auth)
+            appCheckToken()?.let { put(APP_CHECK_HEADER, it) }
+        }
+    }
+
+    const val APP_CHECK_HEADER = "X-Firebase-AppCheck"
 }

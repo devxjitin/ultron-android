@@ -37,6 +37,15 @@ Parameters:
     Type: String
     Default: ""
     Description: Razorpay plan id for Rs 1799 every year.
+  FirebaseProjectNumber:
+    Type: String
+    Default: "434457544612"
+    Description: Numeric Firebase project number (not the id); App Check tokens are checked against it.
+  AppCheckMode:
+    Type: String
+    Default: log
+    AllowedValues: [off, log, enforce]
+    Description: log records a missing or bad App Check token but lets the request run; enforce refuses it with 401.
   RazorpaySecretPrefix:
     Type: String
     Default: /ultron/razorpay
@@ -117,6 +126,8 @@ Resources:
       Environment:
         Variables:
           BUCKET: !Ref ReleasesBucket
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref ReleasesBucket
@@ -143,6 +154,10 @@ Resources:
       Architectures: [x86_64]
       MemorySize: 512
       Timeout: 25
+      Environment:
+        Variables:
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
       Events:
         Mcp:
           Type: HttpApi
