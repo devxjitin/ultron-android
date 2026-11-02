@@ -1,48 +1,5 @@
 {
   "firestore": {
     "rules": "firestore.rules"
-  },
-  "remoteconfig": {
-    "template": "remoteconfig.template.json"
-  },
-  "emulators": {
-    "firestore": {
-      "port": 8080
-    },
-    "singleProjectMode": true
-  },
-  "hosting": {
-    "site": "ultron-control",
-    "public": "console/dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [
-          {
-            "key": "X-Frame-Options",
-            "value": "DENY"
-          },
-          {
-            "key": "X-Content-Type-Options",
-            "value": "nosniff"
-          },
-          {
-            "key": "Referrer-Policy",
-            "value": "no-referrer"
-          }
-        ]
-      }
-    ]
   }
 }

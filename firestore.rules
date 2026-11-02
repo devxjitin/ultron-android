@@ -1,83 +1,8 @@
 rules_version = '2';
+// The app keeps no data in Firestore: prompts, skills and connectors ship inside the APK, and subscriptions live in
+// DynamoDB behind the Ultron API. Everything here stays closed.
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
-
-    function validPrompt() {
-      let d = request.resource.data;
-      return d.keys().hasOnly(['persona', 'policy', 'greeting', 'documentFormatPrompt', 'status',
-                               'minAppVersion', 'note', 'createdBy', 'createdAt'])
-        && d.persona is string && d.persona.size() > 0 && d.persona.size() <= 20000
-        && d.status in ['draft', 'published']
-        && (!('policy' in d) || (d.policy is string && d.policy.size() <= 20000))
-        && (!('greeting' in d) || (d.greeting is string && d.greeting.size() <= 2000))
-        && (!('documentFormatPrompt' in d) || (d.documentFormatPrompt is string && d.documentFormatPrompt.size() <= 20000))
-        && (!('minAppVersion' in d) || (d.minAppVersion is int && d.minAppVersion >= 0));
-    }
-
-    function validActive() {
-      let d = request.resource.data;
-      return d.keys().hasOnly(['promptVersion', 'skillsVersion', 'updatedBy', 'updatedAt'])
-        && d.promptVersion is string && d.promptVersion.size() > 0;
-    }
-
-    // Pointer to the published content versions. The phone listens to this one document only.
-    match /config/{doc} {
-      allow read: if signedIn();
-      allow write: if isAdmin() && doc == 'active' && validActive();
-    }
-
-    // Only published versions are readable by users, drafts stay with admins.
-    match /prompts/{versionId} {
-      allow read: if signedIn() && (resource.data.status == 'published' || isAdmin());
-      allow write: if isAdmin() && validPrompt();
-    }
-
-    match /skills/{versionId}/items/{name} {
-      allow read: if signedIn();
-      allow write: if isAdmin() && request.resource.data.description is string && request.resource.data.body is string;
-    }
-
-    match /connectors/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-
-    match /announcements/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-
-    // Written only by the admin Lambda (Admin SDK bypasses rules).
-    match /releases/{versionCode} {
-      allow read: if signedIn();
-      allow write: if false;
-    }
-
-    match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['createdAt', 'lastSeenVersion']);
-      allow update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenVersion']);
-    }
-
-    match /users/{uid}/private/{doc} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if false;
-    }
-
-    // Append-only: an admin can add an entry under their own email, nobody can edit or delete one.
-    match /auditLog/{id} {
-      allow read: if isAdmin();
-      allow create: if isAdmin()
-        && request.resource.data.keys().hasOnly(['actor', 'action', 'target', 'at'])
-        && request.resource.data.actor == request.auth.token.email;
-      allow update, delete: if false;
-    }
-
     match /{document=**} {
       allow read, write: if false;
     }

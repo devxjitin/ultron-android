@@ -8,18 +8,14 @@ object AssistantOptions {
 
     data class LiveModel(val id: String, val label: String)
 
-    /** Models shipped in the APK, used until Remote Config says otherwise (and whenever it is unreachable). */
-    val bundledLiveModels: List<LiveModel> = listOf(
+    /** Live API models this build knows about. The first one is the model every session uses. */
+    val liveModels: List<LiveModel> = listOf(
         LiveModel("gemini-3.8-live", "Gemini 3.8 Live"),
         LiveModel("gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (preview)")
     )
 
-    /** Live API models the user can choose between in Settings, as allowed by Remote Config. */
-    val liveModels: List<LiveModel> get() = RemoteConfigRepository.current.liveModels
+    val defaultLiveModel: String = liveModels.first().id
 
-    val defaultLiveModel: String get() = RemoteConfigRepository.current.liveModelDefault
-
-    fun isApprovedLiveModel(id: String): Boolean = liveModels.any { it.id == id }
 
     data class Voice(val name: String, val gender: String, val style: String)
 

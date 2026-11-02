@@ -64,30 +64,6 @@ class SkillRegistryTest {
     @Test fun taskThatDoesNotExistIsNotLoadable() {
         assertTrue(SkillRegistry.use("whatsapp", "create_contact", listOf(whatsapp.copy(tasks = listOf(send)))).startsWith("status=not_found"))
     }
-
-    @Test fun onlySwitchedOnSkillsAreVisible() {
-        val entries = listOf(SkillEntry(whatsapp, builtIn = true, enabled = false), SkillEntry(notes, builtIn = false, enabled = true))
-        assertEquals(listOf("notes"), SkillRegistry.visible(entries).map { it.name })
-    }
-
-    @Test fun onlyTheFeaturesSkillIsLocked() {
-        assertTrue(SkillEntry(SkillGroup("ultron-features", "d", "b", emptyList()), builtIn = true).locked)
-        assertTrue(!SkillEntry(whatsapp, builtIn = true).locked)
-        assertTrue(!SkillEntry(SkillGroup("ultron-features", "d", "b", emptyList()), builtIn = false).locked)
-    }
-}
-
-class SkillDraftTest {
-    @Test fun frontmatterFillsNameDescriptionAndInstruction() {
-        val d = SkillParser.draftFromMarkdown("---\nname: Trip-Planner\ndescription: Plan a trip\n---\n# Steps\n1. Ask dates", "x.md")
-        assertEquals(SkillDraft("trip-planner", "Plan a trip", "# Steps\n1. Ask dates"), d)
-    }
-
-    @Test fun plainMarkdownUsesFileNameAndFirstLine() {
-        val d = SkillParser.draftFromMarkdown("# Write emails\nKeep them short.\n", "My Email Skill.md")
-        assertEquals("my-email-skill", d.name)
-        assertEquals("Write emails", d.description)
-    }
 }
 
 /** Every skill shipped in assets must parse, or it silently disappears from the app. */

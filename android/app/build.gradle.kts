@@ -27,6 +27,10 @@ val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
+// Key for knowledge import and search (embeddings run outside Firebase AI Logic). Add KNOWLEDGE_API_KEY=... to
+// android/local.properties; without it the main GEMINI_API_KEY is used, and blank leaves knowledge search switched off.
+val knowledgeApiKey: String = localProperties.getProperty("KNOWLEDGE_API_KEY", "").ifBlank { geminiApiKey }
+
 // URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
@@ -67,6 +71,7 @@ android {
         versionName = appVersionName
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "KNOWLEDGE_API_KEY", "\"$knowledgeApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
@@ -185,8 +190,6 @@ dependencies {
     debugImplementation("com.google.firebase:firebase-appcheck-debug")
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-config")
-    implementation("com.google.firebase:firebase-firestore")
     // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 

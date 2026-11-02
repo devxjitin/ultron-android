@@ -2,8 +2,6 @@ package com.assistant.app
 
 import android.app.Application
 import android.util.Log
-import com.assistant.app.data.ContentRepository
-import com.assistant.app.data.RemoteConfigRepository
 import com.assistant.app.network.FirebaseGemini
 import com.google.firebase.auth.FirebaseAuth
 
@@ -15,18 +13,13 @@ import com.google.firebase.auth.FirebaseAuth
 class UltronApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        ContentRepository.load(this)
         if (!FirebaseGemini.isAvailable(this)) return
         runCatching { AppCheckInstaller.install() }.onFailure { Log.w(TAG, "App Check setup failed", it) }
-        RemoteConfigRepository.refresh()
         runCatching {
             val auth = FirebaseAuth.getInstance()
             if (auth.currentUser == null) {
                 auth.signInAnonymously()
-                    .addOnSuccessListener { ContentRepository.refresh() }
                     .addOnFailureListener { Log.w(TAG, "Anonymous sign-in failed", it) }
-            } else {
-                ContentRepository.refresh()
             }
         }.onFailure { Log.w(TAG, "Auth setup failed", it) }
     }

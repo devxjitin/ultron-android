@@ -68,17 +68,6 @@ class MainActivity : ComponentActivity() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** Recreates the task after a saved Developer configuration so the next session gets only
-     *  the newly persisted settings and no old Live connection remains active. */
-    private fun restartApp() {
-        viewModel.onAppBackgrounded()
-        val launchIntent = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(launchIntent)
-        finishAffinity()
-    }
-
     /** Reads a bounded PDF intact so Gemini can process its visual document context directly. */
     private fun readKnowledgePdf(uri: Uri): Pair<String, ByteArray>? {
         var declaredSize: Long? = null
@@ -284,25 +273,6 @@ class MainActivity : ComponentActivity() {
                                 ?: android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                         }
                     }
-                    LaunchedEffect(uiState.restartRequestId) {
-                        if (uiState.restartRequestId > 0) {
-                            delay(900)
-                            restartApp()
-                        }
-                    }
-
-                    val remote by com.assistant.app.data.RemoteConfigRepository.settings.collectAsState()
-                    if (BuildConfig.VERSION_CODE < remote.minSupportedVersion) {
-                        LaunchedEffect(Unit) { viewModel.checkForUpdate(manual = true) }
-                        com.assistant.app.ui.ForceUpdateScreen(
-                            updateAvailable = uiState.availableUpdate != null,
-                            checking = uiState.updateCheckState == com.assistant.app.viewmodel.UpdateCheckState.CHECKING,
-                            onCheck = { viewModel.checkForUpdate(manual = true) },
-                            onInstall = { viewModel.onUpdateNow() }
-                        )
-                        return@Surface
-                    }
-
                     val voiceLevel = viewModel.voiceLevel.collectAsState()
                     AssistantScreen(
                         uiState = uiState,
@@ -328,15 +298,10 @@ class MainActivity : ComponentActivity() {
                         onUpdateNow = { viewModel.onUpdateNow() },
                         onUsageTapped = { viewModel.onUsageTapped() },
                         onStorageTapped = { viewModel.onStorageTapped() },
-                        onSkillsTapped = { viewModel.onSkillsTapped() },
-                        onSkillToggled = { name, on -> viewModel.onSkillToggled(name, on) },
-                        onSkillSaved = { name, description, body -> viewModel.onSkillSaved(name, description, body) },
-                        onSkillDeleted = { viewModel.onSkillDeleted(it) },
                         onClearCache = { viewModel.onClearCache() },
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
-                        onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
                         onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
@@ -357,30 +322,13 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         onSettingsTapped = { viewModel.onSettingsTapped() },
-                        onDeveloperTapped = { viewModel.onDeveloperTapped() },
                         onAboutTapped = { viewModel.onAboutTapped() },
                         onDismissSettings = { viewModel.onDismissSettings() },
-                        onClearApiKey = { viewModel.onClearApiKey() },
-                        onClearEmbeddingApiKey = { viewModel.onClearEmbeddingApiKey() },
-                        onLiveModelSelected = { id -> viewModel.onLiveModelSelected(id) },
                         onVoiceSelected = { voice -> viewModel.onVoiceSelected(voice) },
                         onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
                         onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
-                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, documentPrompt, retrievalLimit ->
-                            viewModel.onSaveDeveloperChanges(
-                                name,
-                                greeting,
-                                apiKey,
-                                embeddingApiKey,
-                                systemPrompt,
-                                documentPrompt,
-                                retrievalLimit
-                            )
-                        },
-                        onGeneratePromptFromKnowledgeBase = { viewModel.onGeneratePromptFromKnowledgeBase() },
-                        onDismissPromptGenerationError = { viewModel.onDismissPromptGenerationError() },
                         onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
                         onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
                         onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },
