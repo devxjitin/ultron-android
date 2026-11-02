@@ -261,6 +261,24 @@ def webhook(event):
     return _resp(200, {"ok": True})
 
 
+def reconcile_all():
+    """Daily sweep: records still marked paid whose cycle ended long ago are re-read from Razorpay, so a webhook that was
+    never delivered cannot keep someone active. Returns how many records changed."""
+    changed, start_key = 0, None
+    while True:
+        page = _db().scan(**({"ExclusiveStartKey": start_key} if start_key else {}))
+        for item in page.get("Items", []):
+            if not _is_stale(item):
+                continue
+            fresh = _refresh(item)
+            if fresh is not item and fresh.get("status") != item.get("status"):
+                _db().put_item(Item=fresh)
+                changed += 1
+        start_key = page.get("LastEvaluatedKey")
+        if not start_key:
+            return changed
+
+
 ROUTES = {
     ("GET", "/v1/billing/status"): status,
     ("POST", "/v1/billing/subscribe"): subscribe,
@@ -270,6 +288,9 @@ ROUTES = {
 
 
 def lambda_handler(event, context):
+    if event.get("source") == "aws.events":
+        print(f"Reconciled {reconcile_all()} stale subscriptions")
+        return {"reconciled": True}
     method = event.get("requestContext", {}).get("http", {}).get("method", "")
     handler = ROUTES.get((method, event.get("rawPath", "")))
     if handler is None:

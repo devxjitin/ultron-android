@@ -34,6 +34,9 @@ class FakeTable:
     def put_item(self, Item):
         self.items[Item["uid"]] = dict(Item)
 
+    def scan(self, **kwargs):
+        return {"Items": [dict(i) for i in self.items.values()]}
+
 
 class FakeRazorpay:
     def __init__(self):
@@ -265,6 +268,19 @@ class BillingTests(unittest.TestCase):
             raise billing.urllib.error.URLError("timeout")
         billing._razorpay = down
         self.assertEqual(502, call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))[0])
+
+    def test_daily_sweep_locks_users_whose_cancel_webhook_never_came(self):
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))
+        self.pay("sub_1", current_end=int(time.time()) - 5 * 86_400)
+        self.webhook(self.event_for("sub_1"))
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}, uid="fresh"))
+        self.pay("sub_2")
+        self.webhook(self.event_for("sub_2"))
+        self.pay("sub_1", status="halted", current_end=int(time.time()) - 5 * 86_400)
+        result = billing.lambda_handler({"source": "aws.events"}, None)
+        self.assertEqual({"reconciled": True}, result)
+        self.assertEqual("halted", self.table.items["user-1"]["status"])
+        self.assertEqual("active", self.table.items["fresh"]["status"])
 
     def test_unknown_route_is_not_found(self):
         self.assertEqual(404, call(request("GET", "/v1/billing/nope"))[0])

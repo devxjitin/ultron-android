@@ -709,6 +709,13 @@ kisi abandoned try ke upar bhi record hota hai), P7 (khali secret par `503`) aur
 code me hain, 8 naye tests ke saath (suite 49 pass). **Baaki:** P3 ka daily reconcile job aur alarms, P4 ki
 double-tap race ka DynamoDB conditional write (abhi sirf reuse se kam kiya hai), aur `ultron-api` stack redeploy.
 
+**Doosra code fix (branch `api-hardening`, deploy nahi hua).** P3 ka daily sweep ban gaya (EventBridge `rate(1 day)` se
+billing Lambda `reconcile_all()` chalata hai, test ke saath) aur P6 ke liye `infra/api.yaml` me route throttles hain
+(web-extract 3 rps burst 10, webhook alag 20/40). Do baatein. Template maine `cfn-lint` ya `validate-template` se check
+nahi kiya (AWS login nahi hai), deploy se pehle ye karna hai. Aur HTTP API ka default throttle shayad har route par alag
+lagta hai, stage par shared nahi, to P6 ka "webhook ko starve karna" wala asar mere likhne se kam ho sakta hai. Web-extract
+ka chhota limit phir bhi abuse ke liye sahi hai.
+
 Jo sahi hai. Webhook HMAC + `compare_digest`, verify aur webhook dono Razorpay se dobara padhte hain, `notes.uid` se
 ownership check, Google account zaroori (anonymous nahi khareed sakta), secrets SSM SecureString me, DynamoDB PITR aur
 encryption on.

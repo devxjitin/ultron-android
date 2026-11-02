@@ -74,6 +74,15 @@ Resources:
       DefaultRouteSettings:
         ThrottlingBurstLimit: 40
         ThrottlingRateLimit: 20
+      # Web reading is the one route anyone with an anonymous account can make expensive; keep it small. Razorpay retries
+      # failed webhooks, but a flood must never starve them, so the webhook has its own limit.
+      RouteSettings:
+        "POST /v1/web/mcp":
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 3
+        "POST /v1/billing/webhook":
+          ThrottlingBurstLimit: 40
+          ThrottlingRateLimit: 20
       Tags:
         project: ultron
 
@@ -200,6 +209,11 @@ Resources:
                 StringEquals:
                   kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
       Events:
+        # Re-reads subscriptions whose paid cycle ended long ago, in case Razorpay's webhook never arrived.
+        DailySweep:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
         Status:
           Type: HttpApi
           Properties:

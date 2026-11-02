@@ -504,3 +504,4 @@
 [2026-11-02 21:47] [Claude] [Fix: Google sign-in chalu, purana Android client Autourgos se hata, Ultron me bana]
 [2026-11-02 21:56] [Claude] [Docs: security + payment review, ARCHITECTURE.md section 1, 2, 20 update]
 [2026-11-02 21:58] [Claude] [Fix: billing Lambda stale-active reconcile, subscribe reuse/cancel, fail-closed secrets, 8 tests]
+[2026-11-02 22:05] [Claude] [Add: billing daily sweep Lambda event, route throttles in api.yaml, test]
