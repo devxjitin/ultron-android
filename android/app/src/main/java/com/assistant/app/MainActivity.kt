@@ -46,12 +46,25 @@ import com.assistant.app.ui.theme.ThemePrefs
 import com.assistant.app.ui.theme.applyWindowColors
 import com.assistant.app.ui.theme.paletteFor
 import com.assistant.app.viewmodel.AssistantViewModel
+import com.assistant.app.data.AccessGate
+import com.assistant.app.network.GoogleAuth
+import com.assistant.app.network.PendingSubscription
+import com.assistant.app.ui.AccessCheckingScreen
+import com.assistant.app.ui.AccountSummary
+import com.assistant.app.ui.PaywallScreen
+import com.assistant.app.ui.SignInScreen
+import com.assistant.app.viewmodel.AccessState
+import com.assistant.app.viewmodel.AccessViewModel
+import com.razorpay.Checkout
+import com.razorpay.PaymentData
+import com.razorpay.PaymentResultWithDataListener
+import org.json.JSONObject
 
 /** A missing declared size passes here; the streaming read enforces the limit in that case. */
 internal fun isPdfWithinLimit(declaredSizeBytes: Long?, maxBytes: Int = 10 * 1024 * 1024): Boolean =
     declaredSizeBytes == null || declaredSizeBytes <= maxBytes
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     companion object {
         /** Inline base64 PDF requests must stay well under Gemini's ~20 MB request limit. */
@@ -63,6 +76,9 @@ class MainActivity : ComponentActivity() {
     // Held at Activity scope (not just inside the Compose tree) so onStart/onStop below can
     // reach the same instance Compose is observing.
     private val viewModel: AssistantViewModel by viewModels()
+    private val access: AccessViewModel by viewModels()
+    /** Skips the subscription re-check on the very first start; the access view model already runs one. */
+    private var startedOnce = false
 
     private fun hasMicPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -125,6 +141,33 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.onAppForegrounded()
+        if (startedOnce) access.refresh(quiet = true)
+        startedOnce = true
+    }
+
+    /** Opens Razorpay Checkout for a subscription the billing API just created. */
+    private fun openCheckout(pending: PendingSubscription, email: String) {
+        val options = JSONObject()
+            .put("name", "Ultron")
+            .put("description", "Ultron subscription")
+            .put("subscription_id", pending.subscriptionId)
+            .put("theme", JSONObject().put("color", "#B3202A"))
+        if (email.isNotBlank()) options.put("prefill", JSONObject().put("email", email))
+        runCatching {
+            Checkout().apply { setKeyID(pending.keyId) }.open(this, options)
+        }.onFailure { access.onPaymentFailed(cancelled = false) }
+    }
+
+    override fun onPaymentSuccess(paymentId: String?, data: PaymentData?) {
+        access.onPaymentSuccess(
+            paymentId = paymentId ?: data?.paymentId.orEmpty(),
+            subscriptionId = data?.data?.optString("razorpay_subscription_id"),
+            signature = data?.signature
+        )
+    }
+
+    override fun onPaymentError(code: Int, response: String?, data: PaymentData?) {
+        access.onPaymentFailed(cancelled = code == Checkout.PAYMENT_CANCELED)
     }
 
 
@@ -139,12 +182,13 @@ class MainActivity : ComponentActivity() {
         val action = intent?.action ?: return
         if (action != Intent.ACTION_ASSIST && action != Intent.ACTION_VOICE_COMMAND) return
         intent.action = null // so a recreated activity does not start a second session
-        if (hasMicPermission()) viewModel.onAssistInvoked()
+        if (hasMicPermission() && AccessGate.unlocked) viewModel.onAssistInvoked()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        Checkout.preload(applicationContext)
         // Know the theme before the first frame so the window never flashes the other one.
         val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -261,6 +305,28 @@ class MainActivity : ComponentActivity() {
                     color = com.assistant.app.ui.theme.AssistantBackground,
                     contentColor = com.assistant.app.ui.theme.AssistantTextPrimary
                 ) {
+                    val accessState by access.state.collectAsState()
+                    val unlocked = accessState is AccessState.Active
+                    LaunchedEffect(unlocked) { viewModel.onAccessChanged(unlocked) }
+                    when (val gate = accessState) {
+                        AccessState.Checking -> { AccessCheckingScreen(); return@Surface }
+                        is AccessState.SignedOut -> {
+                            SignInScreen(gate, enabled = GoogleAuth.isConfigured, onSignIn = { access.signIn(this@MainActivity) })
+                            return@Surface
+                        }
+                        is AccessState.Locked -> {
+                            PaywallScreen(
+                                state = gate,
+                                onBuy = { plan -> access.buy(plan, ::openCheckout) },
+                                onRefresh = { access.refresh() },
+                                onSignOut = { access.signOut(this@MainActivity) }
+                            )
+                            return@Surface
+                        }
+                        is AccessState.Active -> Unit
+                    }
+                    val account = accessState as AccessState.Active
+
                     val uiState by viewModel.uiState.collectAsState()
                     LaunchedEffect(uiState.permissionRequestId) {
                         if (uiState.permissionRequestId > 0 && uiState.requestedPermissions.isNotEmpty()) {
@@ -338,6 +404,8 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismissKnowledgeDocumentError = { viewModel.onDismissKnowledgeDocumentError() },
                         onDismissToast = { viewModel.onDismissToast() },
+                        account = AccountSummary(account.email, account.status),
+                        onSignOut = { access.signOut(this@MainActivity) },
                     )
                 }
             }

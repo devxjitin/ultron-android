@@ -13,6 +13,7 @@ import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
 import com.assistant.app.audio.MicStreamer
+import com.assistant.app.data.AccessGate
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationStore
@@ -1242,6 +1243,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun startSession(isAutoReconnect: Boolean = false) {
         userInitiatedStop = false
+        // A locked app (signed out or no active plan) never opens a Gemini session.
+        if (!AccessGate.unlocked) return
 
         val apiKey = resolveApiKey()
         if (!hasGeminiAccess()) {
@@ -1860,6 +1863,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun prewarmIfPossible() {
         if (!keysLoaded) return
+        if (!AccessGate.unlocked) return
         if (!isForeground) return
         if (warmClient != null || prewarmInFlight) return
         if (_uiState.value.voiceState != VoiceState.IDLE) return
@@ -2253,6 +2257,20 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Called when the Activity comes back to the foreground -- re-arm the warm session so the
      *  next mic tap is fast again. */
+    /** The subscription screen opened or closed the app: warm up a session, or end everything that is running. */
+    fun onAccessChanged(unlocked: Boolean) {
+        if (unlocked) {
+            prewarmIfPossible()
+            return
+        }
+        if (isSessionActive(_uiState.value.voiceState)) stopSession()
+        cancelInFlightPrewarm()
+        warmClient?.close()
+        warmClient = null
+        isPrewarmReady = false
+        activateWarmOnReady = false
+    }
+
     fun onAppForegrounded() {
         isForeground = true
         backgroundSessionAllowed = false

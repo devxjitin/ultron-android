@@ -105,6 +105,8 @@ fun SettingsPage(
     page: AppPage,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    account: com.assistant.app.ui.AccountSummary? = null,
+    onSignOut: () -> Unit = {},
 ) {
     var editingDocument by remember { mutableStateOf<RagDocument?>(null) }
     var showAddDocumentDialog by remember { mutableStateOf(false) }
@@ -131,7 +133,7 @@ fun SettingsPage(
             when (activeBranch) {
                 0 -> GeneralSettingsContent(
                     settings, onVoiceSelected, onLanguageSelected,
-                    onMicSensitivitySelected, onBargeInToggled, onOwnerNameChanged
+                    onMicSensitivitySelected, onBargeInToggled, onOwnerNameChanged, account, onSignOut
                 )
                 1 -> Column {
                     SectionLabel("Knowledge documents")
@@ -389,7 +391,9 @@ private fun GeneralSettingsContent(
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
-    onOwnerNameChanged: (String) -> Unit
+    onOwnerNameChanged: (String) -> Unit,
+    account: com.assistant.app.ui.AccountSummary?,
+    onSignOut: () -> Unit
 ) {
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
@@ -397,6 +401,14 @@ private fun GeneralSettingsContent(
         MicSensitivity.HIGH to "Picks up quiet voices"
     )
     Column {
+        if (account != null) {
+            SettingsHeading("Account")
+            Text(account.email, color = com.assistant.app.ui.theme.AssistantTextPrimary)
+            account.planLine.takeIf { it.isNotEmpty() }?.let { Text(it, color = AssistantTextMuted) }
+            TextButton(onClick = onSignOut, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                Text("Sign out", color = AssistantError)
+            }
+        }
         SettingsHeading("Voice")
         SettingsDropdown(
             value = AssistantOptions.voices.firstOrNull { it.name == settings.voiceName }

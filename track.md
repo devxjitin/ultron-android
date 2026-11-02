@@ -496,3 +496,4 @@
 [2026-11-02 19:50] [Claude] [Add: Phase 4 admin console (Vite+React), hosting ultron-control, reCAPTCHA App Check, audit rules]
 [2026-11-02 20:40] [Claude] [Update: publish-ota ab console/rules/contracts/infra/mcp changes par OTA nahi banata]
 [2026-11-02 20:05] [Claude] [Remove: console, remote content, Skills/Developer pages; app me sirf connectors editable]
+[2026-11-02 20:17] [Claude] [Add: Google sign-in, Razorpay subscription (199/999/1799), billing Lambda + DynamoDB]

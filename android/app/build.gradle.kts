@@ -37,6 +37,9 @@ val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
 
 // Base URL of the Ultron API on AWS (checks the user's Firebase token, so it is not a secret). Overridable from local.properties.
 val apiBaseUrl: String = localProperties.getProperty("API_BASE_URL", "https://api.devxjitin.dev")
+// OAuth web client id of the Firebase project (Authentication > Google provider). Add GOOGLE_WEB_CLIENT_ID=... to
+// android/local.properties; blank leaves "Continue with Google" switched off.
+val googleWebClientId: String = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")
 // Add: WEB_EXTRACT_URL=https://.../<token>  to android/local.properties. Blank = the web page reader tool says it is not set up.
 val webExtractUrl: String = localProperties.getProperty("WEB_EXTRACT_URL", "")
 // Every build gets a higher version code than the one before (minutes since 1970), so the phone can always tell
@@ -76,6 +79,7 @@ android {
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
     }
 
     signingConfigs {
@@ -179,6 +183,7 @@ dependencies {
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
     implementation("androidx.security:security-crypto:1.1.0")
 
     // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
@@ -186,6 +191,12 @@ dependencies {
     implementation("com.google.firebase:firebase-ai")
     // Identity (anonymous at first), proof that requests come from the genuine app, and crash and usage reporting.
     implementation("com.google.firebase:firebase-auth")
+    // Google sign-in through Credential Manager; the subscription is tied to the Google account.
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
+    // Razorpay Checkout for the subscription payment.
+    implementation("com.razorpay:checkout:1.6.41")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     debugImplementation("com.google.firebase:firebase-appcheck-debug")
     implementation("com.google.firebase:firebase-crashlytics")
