@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Locked down: nothing in this database is used by the app yet. Real rules come with the remote content phase.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
