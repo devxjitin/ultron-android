@@ -1,5 +1,5 @@
 # Builds the Ultron app and publishes it to the AWS OTA update bucket with scripts/publish-update.ps1.
-# Runs on every push to main (docs-only pushes are skipped) and by hand from the Actions tab.
+# Runs on every push to main (pushes that only touch docs, the console, rules, contracts, infra or Lambdas are skipped) and by hand from the Actions tab.
 # Secrets: ULTRON_DEBUG_KEYSTORE (base64 of ~/.ultron-android/debug.keystore, the key on installed phones),
 # GOOGLE_SERVICES_JSON (base64 of android/app/google-services.json), LOCAL_PROPERTIES (the app's URL/ID lines
 # from android/local.properties). Variable: AWS_PUBLISH_ROLE_ARN (role ultron-ota-publish, assumed via OIDC).
@@ -8,7 +8,7 @@ name: Publish OTA
 on:
   push:
     branches: [main]
-    paths-ignore: [track.md, README.md, "docs/**"]
+    paths-ignore: [track.md, README.md, "docs/**", "console/**", "rules-tests/**", "contracts/**", "infra/**", "mcp/**", "firestore.rules", "firebase.json", "remoteconfig.template.json"]
   workflow_dispatch:
     inputs:
       notes:
