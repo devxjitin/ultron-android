@@ -9,8 +9,8 @@ import org.json.JSONArray
  */
 data class RemoteSettings(
     val minSupportedVersion: Int = 0,
-    val liveModels: List<AssistantOptions.LiveModel> = AssistantOptions.liveModels,
-    val liveModelDefault: String = AssistantOptions.defaultLiveModel,
+    val liveModels: List<AssistantOptions.LiveModel> = AssistantOptions.bundledLiveModels,
+    val liveModelDefault: String = AssistantOptions.bundledLiveModels.first().id,
     val sessionMaxMinutes: Int = 15,
     val idleTimeoutSeconds: Int = 120,
     val turnTimeoutSeconds: Int = 15,

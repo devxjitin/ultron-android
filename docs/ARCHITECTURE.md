@@ -582,4 +582,10 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | Firestore rules | Naye rules likhe (config/prompts/skills/connectors/announcements/users/releases/auditLog, admin custom claim, published-only read, validation). **Deploy baaki**, abhi live rules deny-all hi hain |
 | Rules tests | `rules-tests/` (emulator, 8 tests) aur contract tests (2 pass local). Emulator ko JDK 21 chahiye, local me 17 hai, to rules tests CI ke `firestore-rules` job me chalenge |
 | Android | `RemoteSettings` (defensive parse, range clamp, bundled defaults), `RemoteConfigRepository` (hourly fetch, `UltronApp` se refresh), `tools_disabled` kill switch `DeviceToolRunner` me. 7 unit tests pass, `compileOtaKotlin` pass |
-| Baaki | Viewmodel ke timeouts aur model list ko `RemoteSettings` se jodna, `min_supported_version` force-update screen, `ContentRepository` (Firestore prompts/skills, `config/active` listener), admin custom claim set karna, Firestore enforce App Check |
+| Deploy | **Ho gaya (2026-11-02).** Firestore rules aur Remote Config template ultron-5350c par deploy hue. PR 21 `main` par merge, CI green (android, firestore-rules, lambdas) |
+| Viewmodel jodna | Session max, idle, turn timeout, update check interval, tool result limit ab `RemoteSettings` se. Model list aur default model bhi (`AssistantOptions` ab Remote Config se allowed list leta hai, bundled list fallback) |
+| Force update | `min_supported_version` build se bada ho to `ForceUpdateScreen` app ki jagah dikhti hai, button se update check aur install |
+| ContentRepository | Firestore `config/active` se `promptVersion`, phir `prompts/{version}`, contract ke hisaab se validate (published, size, `minAppVersion`), last good prompt cache. User ne khud prompt likha ho to wo hi chalega. Abhi ek baar start par fetch hota hai (listener nahi, reads kam rakhne ke liye) |
+| Admin claim aur seed | **Ho gaya (2026-11-02).** `devxjitin@gmail.com` par `admin: true` custom claim set, `prompts/v1` (bundled persona ki copy, published) aur `config/active` seed. Behaviour pehle jaisa rahega jab tak console se naya version publish na ho |
+| Firestore App Check | **ENFORCED (2026-11-02).** Dhyan: future admin web console ko reCAPTCHA App Check chahiye hoga |
+| Baaki | Skills ka remote version (locked skills bundled rahengi), `embed` route aur Lambda me App Check verification |

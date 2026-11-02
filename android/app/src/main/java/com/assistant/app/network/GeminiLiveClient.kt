@@ -445,7 +445,7 @@ class GeminiLiveClient(
         // The server announces an imminent disconnect (session/time limit) via goAway instead of
         // just closing outright -- previously unhandled, so the client kept streaming audio into
         // a session the server had already given up on, with every subsequent turn silently
-        // burning the full TURN_RESPONSE_TIMEOUT_MS for a reply that was never coming. Closing
+        // burning the full turnResponseTimeoutMs for a reply that was never coming. Closing
         // now instead of waiting routes this through the existing onClosed()/reconnect-with-
         // backoff path immediately rather than after a wasted 15s timeout.
         json.optJSONObject("goAway")?.let {
