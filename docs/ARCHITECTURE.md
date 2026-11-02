@@ -484,7 +484,7 @@ DNS name.com par hi rakho (free hai). Records:
 | **0. Security** (ho gaya, section 13) | S1 root se IAM Identity Center, S6 API key restriction, S7 Firestore cleanup, Budgets alarm, `google-workspace-mcp` aur unused Function URLs band | 1 din |
 | **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore (naya package optional) | 1 hafta |
 | **2. Backend (core done)** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
-| **3. Remote content (started, section 17)** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
+| **3. Remote content (core done, section 17)** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
 | **4. Console** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
 | **5. App refactor** | Hilt, modules, `VoiceSessionService`, `ToolRegistry`, `ConnectorRegistry`, `PermissionBroker`, onboarding | 2-3 hafte (feature by feature, har step par tests) |
 | **6. Website launch** | `devxjitin.dev` landing, download page (SHA-256, signing fingerprint), privacy policy, terms, Play Protect aur "unknown app" FAQ, in-app updater test, Android developer verification rules check | 1-2 hafte |
@@ -588,4 +588,5 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | ContentRepository | Firestore `config/active` se `promptVersion`, phir `prompts/{version}`, contract ke hisaab se validate (published, size, `minAppVersion`), last good prompt cache. User ne khud prompt likha ho to wo hi chalega. Abhi ek baar start par fetch hota hai (listener nahi, reads kam rakhne ke liye) |
 | Admin claim aur seed | **Ho gaya (2026-11-02).** `devxjitin@gmail.com` par `admin: true` custom claim set, `prompts/v1` (bundled persona ki copy, published) aur `config/active` seed. Behaviour pehle jaisa rahega jab tak console se naya version publish na ho |
 | Firestore App Check | **ENFORCED (2026-11-02).** Dhyan: future admin web console ko reCAPTCHA App Check chahiye hoga |
+| Phone verify | **Ho gaya (2026-11-02).** `prompts/v2` publish karke `config/active` badla, phone par naya greeting aaya. Stored default prompt/greeting ab remote ko nahi dabate (PR 23) |
 | Baaki | Skills ka remote version (locked skills bundled rahengi), `embed` route aur Lambda me App Check verification |
