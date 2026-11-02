@@ -640,5 +640,9 @@ Setup jo abhi baaki hai (ek baar):
 5. `ultron-api` stack teen plan id parameters ke saath deploy karo.
 6. Razorpay dashboard me webhook `https://api.devxjitin.dev/v1/billing/webhook`, subscription events, wahi webhook secret.
 
+Status (2026-11-02): step 3, 4 aur 5 ho gaye (test mode). Plans `plan_TvLmXcUby3aa5w` (monthly),
+`plan_TvLmXs3OS99lzM` (6 months), `plan_TvLmY52xpcSDdR` (yearly). SSM me teeno parameters, `ultron-api` stack deploy
+(billing Lambda + table add, console wala admin Lambda hata). Step 1, 2 aur 6 baaki.
+
 Seema: Gemini call Firebase AI Logic se seedha phone se jaati hai, to lock app ke andar hai, server par nahi. Patch kiya
 hua APK lock tod sakta hai. Pakka server-side lock chahiye to Gemini ko apne backend ke peeche le jaana hoga (alag kaam).
