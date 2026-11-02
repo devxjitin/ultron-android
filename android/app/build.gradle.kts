@@ -10,7 +10,10 @@ plugins {
 
 // Firebase AI Logic needs android/app/google-services.json (gitignored). Without it the app still builds and
 // falls back to the on-device Gemini key.
-if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+}
 
 // Optional compile-time default API key, read from local.properties (gitignored, never
 // committed). The app also lets the key be entered/changed at runtime from Settings, which
@@ -173,6 +176,12 @@ dependencies {
     // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-ai")
+    // Identity (anonymous at first), proof that requests come from the genuine app, and crash and usage reporting.
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-analytics")
     // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
