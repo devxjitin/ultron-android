@@ -85,7 +85,7 @@ object ToolDeclarations {
             val declaration = JSONObject().put("name", name).put("description", description)
                 .put("parameters", JSONObject().put("type", "OBJECT").put("properties", properties)
                     .put("required", JSONArray().put(required)))
-                return declaration
+            return declaration
         }
         return listOf(
             tool(MEMORY_SAVE_TOOL,

@@ -3,6 +3,7 @@ package com.assistant.app.data
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.ComponentName
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadata
@@ -25,6 +26,7 @@ import com.assistant.app.AssistantNotificationListener
  */
 class PhoneExtras(private val app: Context, private val start: (Intent) -> Unit) {
 
+    @SuppressLint("MissingPermission") // The caller checks ANSWER_PHONE_CALLS first.
     @Suppress("DEPRECATION")
     fun endCall(): String {
         val telecom = app.getSystemService(TelecomManager::class.java) ?: return "status=unavailable\nThis phone has no call service."
@@ -32,6 +34,7 @@ class PhoneExtras(private val app: Context, private val start: (Intent) -> Unit)
         else "status=failed\nThere is no call in progress to end."
     }
 
+    @SuppressLint("MissingPermission") // The caller checks ANSWER_PHONE_CALLS first.
     fun answerCall(): String {
         val telecom = app.getSystemService(TelecomManager::class.java) ?: return "status=unavailable\nThis phone has no call service."
         return runCatching { telecom.acceptRingingCall(); "status=ok\nAnswered the call." }

@@ -11,6 +11,7 @@ import android.app.PendingIntent
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -1226,6 +1227,7 @@ class DeviceToolRunner(
      * Places a call through Telecom, which shows its own call screen. Starting the call activity directly is blocked
      * while Ultron is in the background (a voice session running behind another app), and the call then never started.
      */
+    @SuppressLint("MissingPermission") // The caller checks CALL_PHONE before reaching this.
     private fun placeCall(number: String) {
 
         val telecom = app.getSystemService(TelecomManager::class.java)

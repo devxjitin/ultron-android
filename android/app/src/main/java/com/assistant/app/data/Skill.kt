@@ -28,7 +28,7 @@ object SkillParser {
 
     /** Null when the name, description or (unless [allowEmptyBody]) the body is missing. */
     fun parse(text: String, fallbackName: String? = null, allowEmptyBody: Boolean = false): Skill? {
-        val lines = text.replace("\r\n", "\n").trimStart('﻿').lines()
+        val lines = text.replace("\r\n", "\n").trimStart('\uFEFF').lines()
         val fields = HashMap<String, String>()
         var bodyStart = 0
         if (lines.firstOrNull()?.trim() == "---") {
@@ -57,7 +57,7 @@ data class SkillDraft(val name: String, val description: String, val instruction
  * used when present; otherwise the name comes from the file name and the description from the first plain line.
  */
 fun SkillParser.draftFromMarkdown(text: String, fileName: String): SkillDraft {
-    val lines = text.replace("\r\n", "\n").trimStart('﻿').lines()
+    val lines = text.replace("\r\n", "\n").trimStart('\uFEFF').lines()
     val fields = HashMap<String, String>()
     var bodyStart = 0
     if (lines.firstOrNull()?.trim() == "---") {
