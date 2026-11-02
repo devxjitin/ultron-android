@@ -49,7 +49,7 @@ class RemoteSettingsTest {
     fun brokenJsonKeepsDefaults() {
         val s = settings("tools_disabled" to "not json", "live_models_allowed" to "{oops")
         assertTrue(s.toolsDisabled.isEmpty())
-        assertEquals(AssistantOptions.liveModels, s.liveModels)
+        assertEquals(AssistantOptions.bundledLiveModels, s.liveModels)
     }
 
     @Test
@@ -74,6 +74,6 @@ class RemoteSettingsTest {
     @Test
     fun emptyModelListIsRejected() {
         val s = settings("live_models_allowed" to "[]")
-        assertEquals(AssistantOptions.liveModels, s.liveModels)
+        assertEquals(AssistantOptions.bundledLiveModels, s.liveModels)
     }
 }

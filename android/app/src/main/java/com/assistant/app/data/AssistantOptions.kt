@@ -8,13 +8,16 @@ object AssistantOptions {
 
     data class LiveModel(val id: String, val label: String)
 
-    /** Live API models the user can choose between in Settings. */
-    val liveModels: List<LiveModel> = listOf(
+    /** Models shipped in the APK, used until Remote Config says otherwise (and whenever it is unreachable). */
+    val bundledLiveModels: List<LiveModel> = listOf(
         LiveModel("gemini-3.8-live", "Gemini 3.8 Live"),
         LiveModel("gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (preview)")
     )
 
-    val defaultLiveModel: String = liveModels.first().id
+    /** Live API models the user can choose between in Settings, as allowed by Remote Config. */
+    val liveModels: List<LiveModel> get() = RemoteConfigRepository.current.liveModels
+
+    val defaultLiveModel: String get() = RemoteConfigRepository.current.liveModelDefault
 
     fun isApprovedLiveModel(id: String): Boolean = liveModels.any { it.id == id }
 

@@ -176,9 +176,9 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: true,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
+            systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() } ?: ContentRepository.persona,
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
-            greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_GREETING,
+            greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() } ?: ContentRepository.greeting,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
             documentFormatPrompt = prefs[documentFormatPromptKey]?.takeIf { it.isNotBlank() }
                 ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,

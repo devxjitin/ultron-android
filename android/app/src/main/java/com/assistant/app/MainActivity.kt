@@ -291,6 +291,18 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    val remote by com.assistant.app.data.RemoteConfigRepository.settings.collectAsState()
+                    if (BuildConfig.VERSION_CODE < remote.minSupportedVersion) {
+                        LaunchedEffect(Unit) { viewModel.checkForUpdate(manual = true) }
+                        com.assistant.app.ui.ForceUpdateScreen(
+                            updateAvailable = uiState.availableUpdate != null,
+                            checking = uiState.updateCheckState == com.assistant.app.viewmodel.UpdateCheckState.CHECKING,
+                            onCheck = { viewModel.checkForUpdate(manual = true) },
+                            onInstall = { viewModel.onUpdateNow() }
+                        )
+                        return@Surface
+                    }
+
                     val voiceLevel = viewModel.voiceLevel.collectAsState()
                     AssistantScreen(
                         uiState = uiState,

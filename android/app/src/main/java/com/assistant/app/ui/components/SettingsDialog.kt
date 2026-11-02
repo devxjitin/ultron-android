@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.AssistantOptions
 import com.assistant.app.data.AssistantSettings
-import com.assistant.app.data.DEFAULT_SYSTEM_PROMPT
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.MAX_ASSISTANT_NAME_LENGTH
 import com.assistant.app.data.MAX_GREETING_LENGTH
@@ -346,7 +345,7 @@ fun SettingsPage(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = {
-                            promptInput = DEFAULT_SYSTEM_PROMPT.trim()
+                            promptInput = com.assistant.app.data.ContentRepository.persona
                         }) {
                             Text("Reset to default", color = AssistantError)
                         }
