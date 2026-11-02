@@ -522,7 +522,7 @@ Commits `194d203` (docs aur Firestore rules) aur `7e52801` (app code). Push ya P
 | Verification | `compileDebugKotlin`, `compileOtaKotlin` aur `testDebugUnitTest` pass. Lint aur phone par test nahi hua |
 | Firebase console steps | **App Check aapne kiya, baaki confirm karo**: Anonymous auth enable, SHA-256 `FB:11:8C:42:FC:C4:E6:19:6F:34:9D:52:66:FE:C7:FD:6B:49:F6:E1:6C:EC:0C:B7:C0:E7:5B:4F:53:CB:D0:0C` Firebase app me add, App Check me Play Integrity register aur debug token add, Crashlytics enable |
 | App Check verification | Ho gaya (2026-11-02). OTA build phone par chali, console me anonymous user aur verified App Check requests dono dikhe (aapne dekha). Maine console khud nahi dekha |
-| App Check enforcement | **Baaki (aap).** Firebase AI Logic par enforce karo, phir ek voice session chalao, fail ho to turant band. Firestore par zaroorat nahi, rules pehle se sab band karte hain |
+| App Check enforcement | **Ho gaya (2026-11-02).** AI Logic par enforce hai, sideloaded APK se voice session chal raha hai (user ne verify kiya), to device integrity token accept ho raha hai. Custom provider fallback ki zaroorat nahi. Firestore par zaroorat nahi, rules pehle se sab band karte hain |
 | Release keystore | **Baaki.** Website distribution ke liye zaroori. Asli key banani hai, backup ke saath. Key badalne par ek baar reinstall |
 | Package name | **Optional ab.** `com.assistant.app` rakh sakte ho. Rename karna ho to key badalne ke saath hi |
 | Flavors | **Hata diya.** `play` flavor nahi banega, ek hi full build (section 15) |
