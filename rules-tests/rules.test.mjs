@@ -25,7 +25,7 @@ beforeEach(async () => {
 });
 
 const user = (uid = 'u1') => env.authenticatedContext(uid).firestore();
-const admin = () => env.authenticatedContext('boss', { admin: true }).firestore();
+const admin = () => env.authenticatedContext('boss', { admin: true, email: 'boss@example.com' }).firestore();
 const anon = () => env.unauthenticatedContext().firestore();
 
 test('signed-out users read nothing', async () => {
@@ -71,7 +71,10 @@ test('quota and audit log are not writable, quota readable by owner', async () =
   await assertFails(setDoc(doc(user(), 'users/u1/private/quota'), { day: 'y' }));
   await assertFails(getDoc(doc(user(), 'auditLog/a')));
   await assertSucceeds(getDoc(doc(admin(), 'auditLog/a')));
-  await assertFails(setDoc(doc(admin(), 'auditLog/b'), { actor: 'x' }));
+  await assertFails(setDoc(doc(admin(), 'auditLog/b'), { actor: 'someone-else', action: 'x', target: 'y', at: 1 }));
+  await assertFails(setDoc(doc(user(), 'auditLog/c'), { actor: 'boss@example.com', action: 'x', target: 'y', at: 1 }));
+  await assertSucceeds(setDoc(doc(admin(), 'auditLog/d'), { actor: 'boss@example.com', action: 'x', target: 'y', at: 1 }));
+  await assertFails(updateDoc(doc(admin(), 'auditLog/d'), { action: 'edited' }));
 });
 
 test('unknown collections stay locked', async () => {

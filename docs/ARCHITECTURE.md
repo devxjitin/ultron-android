@@ -485,7 +485,7 @@ DNS name.com par hi rakho (free hai). Records:
 | **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore (naya package optional) | 1 hafta |
 | **2. Backend (core done)** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
 | **3. Remote content (core done, section 17)** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
-| **4. Console** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
+| **4. Console (started, section 18)** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
 | **5. App refactor** | Hilt, modules, `VoiceSessionService`, `ToolRegistry`, `ConnectorRegistry`, `PermissionBroker`, onboarding | 2-3 hafte (feature by feature, har step par tests) |
 | **6. Website launch** | `devxjitin.dev` landing, download page (SHA-256, signing fingerprint), privacy policy, terms, Play Protect aur "unknown app" FAQ, in-app updater test, Android developer verification rules check | 1-2 hafte |
 
@@ -590,3 +590,19 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | Firestore App Check | **ENFORCED (2026-11-02).** Dhyan: future admin web console ko reCAPTCHA App Check chahiye hoga |
 | Phone verify | **Ho gaya (2026-11-02).** `prompts/v2` publish karke `config/active` badla, phone par naya greeting aaya. Stored default prompt/greeting ab remote ko nahi dabate (PR 23) |
 | Baaki | Skills ka remote version (locked skills bundled rahengi), `embed` route aur Lambda me App Check verification |
+
+---
+
+## 18. Phase 4 status (branch `phase4-console`, 2026-11-02)
+
+| Item | Status |
+|---|---|
+| App | `console/` (Vite + React + TypeScript + Firebase JS SDK). Google login, `admin` claim na ho to "Not authorized" |
+| Pages | Dashboard (active prompt, version count, shortcut links), Prompts (list, edit as new draft, publish, rollback, confirm dialog), Audit log |
+| Publish model | Edit hamesha naya draft version banata hai. Publish ek batch me version ko `published` karta hai, `config/active` badalta hai aur audit entry likhta hai |
+| Audit log | Rules ab admin ko append-only `create` dene dete hain (actor apna email, `update/delete` band). Rules tests update kiye |
+| Hosting | Site `ultron-control` (`https://ultron-control.web.app`), headers: X-Frame-Options DENY, nosniff, no-referrer |
+| App Check (web) | reCAPTCHA Enterprise key `ultron-console` (domains: console.devxjitin.dev, ultron-control.web.app, localhost), web app par register, Firestore enforcement ke saath chalta hai. Dev me debug token |
+| Custom domain | `console.devxjitin.dev` Hosting me add hua. **name.com par CNAME baaki:** `console` -> `ultron-control.web.app` |
+| Auth domain | `console.devxjitin.dev` authorized domains me add |
+| Baaki | Skills, connectors, announcements, users pages. Releases/channel promote. Remote Config editor (abhi Firebase console ka link) |

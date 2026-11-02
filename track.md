@@ -493,3 +493,5 @@
 [2026-11-02 17:55] [Claude] [Fix: saved default greeting/prompt remote content ko override kar rahe the]
 [2026-11-02 18:40] [Claude] [Docs: remote prompt v2 phone par verify hua, Phase 3 core complete]
 [2026-11-02 19:05] [Claude] [Update: config/active wapas v1 par (rollback test greeting)]
+[2026-11-02 19:50] [Claude] [Add: Phase 4 admin console (Vite+React), hosting ultron-control, reCAPTCHA App Check, audit rules]
+[2026-11-02 20:40] [Claude] [Update: publish-ota ab console/rules/contracts/infra/mcp changes par OTA nahi banata]
