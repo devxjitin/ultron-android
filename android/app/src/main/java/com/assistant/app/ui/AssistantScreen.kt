@@ -144,6 +144,8 @@ fun AssistantScreen(
     onDismissKnowledgeDocumentError: () -> Unit,
     onDismissToast: () -> Unit,
     voiceLevel: () -> Float = { 0f },
+    account: AccountSummary? = null,
+    onSignOut: () -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(com.assistant.app.ui.theme.AssistantBackground)) {
         val availableHeight = maxHeight
@@ -336,7 +338,9 @@ fun AssistantScreen(
                     onResetKnowledge = onResetKnowledge,
                     onUploadMarkdownFile = onUploadMarkdownFile,
                     onDismissKnowledgeDocumentError = onDismissKnowledgeDocumentError,
-                    onDismiss = onDismissSettings
+                    onDismiss = onDismissSettings,
+                    account = account,
+                    onSignOut = onSignOut
                 )
             }
 

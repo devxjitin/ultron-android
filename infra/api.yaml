@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release and web-extract Lambdas.
+Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release, web-extract and billing Lambdas.
 # Deploy without the SAM CLI (build the web-extract zip first):
 #   python mcp/web-extract/build.py
 #   aws cloudformation package --template-file infra/api.yaml --s3-bucket <bucket> --s3-prefix cfn --output-template-file packaged.yaml
@@ -25,6 +25,22 @@ Parameters:
     Type: String
     Default: ""
     Description: ACM certificate (same region) for DomainName.
+  RazorpayPlanMonthly:
+    Type: String
+    Default: ""
+    Description: Razorpay plan id for Rs 199 every month (scripts/razorpay-plans.py prints it).
+  RazorpayPlanHalfYearly:
+    Type: String
+    Default: ""
+    Description: Razorpay plan id for Rs 999 every 6 months.
+  RazorpayPlanYearly:
+    Type: String
+    Default: ""
+    Description: Razorpay plan id for Rs 1799 every year.
+  RazorpaySecretPrefix:
+    Type: String
+    Default: /ultron/razorpay
+    Description: SSM path holding key_id, key_secret and webhook_secret as SecureString parameters.
 
 Conditions:
   HasDomain: !And
@@ -131,6 +147,92 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/lambda/${WebExtractFunction}"
       RetentionInDays: 14
+
+  # One item per Firebase user: their Razorpay subscription and how long it is paid for.
+  SubscriptionsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: ultron-subscriptions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: uid
+          AttributeType: S
+      KeySchema:
+        - AttributeName: uid
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: project
+          Value: ultron
+
+  BillingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ultron-api-billing
+      CodeUri: ../mcp/billing/
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 20
+      Environment:
+        Variables:
+          TABLE: !Ref SubscriptionsTable
+          PLAN_MONTHLY: !Ref RazorpayPlanMonthly
+          PLAN_HALFYEARLY: !Ref RazorpayPlanHalfYearly
+          PLAN_YEARLY: !Ref RazorpayPlanYearly
+          SECRET_PREFIX: !Ref RazorpaySecretPrefix
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SubscriptionsTable
+        - Statement:
+            - Effect: Allow
+              Action: [ssm:GetParameters]
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RazorpaySecretPrefix}/*"
+            # SecureString parameters use the account's default aws/ssm key.
+            - Effect: Allow
+              Action: [kms:Decrypt]
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
+      Events:
+        Status:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/billing/status
+            Method: GET
+        Subscribe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/billing/subscribe
+            Method: POST
+        Verify:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/billing/verify
+            Method: POST
+        # Razorpay has no Firebase token; the Lambda checks the webhook signature instead.
+        Webhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/billing/webhook
+            Method: POST
+            Auth:
+              Authorizer: NONE
+
+  BillingLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${BillingFunction}"
+      RetentionInDays: 30
 
 Outputs:
   ApiUrl:

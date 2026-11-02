@@ -606,3 +606,47 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | Custom domain | `console.devxjitin.dev` Hosting me add hua. **name.com par CNAME baaki:** `console` -> `ultron-control.web.app` |
 | Auth domain | `console.devxjitin.dev` authorized domains me add |
 | Baaki | Skills, connectors, announcements, users pages. Releases/channel promote. Remote Config editor (abhi Firebase console ka link) |
+
+---
+
+## 19. Decision: sab hardcoded, console band, Razorpay subscription (2026-11-02)
+
+Section 6 aur 18 ka remote-content plan wapas liya. Wajah ye thi ki non-technical user phone par prompt, API key ya
+skills badal ke agent bigaad sakta tha, aur remote content ke liye console, rules aur contracts ka bojh bhi tha. Ab jo
+cheez agent ka behaviour tay karti hai wo APK ke andar hai, aur badlav sirf naye build se jaata hai (merge to `main`,
+CI OTA publish karta hai).
+
+| Item | Ab |
+|---|---|
+| Prompt, naam, greeting, model, timeouts | Code me fixed (`AppSettingsStore`, `AssistantOptions`, `AssistantViewModel` constants). Remote Config aur Firestore app se hat gaye |
+| Skills | Sirf `assets/skills/` wali built-in skills. Skills page, user skills aur on/off switch hata diye |
+| API keys | `GEMINI_API_KEY` aur `KNOWLEDGE_API_KEY` `local.properties` se build time par. Developer page hata diya |
+| User kya badal sakta hai | Connectors on/off, apna naam, voice, language, mic, barge-in, memories, knowledge documents |
+| Console | `console/`, `contracts/`, `rules-tests/`, hosting config aur Remote Config template hata diye. Firestore rules ab deny-all |
+| Releases | `ultron-api-releases` (`/v1/releases/latest`) rehta hai, OTA update isi se aata hai. Console wala admin Lambda kabhi `main` me nahi aaya |
+| Login | Google sign-in (Credential Manager + Firebase Auth). Anonymous user ko link karke same uid rakha jata hai. Subscription Google account se judi hai, reinstall par wapas milti hai |
+| Subscription | Razorpay: 1 month Rs 199, 6 months Rs 999, 1 year Rs 1799, auto-renew. Bina active plan ke app lock (koi free trial nahi) |
+| Billing backend | `mcp/billing` Lambda (`ultron-api-billing`) + DynamoDB `ultron-subscriptions` (uid key). Routes `/v1/billing/status`, `subscribe`, `verify` (Firebase JWT) aur `webhook` (Razorpay signature, bina JWT) |
+| Trust | Verify aur webhook dono Razorpay se subscription dobara padhte hain, request body par bharosa nahi. Checkout signature HMAC se check hota hai |
+| Offline | Server ka last answer cache hota hai, paid cycle khatam hone tak offline bhi app khulti hai |
+
+Setup jo abhi baaki hai (ek baar):
+
+1. Firebase console me Authentication > Google provider on karo, OTA aur release keystore ka SHA-1 add karo, web client id
+   ko `local.properties` aur CI secret `LOCAL_PROPERTIES` me `GOOGLE_WEB_CLIENT_ID=...` daalo.
+2. `KNOWLEDGE_API_KEY=...` bhi wahin daalo (nahi diya to `GEMINI_API_KEY` use hoga).
+3. Razorpay test keys se plans banao: `python scripts/razorpay-plans.py`, teen plan id milenge.
+4. SSM me SecureString parameters: `/ultron/razorpay/key_id`, `key_secret`, `webhook_secret`.
+5. `ultron-api` stack teen plan id parameters ke saath deploy karo.
+6. Razorpay dashboard me webhook `https://api.devxjitin.dev/v1/billing/webhook`, subscription events, wahi webhook secret.
+
+Status (2026-11-02): step 3, 4 aur 5 ho gaye (test mode). Plans `plan_TvLmXcUby3aa5w` (monthly),
+`plan_TvLmXs3OS99lzM` (6 months), `plan_TvLmY52xpcSDdR` (yearly). SSM me teeno parameters, `ultron-api` stack deploy
+(billing Lambda + table add, console wala admin Lambda hata). Step 6 (Razorpay webhook, test mode) bhi ho gaya. Step 1: Google provider pehle se on tha, `GOOGLE_WEB_CLIENT_ID`
+local.properties aur CI secret me daal diya. **Atka hua:** debug keystore ka SHA-1 Ultron Firebase app me add nahi hota,
+kyunki `com.assistant.app` + is SHA-1 ka Android OAuth client kisi doosre Google Cloud project me hai (nira-695fe aur
+voice-assistant-studio me nahi mila). Wo client hataye bina Google sign-in phone par fail hoga. Step 2
+(`KNOWLEDGE_API_KEY`) baaki, uske bina knowledge search band rahega.
+
+Seema: Gemini call Firebase AI Logic se seedha phone se jaati hai, to lock app ke andar hai, server par nahi. Patch kiya
+hua APK lock tod sakta hai. Pakka server-side lock chahiye to Gemini ko apne backend ke peeche le jaana hoga (alag kaam).
