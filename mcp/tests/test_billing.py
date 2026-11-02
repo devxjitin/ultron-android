@@ -192,6 +192,80 @@ class BillingTests(unittest.TestCase):
     def test_unrelated_webhook_events_are_ignored(self):
         self.assertEqual((200, {"ignored": True}), self.webhook({"event": "payment.captured", "payload": {}}))
 
+    def test_status_rereads_razorpay_when_the_paid_cycle_ended_long_ago(self):
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))
+        self.pay("sub_1", current_end=int(time.time()) - 5 * 86_400)
+        self.webhook(self.event_for("sub_1"))
+        # The halted event never arrived; Razorpay itself already knows.
+        self.pay("sub_1", status="halted", current_end=int(time.time()) - 5 * 86_400)
+        status = call(request("GET", "/v1/billing/status"))[1]
+        self.assertFalse(status["active"])
+        self.assertEqual("halted", status["status"])
+
+    def test_status_keeps_a_paying_user_active_when_razorpay_is_down(self):
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))
+        self.pay("sub_1", current_end=int(time.time()) - 5 * 86_400)
+        self.webhook(self.event_for("sub_1"))
+
+        def down(method, path, payload=None):
+            raise billing.urllib.error.URLError("down")
+        billing._razorpay = down
+        self.assertTrue(call(request("GET", "/v1/billing/status"))[1]["active"])
+
+    def test_subscribing_twice_for_the_same_plan_reuses_the_unpaid_subscription(self):
+        first = call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))[1]
+        second = call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))[1]
+        self.assertEqual(first["subscriptionId"], second["subscriptionId"])
+        self.assertEqual(1, len(self.razorpay.subscriptions))
+
+    def test_subscribing_notices_a_payment_whose_webhook_was_missed(self):
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))
+        self.pay("sub_1")
+        self.assertEqual(409, call(request("POST", "/v1/billing/subscribe", {"plan": "yearly"}))[0])
+
+    def test_pending_leftover_is_cancelled_before_a_new_subscription(self):
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))
+        self.razorpay.subscriptions["sub_1"].update(status="pending", current_end=0)
+        self.razorpay.cancelled = []
+        original = self.razorpay.__call__
+
+        def with_cancel(method, path, payload=None):
+            if path.endswith("/cancel"):
+                self.razorpay.cancelled.append(path)
+                return {}
+            return original(method, path, payload)
+        billing._razorpay = with_cancel
+        self.assertEqual(200, call(request("POST", "/v1/billing/subscribe", {"plan": "yearly"}))[0])
+        self.assertEqual(["/subscriptions/sub_1/cancel"], self.razorpay.cancelled)
+
+    def test_payment_on_an_abandoned_older_try_still_unlocks(self):
+        call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))
+        # A second subscription replaced the first in the table, but the user paid the first one.
+        self.razorpay.subscriptions["sub_2"] = {"id": "sub_2", "status": "created", "current_end": None,
+                                                "notes": {"uid": "user-1", "plan": "yearly"}}
+        billing._record("user-1", self.razorpay.subscriptions["sub_2"])
+        self.pay("sub_1")
+        self.webhook(self.event_for("sub_1"))
+        status = call(request("GET", "/v1/billing/status"))[1]
+        self.assertTrue(status["active"])
+        self.assertEqual("monthly", status["plan"])
+
+    def test_missing_secrets_refuse_instead_of_signing_with_an_empty_key(self):
+        billing._secrets = {"key_id": "rzp_test_key"}
+        raw = json.dumps(self.event_for("sub_1"))
+        empty_sig = hmac.new(b"", raw.encode(), hashlib.sha256).hexdigest()
+        code, _ = call(request("POST", "/v1/billing/webhook", uid="", raw=raw, headers={"X-Razorpay-Signature": empty_sig}))
+        self.assertEqual(503, code)
+        forged = {"paymentId": "p", "subscriptionId": "sub_1",
+                  "signature": hmac.new(b"", b"p|sub_1", hashlib.sha256).hexdigest()}
+        self.assertEqual(503, call(request("POST", "/v1/billing/verify", forged))[0])
+
+    def test_network_failure_to_razorpay_is_a_502(self):
+        def down(method, path, payload=None):
+            raise billing.urllib.error.URLError("timeout")
+        billing._razorpay = down
+        self.assertEqual(502, call(request("POST", "/v1/billing/subscribe", {"plan": "monthly"}))[0])
+
     def test_unknown_route_is_not_found(self):
         self.assertEqual(404, call(request("GET", "/v1/billing/nope"))[0])
 

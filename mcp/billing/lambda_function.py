@@ -33,6 +33,8 @@ PLANS = {
 PAID_STATUSES = {"active", "authenticated"}
 # Statuses after which a new subscription may be started.
 FINISHED_STATUSES = {"cancelled", "completed", "expired", "halted"}
+# A paid-looking record is re-read from Razorpay once its cycle ended this long ago without a newer event.
+STALE_GRACE_SECONDS = 2 * 86_400
 SUBSCRIPTION_EVENTS = {
     "subscription.authenticated", "subscription.activated", "subscription.charged", "subscription.pending",
     "subscription.halted", "subscription.cancelled", "subscription.completed", "subscription.paused",
@@ -61,6 +63,17 @@ def _secret(name):
         found = boto3.client("ssm").get_parameters(Names=names, WithDecryption=True)["Parameters"]
         _secrets = {p["Name"].rsplit("/", 1)[1]: p["Value"] for p in found}
     return _secrets.get(name, "")
+
+
+class SecretMissing(Exception):
+    """An SSM parameter is absent or empty; billing must refuse to run instead of signing with an empty key."""
+
+
+def _require(name):
+    value = _secret(name)
+    if not value:
+        raise SecretMissing(name)
+    return value
 
 
 def _resp(status, body):
@@ -96,7 +109,7 @@ def _signed_in_with_google(event):
 
 
 def _razorpay(method, path, payload=None):
-    auth = base64.b64encode(f"{_secret('key_id')}:{_secret('key_secret')}".encode()).decode()
+    auth = base64.b64encode(f"{_require('key_id')}:{_require('key_secret')}".encode()).decode()
     data = json.dumps(payload).encode() if payload is not None else None
     request = urllib.request.Request(RAZORPAY_API + path, data=data, method=method, headers={
         "Authorization": f"Basic {auth}", "Content-Type": "application/json"})
@@ -104,9 +117,8 @@ def _razorpay(method, path, payload=None):
         return json.loads(response.read())
 
 
-def _record(uid, subscription):
-    """Stores what Razorpay says about [subscription] for [uid] and returns the status view."""
-    item = {
+def _item(uid, subscription):
+    return {
         "uid": uid,
         "subscriptionId": subscription["id"],
         "plan": (subscription.get("notes") or {}).get("plan", ""),
@@ -114,8 +126,23 @@ def _record(uid, subscription):
         "currentEnd": int(subscription.get("current_end") or 0),
         "updatedAt": int(time.time()),
     }
+
+
+def _record(uid, subscription):
+    """Stores what Razorpay says about [subscription] for [uid] and returns the status view."""
+    item = _item(uid, subscription)
     _db().put_item(Item=item)
     return _view(item)
+
+
+def _refresh(item):
+    """Reads the stored subscription back from Razorpay and stores the answer. Falls back to [item] if Razorpay is down,
+    so a Razorpay outage does not lock paying users."""
+    try:
+        return _item(item["uid"], _razorpay("GET", f"/subscriptions/{item['subscriptionId']}")) | {"uid": item["uid"]}
+    except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+        print(f"Could not refresh {item.get('subscriptionId')}: {e!r}")
+        return item
 
 
 def _view(item):
@@ -132,8 +159,20 @@ def _stored(uid):
     return _db().get_item(Key={"uid": uid}).get("Item")
 
 
+def _is_stale(item):
+    """Marked paid, but its cycle ended long ago and no event has moved it on: a webhook was probably missed."""
+    end = int(item.get("currentEnd") or 0)
+    return item.get("status") in PAID_STATUSES and 0 < end and end + STALE_GRACE_SECONDS < time.time()
+
+
 def status(event):
-    return _resp(200, _view(_stored(_uid(event))))
+    item = _stored(_uid(event))
+    if item and _is_stale(item):
+        fresh = _refresh(item)
+        if fresh is not item:
+            _db().put_item(Item=fresh)
+        item = fresh
+    return _resp(200, _view(item))
 
 
 def subscribe(event):
@@ -148,8 +187,23 @@ def subscribe(event):
     if not plan_id:
         return _resp(503, {"error": "plan not set up"})
     current = _stored(uid)
+    if current and current.get("status") not in FINISHED_STATUSES:
+        # A leftover from an earlier try. Its payment may have landed without a webhook, so look at Razorpay first.
+        fresh = _refresh(current)
+        if fresh is not current:
+            _db().put_item(Item=fresh)
+            current = fresh
     if current and _view(current)["active"]:
         return _resp(409, {"error": "already subscribed", **_view(current)})
+    if current and current.get("status") == "created" and current.get("plan") == body["plan"]:
+        # Same plan, never paid: hand the same subscription back instead of piling up new ones on a double tap.
+        return _resp(200, {"subscriptionId": current["subscriptionId"], "keyId": _require("key_id")})
+    if current and current.get("status") not in FINISHED_STATUSES | {"created"}:
+        # Authenticated/pending/paused leftovers hold a mandate on the customer's account; end it before starting another.
+        try:
+            _razorpay("POST", f"/subscriptions/{current['subscriptionId']}/cancel", {"cancel_at_cycle_end": 0})
+        except urllib.error.HTTPError as e:
+            print(f"Could not cancel {current['subscriptionId']}: {e.code} {e.read()[:300]!r}")
     subscription = _razorpay("POST", "/subscriptions", {
         "plan_id": plan_id,
         "total_count": plan["total_count"],
@@ -157,7 +211,7 @@ def subscribe(event):
         "notes": {"uid": uid, "plan": body["plan"]},
     })
     _record(uid, subscription)
-    return _resp(200, {"subscriptionId": subscription["id"], "keyId": _secret("key_id")})
+    return _resp(200, {"subscriptionId": subscription["id"], "keyId": _require("key_id")})
 
 
 def verify(event):
@@ -167,7 +221,7 @@ def verify(event):
     if not (payment_id and subscription_id and signature):
         return _resp(400, {"error": "paymentId, subscriptionId and signature are required"})
     # Checkout signs payment_id|subscription_id with the key secret.
-    expected = hmac.new(_secret("key_secret").encode(), f"{payment_id}|{subscription_id}".encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(_require("key_secret").encode(), f"{payment_id}|{subscription_id}".encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         return _resp(400, {"error": "signature mismatch"})
     subscription = _razorpay("GET", f"/subscriptions/{subscription_id}")
@@ -179,7 +233,7 @@ def verify(event):
 def webhook(event):
     headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
     raw = _raw_body(event)
-    expected = hmac.new(_secret("webhook_secret").encode(), raw, hashlib.sha256).hexdigest()
+    expected = hmac.new(_require("webhook_secret").encode(), raw, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, headers.get("x-razorpay-signature", "")):
         return _resp(400, {"error": "bad signature"})
     try:
@@ -198,9 +252,11 @@ def webhook(event):
     if not uid:
         return _resp(200, {"ignored": True})
     stored = _stored(uid)
-    # A webhook for an older, finished subscription must not overwrite the user's newer one.
-    if stored and stored.get("subscriptionId") != subscription_id and stored.get("status") not in FINISHED_STATUSES:
-        return _resp(200, {"ignored": True})
+    # A different subscription only replaces the stored one when the stored one is not paid and this one is: an old
+    # finished subscription must not overwrite a newer paid one, but a payment that landed on an abandoned try must count.
+    if stored and stored.get("subscriptionId") != subscription_id:
+        if _view(stored)["active"] or not _view(_item(uid, subscription))["active"]:
+            return _resp(200, {"ignored": True})
     _record(uid, subscription)
     return _resp(200, {"ok": True})
 
@@ -222,6 +278,12 @@ def lambda_handler(event, context):
         return _resp(401, {"error": "sign in required"})
     try:
         return handler(event)
+    except SecretMissing as e:
+        print(f"Billing secret missing: {e}")
+        return _resp(503, {"error": "billing not set up"})
     except urllib.error.HTTPError as e:
         print(f"Razorpay error {e.code}: {e.read()[:500]!r}")
+        return _resp(502, {"error": "payment provider error"})
+    except (urllib.error.URLError, OSError, KeyError, ValueError) as e:
+        print(f"Billing failure on {event.get('rawPath')}: {e!r}")
         return _resp(502, {"error": "payment provider error"})
