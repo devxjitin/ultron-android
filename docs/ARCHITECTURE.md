@@ -473,8 +473,8 @@ DNS name.com par hi rakho (free hai). Records:
 
 | Phase | Kaam | Andaza |
 |---|---|---|
-| **0. Security** | S1 root se IAM Identity Center, S6 API key restriction, S7 Firestore cleanup, Budgets alarm, `google-workspace-mcp` aur unused Function URLs band | 1 din |
-| **1. Foundation** | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore, naya package + flavors skeleton | 1 hafta |
+| **0. Security** (ho gaya, section 13) | S1 root se IAM Identity Center, S6 API key restriction, S7 Firestore cleanup, Budgets alarm, `google-workspace-mcp` aur unused Function URLs band | 1 din |
+| **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore, naya package + flavors skeleton | 1 hafta |
 | **2. Backend** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
 | **3. Remote content** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
 | **4. Console** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
@@ -487,12 +487,34 @@ Har phase alag branch + PR, aur Phase 0 sabse pehle kyunki wo aaj ka risk hai.
 
 ## 13. Phase 0 status (2026-11-02)
 
+Phase 0 ka kaam ho gaya hai, do cheezein aise hain jinhe aapne kiya aur maine console se verify nahi kiya (neeche likhi hain).
+
 | Item | Status |
 |---|---|
-| Budget alarm | Naya `ultron-monthly` $20 banaya (credits count nahi hote). Alerts devxjitin@gmail.com par 25% ($5), 80% actual aur 100% forecast par. `trustid-monthly` ko haath nahi lagaya. Ye account-wide hai, kyunki is account me doosre projects bhi hain |
+| Budget alarm | Ho gaya. Naya `ultron-monthly` $20 (credits count nahi hote). Alerts devxjitin@gmail.com par 25% ($5), 80% actual aur 100% forecast par. `trustid-monthly` ko haath nahi lagaya. Ye account-wide hai, kyunki is account me doosre projects bhi hain |
 | Root account (S1) | Ho gaya. Root par MFA on, root keys nahi. CLI ab IAM user `jitin-admin` se chalta hai (`aws sts get-caller-identity` se verify kiya) |
-| `google-workspace-mcp` | Reserved concurrency 0 kar di, yaani koi request nahi chalegi. Function aur URL delete nahi kiye, undo: `aws lambda delete-function-concurrency --function-name google-workspace-mcp --region us-east-1`. Phase 2 me delete karenge |
-| `ultron-updates`, `web-extract-mcp` | Abhi band nahi kar sakte, live app inhe use karti hai. Phase 2 me API Gateway par shift hone ke baad band honge |
+| `google-workspace-mcp` | Reserved concurrency 0 hai, yaani koi request nahi chalegi. Function aur URL delete nahi kiye. Undo: `aws lambda delete-function-concurrency --function-name google-workspace-mcp --region us-east-1`. Phase 2 me delete hoga |
+| `ultron-updates`, `web-extract-mcp` | Abhi band nahi, live app inhe use karti hai. Phase 2 me API Gateway par shift hone ke baad band honge |
+| S6 API key restriction | Aapne Google Cloud Console me Android app (package `com.assistant.app` + debug key SHA-1) tak restrict ki. **Maine console se verify nahi kiya.** Phone par voice session chal jaye to sahi hai |
+| S7 Firestore | Rules `firestore.rules` se deploy hue (sab read/write band). Bina login ke `remote/prompts` par `403 PERMISSION_DENIED` aata hai (verify kiya). Purana `remote` aur `remote_skills` data delete commands exit 0 se chale, **console me refresh karke confirm karna baaki hai** |
 | `android/local.properties` | Stale `GOOGLE_MCP_URL` line hai (gitignored, app padhti nahi), aap hata sakte ho |
-| S6 Firebase/GCP API key restriction | Aapko Google Cloud Console me karna hai: APIs & Services > Credentials > key `AIzaSyCiv...` > Application restrictions = Android apps (package `com.assistant.app` + SHA-1 of the signing key), API restrictions = Firebase AI Logic, Firebase Installations, FCM registration |
-| S7 Firestore cleanup | Purana `remote/prompts` aur `remote_skills` data delete karna hai ya nahi, ye aapka decision hai. App ab Firestore padhti hi nahi. Rules ko closed rakhne ke liye `match /{document=**} { allow read, write: if false; }` deploy karna safe hai |
+
+---
+
+## 14. Phase 1 status (branch `phase1-foundation`)
+
+Commits `194d203` (docs aur Firestore rules) aur `7e52801` (app code). Push ya PR abhi nahi hua, `main` par kuch nahi gaya.
+
+| Item | Status |
+|---|---|
+| App Check in app | Code me. `UltronApp` startup par provider install karta hai. Debug build debug provider, OTA/release Play Integrity (`src/debug`, `src/ota`, `src/release` me `AppCheckInstaller`) |
+| Firebase Auth | Code me. Anonymous sign-in startup par, Firebase config na ho to skip, fail ho to sirf log |
+| Crashlytics, Analytics | Dependencies aur Gradle plugin add. Crashlytics plugin sirf tab lagta hai jab `google-services.json` ho |
+| PR checks | `.github/workflows/checks.yml`, PR par unit tests, lint aur Lambda tests |
+| Verification | `compileDebugKotlin`, `compileOtaKotlin` aur `testDebugUnitTest` pass. Lint aur phone par test nahi hua |
+| Firebase console steps | **Baaki (aap)**: Anonymous auth enable, SHA-256 `FB:11:8C:42:FC:C4:E6:19:6F:34:9D:52:66:FE:C7:FD:6B:49:F6:E1:6C:EC:0C:B7:C0:E7:5B:4F:53:CB:D0:0C` Firebase app me add, App Check me Play Integrity register aur debug token add, Crashlytics enable |
+| App Check enforcement | **Abhi on mat karo.** Pehle phone par voice session test karo, phir AI Logic aur Firestore par enforce karo |
+| Release keystore | **Baaki.** Asli release key banani hai, aapke decision ke saath, key kabhi khoni nahi chahiye |
+| Naya package name aur flavors | **Baaki.** `dev.devxjitin.ultron` par jane se purani install update nahi hogi, naya Firebase app aur naya SHA chahiye. Aapka decision |
+
+**Dhyan:** `main` par push karte hi OTA APK sab phones par jaata hai (`publish-ota.yml`). Isliye PR banao, test karo, phir merge.
