@@ -725,6 +725,15 @@ deploy, kuch din log dekho (`App Check missing token` kam hote jaana chahiye), s
 12 tests), to enforce se pehle log me `bad signature` ya `wrong audience` na dikhe ye zaroor dekho. Anonymous users ko
 rokna aur billing route par check abhi nahi hai. Billing ko JWT hi kaafi hai kyunki Razorpay se khud verify hota hai.
 
+**Chautha code fix (branch `sms-call-confirm`, T5 ka hissa, phone par test nahi hua).** `ActionGuard`: jab pichle 5
+minute me koi untrusted text model tak pahuncha ho (SMS, notification, web page, YouTube, GitHub, jiska result "untrusted
+content" marker ke saath aata hai), tab `send_sms`, `send_sms_contact`, `call_contact` aur `dial_number` ek on-screen
+dialog (recipient aur poora message dikhta hai) par Allow ka wait karte hain. 45 second me tap na aaye, ya app screen par
+na ho, to refuse, aur model ko `status=denied` milta hai. Voice "haan" kaafi nahi maana, kyunki wahi text use bol sakta hai.
+**Abhi nahi hua:** accessibility write actions (click, type, tap) par confirmation, SMS counter (`SmsRules`) ka restart
+par reset hona, aur naye ya international number par hamesha confirm. Screen tools ko jaan-boojh kar guard nahi kiya, kyunki
+WhatsApp jaisi skills har click par tap maangti. 6 unit tests, `testDebugUnitTest` aur `compileOtaKotlin` pass.
+
 Jo sahi hai. Webhook HMAC + `compare_digest`, verify aur webhook dono Razorpay se dobara padhte hain, `notes.uid` se
 ownership check, Google account zaroori (anonymous nahi khareed sakta), secrets SSM SecureString me, DynamoDB PITR aur
 encryption on.

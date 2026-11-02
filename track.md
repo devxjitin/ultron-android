@@ -506,3 +506,4 @@
 [2026-11-02 21:58] [Claude] [Fix: billing Lambda stale-active reconcile, subscribe reuse/cancel, fail-closed secrets, 8 tests]
 [2026-11-02 22:05] [Claude] [Add: billing daily sweep Lambda event, route throttles in api.yaml, test]
 [2026-11-02 22:08] [Claude] [Add: App Check token verify in web-extract + releases Lambdas (log mode), app sends header]
+[2026-11-02 22:13] [Claude] [Add: on-screen confirm for SMS/calls after untrusted content (ActionGuard)]
