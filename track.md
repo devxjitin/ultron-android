@@ -481,3 +481,4 @@
 [2026-11-02 10:32] [Claude] [Docs: ARCHITECTURE.md website distribution ke hisaab se, play flavor hata, section 15]
 [2026-11-02 10:54] [Claude] [Update: phase1-foundation main me merge, OTA se phone par live, user ne phone par check kiya]
 [2026-11-02 11:03] [Claude] [Docs: App Check verification ho gaya, enforcement baaki, ARCHITECTURE.md status]
+[2026-11-02 11:32] [Claude] [Add: Phase 2, ultron-api stack (HTTP API + Firebase JWT), Lambdas JWT mode, app ApiClient, purana path fallback]

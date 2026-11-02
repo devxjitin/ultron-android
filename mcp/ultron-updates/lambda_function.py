@@ -1,6 +1,6 @@
 """Tells the Ultron app whether a newer build exists and hands out a short-lived download link for it.
 
-GET /<ACCESS_TOKEN>/latest  ->  contents of s3://BUCKET/latest.json plus `apkUrl`, a presigned link to the APK.
+GET /v1/releases/latest (JWT_AUTH=1, behind API Gateway) or GET /<ACCESS_TOKEN>/latest (legacy Function URL)  ->  contents of s3://BUCKET/latest.json plus `apkUrl`, a presigned link to the APK.
 The bucket stays private (the APK holds connector secrets), so the link expires after 30 minutes.
 The link uses S3 Transfer Acceleration (enabled on the bucket), so phones far from us-east-1 download
 through the nearest AWS edge.
@@ -26,10 +26,19 @@ def _resp(status, body):
     return {"statusCode": status, "headers": {"content-type": "application/json"}, "body": json.dumps(body)}
 
 
-def lambda_handler(event, context):
-    parts = [p for p in event.get("rawPath", "").split("/") if p]
+def _routed(event):
+    """Behind API Gateway the Firebase token was already checked there, so only the route matters (JWT_AUTH=1).
+    Without it the older Function URL mode still needs the secret first path segment."""
+    path = event.get("rawPath", "")
+    if os.environ.get("JWT_AUTH") == "1":
+        return path == "/v1/releases/latest"
+    parts = [p for p in path.split("/") if p]
     token = os.environ.get("ACCESS_TOKEN", "")
-    if len(parts) != 2 or parts[1] != "latest" or not token or not hmac.compare_digest(parts[0], token):
+    return len(parts) == 2 and parts[1] == "latest" and bool(token) and hmac.compare_digest(parts[0], token)
+
+
+def lambda_handler(event, context):
+    if not _routed(event):
         return _resp(404, {"error": "not found"})
     try:
         info = json.loads(s3.get_object(Bucket=BUCKET, Key="latest.json")["Body"].read())

@@ -76,6 +76,22 @@ class RpcEnvelopeTests(unittest.TestCase):
         self.assertEqual(404, response["statusCode"])
 
 
+class JwtModeTests(unittest.TestCase):
+    """Behind API Gateway the route decides, not a secret path segment."""
+
+    def setUp(self):
+        os.environ["JWT_AUTH"] = "1"
+        self.addCleanup(os.environ.pop, "JWT_AUTH", None)
+
+    def test_the_web_route_runs_without_a_secret_segment(self):
+        response = web.lambda_handler(event("/v1/web/mcp", {"jsonrpc": "2.0", "id": 1, "method": "ping"}), None)
+        self.assertEqual(200, response["statusCode"])
+
+    def test_other_paths_are_not_found_even_with_the_old_secret(self):
+        self.assertEqual(404, web.lambda_handler(event(f"/{SECRET}", {}), None)["statusCode"])
+        self.assertEqual(404, web.lambda_handler(event("/v1/other", {}), None)["statusCode"])
+
+
 class GoogleToolTests(unittest.TestCase):
     existing_events = []
 

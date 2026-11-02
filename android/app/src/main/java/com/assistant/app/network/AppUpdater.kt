@@ -36,15 +36,27 @@ object AppUpdater {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    val isConfigured: Boolean get() = BuildConfig.UPDATE_URL.isNotBlank()
+    val isConfigured: Boolean get() = ApiClient.isConfigured || BuildConfig.UPDATE_URL.isNotBlank()
 
     /** Success(null) means this build is already the newest one (or nothing has been published yet). */
     suspend fun check(): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
         runCatching {
-            http.newCall(Request.Builder().url(BuildConfig.UPDATE_URL).build()).execute().use { response ->
-                if (response.code == 404) return@runCatching null
-                if (!response.isSuccessful) error("The update server answered HTTP ${response.code}.")
-                val json = JSONObject(response.body?.string().orEmpty())
+            var lastFailure: Throwable? = null
+            for (request in latestRequests()) {
+                val body = try {
+                    http.newCall(request).execute().use { response ->
+                        when {
+                            response.code == 404 -> return@runCatching null
+                            !response.isSuccessful -> error("The update server answered HTTP ${response.code}.")
+                            else -> response.body?.string().orEmpty()
+                        }
+                    }
+                } catch (e: Exception) {
+                    // The Ultron API is tried first; if it cannot answer, the older server gets a turn.
+                    lastFailure = e
+                    continue
+                }
+                val json = JSONObject(body)
                 val info = UpdateInfo(
                     versionCode = json.getInt("versionCode"),
                     versionName = json.optString("versionName"),
@@ -53,9 +65,20 @@ object AppUpdater {
                     sizeBytes = json.optLong("sizeBytes"),
                     apkUrl = json.getString("apkUrl")
                 )
-                info.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+                return@runCatching info.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+            }
+            throw lastFailure ?: IllegalStateException("No update server is set up in this build.")
+        }
+    }
+
+    /** The Ultron API first (needs the user's Firebase token), then the older secret-URL server when the build has one. */
+    private fun latestRequests(): List<Request> = buildList {
+        if (ApiClient.isConfigured) {
+            ApiClient.authHeader()?.let { auth ->
+                add(Request.Builder().url(ApiClient.url("/v1/releases/latest")).header("Authorization", auth).build())
             }
         }
+        if (BuildConfig.UPDATE_URL.isNotBlank()) add(Request.Builder().url(BuildConfig.UPDATE_URL).build())
     }
 
     /** Downloads the build to the app's cache and verifies it; [onProgress] gets 0..1. */

@@ -256,10 +256,19 @@ def _resp(status, body=None):
             "body": json.dumps(body) if body is not None else ""}
 
 
-def lambda_handler(event, context):
+def _routed(event):
+    """True when the request may run. Behind API Gateway the Firebase token was already checked there, so only the route
+    matters; the older Function URL mode (no JWT_AUTH) still needs the secret first path segment."""
+    path = event.get("rawPath", "")
+    if os.environ.get("JWT_AUTH") == "1":
+        return path == "/v1/web/mcp"
     secret = os.environ.get("ACCESS_TOKEN", "")
-    parts = [p for p in event.get("rawPath", "").split("/") if p]
-    if len(parts) != 1 or not secret or not hmac.compare_digest(parts[0], secret):
+    parts = [p for p in path.split("/") if p]
+    return len(parts) == 1 and bool(secret) and hmac.compare_digest(parts[0], secret)
+
+
+def lambda_handler(event, context):
+    if not _routed(event):
         return _resp(404, {"error": "not found"})
     if event["requestContext"]["http"]["method"] != "POST":
         return _resp(405, {"error": "use POST"})

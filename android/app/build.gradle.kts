@@ -31,6 +31,8 @@ val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
 
+// Base URL of the Ultron API on AWS (checks the user's Firebase token, so it is not a secret). Overridable from local.properties.
+val apiBaseUrl: String = localProperties.getProperty("API_BASE_URL", "https://uep4ytt3l9.execute-api.us-east-1.amazonaws.com")
 // Add: WEB_EXTRACT_URL=https://.../<token>  to android/local.properties. Blank = the web page reader tool says it is not set up.
 val webExtractUrl: String = localProperties.getProperty("WEB_EXTRACT_URL", "")
 // Every build gets a higher version code than the one before (minutes since 1970), so the phone can always tell
@@ -68,6 +70,7 @@ android {
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     signingConfigs {

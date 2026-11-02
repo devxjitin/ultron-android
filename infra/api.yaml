@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release and web-extract Lambdas.
+# Deploy without the SAM CLI (build the web-extract zip first):
+#   python mcp/web-extract/build.py
+#   aws cloudformation package --template-file infra/api.yaml --s3-bucket <bucket> --s3-prefix cfn --output-template-file packaged.yaml
+#   aws cloudformation deploy --template-file packaged.yaml --stack-name ultron-api --capabilities CAPABILITY_IAM
+# The existing hand-made resources (ultron-updates, web-extract-mcp, the releases bucket) are not touched. The old
+# Function URLs keep working until every phone has moved to this API.
+
+Parameters:
+  FirebaseProjectId:
+    Type: String
+    Default: ultron-5350c
+    Description: Firebase project whose ID tokens are accepted (issuer and audience).
+  ReleasesBucket:
+    Type: String
+    Default: ultron-app-updates-143920986615
+    Description: Existing private bucket that holds latest.json and the APKs.
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Custom domain such as api.devxjitin.dev. Leave empty until the certificate is issued.
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM certificate (same region) for DomainName.
+
+Conditions:
+  HasDomain: !And
+    - !Not [!Equals [!Ref DomainName, ""]]
+    - !Not [!Equals [!Ref CertificateArn, ""]]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Handler: lambda_function.lambda_handler
+    Environment:
+      Variables:
+        JWT_AUTH: "1"
+    Tags:
+      project: ultron
+
+Resources:
+  UltronApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Description: Ultron API (Firebase JWT)
+      Auth:
+        DefaultAuthorizer: FirebaseJwt
+        Authorizers:
+          FirebaseJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub "https://securetoken.google.com/${FirebaseProjectId}"
+              audience:
+                - !Ref FirebaseProjectId
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 40
+        ThrottlingRateLimit: 20
+      Tags:
+        project: ultron
+
+  # Custom domain, created only once DomainName and CertificateArn are given (SAM cannot make it conditional).
+  ApiDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      DomainNameConfigurations:
+        - CertificateArn: !Ref CertificateArn
+          EndpointType: REGIONAL
+          SecurityPolicy: TLS_1_2
+
+  ApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Condition: HasDomain
+    DependsOn: UltronApiApiGatewayDefaultStage
+    Properties:
+      DomainName: !Ref ApiDomain
+      ApiId: !Ref UltronApi
+      Stage: $default
+
+  ReleasesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ultron-api-releases
+      CodeUri: ../mcp/ultron-updates/
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 15
+      Environment:
+        Variables:
+          BUCKET: !Ref ReleasesBucket
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref ReleasesBucket
+      Events:
+        Latest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/releases/latest
+            Method: GET
+
+  ReleasesLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ReleasesFunction}"
+      RetentionInDays: 14
+
+  WebExtractFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ultron-api-web-extract
+      # Built by mcp/web-extract/build.py with Linux x86_64 wheels.
+      CodeUri: ../mcp/web-extract/function.zip
+      Architectures: [x86_64]
+      MemorySize: 512
+      Timeout: 25
+      Events:
+        Mcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/web/mcp
+            Method: POST
+
+  WebExtractLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${WebExtractFunction}"
+      RetentionInDays: 14
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${UltronApi}.execute-api.${AWS::Region}.amazonaws.com"
+  CustomDomainTarget:
+    Condition: HasDomain
+    Description: Point the DNS CNAME for DomainName at this value.
+    Value: !GetAtt ApiDomain.RegionalDomainName
