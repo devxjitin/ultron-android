@@ -4,13 +4,19 @@ import { auth } from './firebase';
 import { Dashboard } from './pages/Dashboard';
 import { Prompts } from './pages/Prompts';
 import { AuditLog } from './pages/AuditLog';
+import { Announcements } from './pages/Announcements';
+import { Connectors } from './pages/Connectors';
+import { Skills } from './pages/Skills';
 
 type Session = { user: User; admin: boolean } | null | undefined;
-type Page = 'dashboard' | 'prompts' | 'audit';
+type Page = 'dashboard' | 'prompts' | 'skills' | 'connectors' | 'announcements' | 'audit';
 
 const PAGES: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'prompts', label: 'Prompts' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'connectors', label: 'Connectors' },
+  { id: 'announcements', label: 'Announcements' },
   { id: 'audit', label: 'Audit log' },
 ];
 
@@ -73,6 +79,9 @@ export function App() {
       <main>
         {page === 'dashboard' && <Dashboard />}
         {page === 'prompts' && <Prompts email={email} />}
+        {page === 'skills' && <Skills email={email} />}
+        {page === 'connectors' && <Connectors email={email} />}
+        {page === 'announcements' && <Announcements email={email} />}
         {page === 'audit' && <AuditLog />}
       </main>
     </div>

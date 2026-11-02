@@ -605,4 +605,6 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | App Check (web) | reCAPTCHA Enterprise key `ultron-console` (domains: console.devxjitin.dev, ultron-control.web.app, localhost), web app par register, Firestore enforcement ke saath chalta hai. Dev me debug token |
 | Custom domain | `console.devxjitin.dev` Hosting me add hua. **name.com par CNAME baaki:** `console` -> `ultron-control.web.app` |
 | Auth domain | `console.devxjitin.dev` authorized domains me add |
-| Baaki | Skills, connectors, announcements, users pages. Releases/channel promote. Remote Config editor (abhi Firebase console ka link) |
+| Skills, Connectors, Announcements | Pages ban gaye. Skills me versioned items (naya version purane ki copy se), publish `config/active.skillsVersion` badalta hai. Sab me audit entry. Rules me field validation aur tests |
+| Fix | Prompt publish ab `config/active` ko merge karta hai, taaki `skillsVersion` na mite |
+| Baaki | Users page (app abhi `users/{uid}` document likhti hi nahi, Phase 5 me), Releases promote (backend Lambda chahiye, rules me `releases` write band), Remote Config editor (abhi Firebase console ka link). App ko in sab ko padhna (skills, connectors, announcements) Phase 5 me |

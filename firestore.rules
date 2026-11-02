@@ -35,19 +35,32 @@ service cloud.firestore {
       allow write: if isAdmin() && validPrompt();
     }
 
+    match /skills/{versionId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     match /skills/{versionId}/items/{name} {
       allow read: if signedIn();
-      allow write: if isAdmin() && request.resource.data.description is string && request.resource.data.body is string;
+      allow write: if isAdmin()
+        && request.resource.data.keys().hasOnly(['description', 'body', 'minAppVersion'])
+        && request.resource.data.description is string && request.resource.data.description.size() <= 500
+        && request.resource.data.body is string && request.resource.data.body.size() <= 20000;
     }
 
     match /connectors/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin()
+        && request.resource.data.title is string && request.resource.data.title.size() <= 80
+        && request.resource.data.description is string && request.resource.data.description.size() <= 500;
     }
 
     match /announcements/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin()
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.body is string && request.resource.data.body.size() <= 2000
+        && request.resource.data.audience in ['all', 'testers'];
     }
 
     // Written only by the admin Lambda (Admin SDK bypasses rules).

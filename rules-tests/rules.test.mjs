@@ -80,3 +80,22 @@ test('quota and audit log are not writable, quota readable by owner', async () =
 test('unknown collections stay locked', async () => {
   await assertFails(getDoc(doc(admin(), 'secrets/x')));
 });
+
+test('skills, connectors and announcements follow the same admin-only, validated shape', async () => {
+  await assertSucceeds(setDoc(doc(admin(), 'skills/s1'), { note: 'first' }));
+  await assertSucceeds(setDoc(doc(admin(), 'skills/s1/items/notes'), { description: 'd', body: 'b' }));
+  await assertFails(setDoc(doc(admin(), 'skills/s1/items/big'), { description: 'd', body: 'x'.repeat(20001) }));
+  await assertFails(setDoc(doc(admin(), 'skills/s1/items/odd'), { description: 'd', body: 'b', extra: 1 }));
+  await assertFails(setDoc(doc(user(), 'skills/s1/items/mine'), { description: 'd', body: 'b' }));
+  await assertSucceeds(getDoc(doc(user(), 'skills/s1/items/notes')));
+
+  await assertSucceeds(setDoc(doc(admin(), 'connectors/web_reader'), { title: 'Web', description: 'Reads pages' }));
+  await assertFails(setDoc(doc(admin(), 'connectors/bad'), { title: 't'.repeat(81), description: 'd' }));
+  await assertFails(setDoc(doc(user(), 'connectors/x'), { title: 't', description: 'd' }));
+
+  await assertSucceeds(setDoc(doc(admin(), 'announcements/a1'), { title: 't', body: 'b', audience: 'all' }));
+  await assertFails(setDoc(doc(admin(), 'announcements/a2'), { title: 't', body: 'b', audience: 'everyone' }));
+  await assertFails(setDoc(doc(user(), 'announcements/a3'), { title: 't', body: 'b', audience: 'all' }));
+  await assertSucceeds(getDoc(doc(user(), 'announcements/a1')));
+});
+

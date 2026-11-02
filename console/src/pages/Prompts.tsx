@@ -87,7 +87,7 @@ export function Prompts({ email }: { email: string }) {
     run(`${id} is now live`, async () => {
       const batch = writeBatch(db);
       batch.update(doc(db, 'prompts', id), { status: 'published' });
-      batch.set(doc(db, 'config', 'active'), { promptVersion: id, updatedBy: email, updatedAt: serverTimestamp() });
+      batch.set(doc(db, 'config', 'active'), { promptVersion: id, updatedBy: email, updatedAt: serverTimestamp() }, { merge: true });
       addAudit(batch, email, active && versionNumber(id) < versionNumber(active) ? 'prompt.rollback' : 'prompt.publish', id);
       await batch.commit();
     });
