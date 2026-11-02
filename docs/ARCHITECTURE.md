@@ -62,11 +62,11 @@ Severity: **P0** = users ko dene se pehle zaroor, **P1** = production quality ke
 | S1 | P0 | AWS CLI root account (`arn:aws:iam::143920986615:root`) se chal raha hai. Root par MFA on hai aur root access keys nahi hain (Phase 0 me check kiya), lekin daily kaam root se nahi hona chahiye | `aws sts get-caller-identity` | Identity Center ka instance "account instance" hai, wo permission sets support nahi karta, to CLI SSO nahi chalega. Ya to IAM user (MFA ke saath, `aws login`) banao, ya AWS Organizations on karke organization-instance Identity Center. Dono aapko khud karne honge (credentials/accounts) |
 | S2 | P0 | Firebase AI Logic par App Check nahi, koi Auth nahi | `FirebaseGemini.kt`, `FirebaseLiveClient.kt` | App Check (Play Integrity) enforce, Firebase Auth, AI Logic me per-user rate limit |
 | S3 | P0 | APK me secrets: `UPDATE_URL` aur `WEB_EXTRACT_URL` ke path tokens | `build.gradle.kts` `buildConfigField` | Path token hatao, har request Firebase ID token + App Check token se verify ho (section 5.3) |
-| S4 | P0 | OTA APK debug keystore se sign (password `android`), CI secret me bhi wahi | `build.gradle.kts` `ota` build type, `publish-ota.yml` | Asli release key, Play App Signing. Package name bhi change (section 7.4) |
+| S4 | P0 | OTA APK debug keystore se sign (password `android`), CI secret me bhi wahi | `build.gradle.kts` `ota` build type, `publish-ota.yml` | Asli release key (Play nahi, website se distribute karna hai, section 15). Key badalne par ek baar naya install karna padega, package rename karna ho to usi time (section 7.4) |
 | S5 | P0 | Lambda Function URLs `AuthType: NONE`, sirf path token | `infra/ultron.yaml` | API Gateway HTTP API + JWT authorizer (Firebase issuer) + throttling |
 | S6 | P1 | Firebase API key Google Cloud me unrestricted lag rahi hai | GCP Credentials page | Key ko Android app (package + SHA-256) aur hosting domains tak restrict karo, sirf zaroori APIs allow |
 | S7 | P1 | Firestore me revert ke baad bhi purane rules/data deployed ho sakte hain (`remote/prompts` public read) | Firebase console | Naye rules deploy karo (section 6.4), purana data hatao ya migrate |
-| S8 | P1 | `isAccessibilityTool="true"` set hai | `accessibility_service_config.xml` | Play policy me ye sirf disability tools ke liye hai. Play build me `false` + prominent disclosure |
+| S8 | P1 | `isAccessibilityTool="true"` set hai | `accessibility_service_config.xml` | Play policy ab lagu nahi (website distribution). Flag rehne do, lekin onboarding me accessibility ka prominent disclosure phir bhi rakho |
 
 ### 3.2 Android permissions
 
@@ -79,8 +79,8 @@ Severity: **P0** = users ko dene se pehle zaroor, **P1** = production quality ke
 | A5 | P1 | Calls connector ek saath `CALL_PHONE`, `ANSWER_PHONE_CALLS`, `READ_CALL_LOG`, `READ_CONTACTS` maangta hai | `ConnectorsPage.kt:198` | Just-in-time: har tool apni permission use ke waqt maange, rationale ke saath |
 | A6 | P1 | Notification aur mic permission pehli launch par bina context ke maange jaate hain | `MainActivity.kt:209-217` | Onboarding screens (kyun chahiye, phir maango) |
 | A7 | P1 | Permission aur connector catalog UI file ke andar hai (773 line ka `ConnectorsPage.kt`) | `ConnectorsPage.kt:152-210` | `ConnectorRegistry` me descriptors (section 7.2) |
-| A8 | P1 | Play policy ke hisaab se restricted: `READ_SMS`, `SEND_SMS`, `READ_CALL_LOG` (default handler na ho to reject), `REQUEST_INSTALL_PACKAGES` (self-update allowed nahi), `READ_MEDIA_*` broad access, Accessibility automation | Manifest | Do flavors: `play` (policy-safe) aur `full` (sideload, devxjitin.dev se) |
-| A9 | P2 | `targetSdk 35`, compileSdk 36 | `build.gradle.kts` | Play ki next target-API deadline se pehle 36 par le jao, behaviour changes test karke |
+| A8 | P1 | Play me ye restricted hoti, website distribution me policy ka dar nahi: `READ_SMS`, `SEND_SMS`, `READ_CALL_LOG` (default handler na ho to reject), `REQUEST_INSTALL_PACKAGES` (self-update allowed nahi), `READ_MEDIA_*` broad access, Accessibility automation | Manifest | Ek hi `full` build, `devxjitin.dev` se. Play flavor ki zaroorat nahi (section 15) |
+| A9 | P2 | `targetSdk 35`, compileSdk 36 | `build.gradle.kts` | Naye Android versions ke behaviour changes se pehle 36 par le jao, test karke |
 | A10 | P2 | Boot par FGS start: Android 15 `BOOT_COMPLETED` se microphone type FGS allow nahi karta. Abhi code specialUse se start karta hai, sahi hai, bas regression test chahiye | `BootReceiver.kt`, `AppForegroundService.kt:95` | Test case + comment |
 
 ### 3.3 Connectors aur tools
@@ -122,7 +122,7 @@ Reverted panel me ye kamiyan thi, naya design inhe theek karta hai:
 ```mermaid
 flowchart TB
   subgraph Clients
-    APP["Ultron Android<br/>flavors: play / full"]
+    APP["Ultron Android<br/>single full build"]
     CON["Admin console<br/>console.devxjitin.dev"]
     WEB["Website + privacy + terms<br/>devxjitin.dev"]
   end
@@ -150,7 +150,7 @@ flowchart TB
 
   APP --> AUTH & AC & RC & FS & AIL & CRASH
   APP -->|"ID token + App Check"| APIGW
-  APP -->|"APK download (full flavor)"| CF --> S3
+  APP -->|"APK download"| CF --> S3
   CON --> AUTH & FS & RC
   CON -->|"admin claim"| APIGW
   APIGW --> L1 & L2 & L3 & L4
@@ -160,7 +160,7 @@ flowchart TB
   CON --- HOST
   GHA["GitHub Actions"] -->|"OIDC"| AWS
   GHA -->|"Workload Identity"| Firebase
-  GHA -->|"AAB"| PLAY["Google Play<br/>internal / closed / production"]
+  GHA -->|"signed APK (OIDC)"| S3
 ```
 
 ### 4.1 Kaam ka bantwara (kaun kya karega)
@@ -170,7 +170,7 @@ flowchart TB
 | **Android app** | Voice loop, device tools, on-device memory/knowledge/chats, offline defaults | Privacy: personal data phone par hi rahe. Latency: Gemini Live seedha phone se |
 | **Firebase** | Identity, App Check, config, content, admin console hosting, crash/analytics, push | Spark plan par free, Android SDK native, realtime config updates, offline cache built-in |
 | **AWS** | Server-side compute jisme secret chahiye, APK delivery, release pipeline | $100 credits + Lambda always-free 1M requests + CloudFront always-free 1 TB. Existing Lambdas aur OIDC role reuse |
-| **Google Play** | Main distribution, updates, signing | "Sab users" ke liye yahi rasta hai, trust aur auto-update free me |
+| **Website + CloudFront** | APK distribution, in-app updater, SHA-256 download page | Aapka decision: Play Store par nahi jana. Full control, koi Play policy nahi, lekin trust aur update ka kaam khud sambhalna hai |
 | **devxjitin.dev** | Website, console, API, downloads | Ek brand, saare endpoints HTTPS (`.dev` HSTS preloaded hai) |
 
 Firebase Cloud Functions jaan-boojh kar **nahi** liye: unke liye Blaze plan chahiye. Server code AWS Lambda par
@@ -186,7 +186,7 @@ rahega jahan credits hain. Firebase Spark par hi rahe (free), jab tak Gemini ka 
   account ke bhi app chale, baad me Google account se link (`linkWithCredential`), data uid ke saath rehta hai.
 - **Roles** custom claims me: `admin`, `tester`. Email hardcode nahi. Claim set karne ke liye ek chhota script
   (`scripts/set-role.mjs`, Admin SDK, aapke local Firebase login se) ya admin Lambda.
-- **App Check**: Android par Play Integrity provider, console par reCAPTCHA Enterprise. Enforcement on: AI Logic,
+- **App Check**: Android par Play Integrity provider, lekin app Play se install nahi hogi, isliye console me `PLAY_RECOGNIZED` required na rakho, sirf device integrity (section 15). Console par reCAPTCHA Enterprise. Enforcement on: AI Logic,
   Firestore, aur AWS API (Lambda me App Check JWT verify).
 
 ### 5.2 Gemini access
@@ -205,7 +205,7 @@ Firebase ID token ka verification bina code ke ho jaata hai. App Check token ek 
 
 | Route | Lambda | Auth | Kaam |
 |---|---|---|---|
-| `GET /v1/releases/latest?channel=beta` | `releases` | user | Channel ka latest build + CloudFront URL (sirf `full` flavor) |
+| `GET /v1/releases/latest?channel=beta` | `releases` | user | Channel ka latest build + CloudFront URL |
 | `POST /v1/web/extract` | `web-extract` | user | Existing trafilatura code, SSRF checks same rehenge |
 | `POST /v1/embed` | `embed` | user | Gemini embedding proxy, server key SSM se, per-uid daily quota (DynamoDB on-demand ya Firestore counter) |
 | `POST /v1/admin/releases` | `admin` | `admin` claim | Release promote, rollout %, notes |
@@ -261,7 +261,7 @@ prompts/{versionId}               { persona, policy, greeting, documentFormatPro
                                     minAppVersion, createdBy, createdAt, note }
 skills/{versionId}/items/{name}   { description, body, tasks: {...}, minAppVersion, locked: false }
 connectors/{id}                   { title, description, permissionText, privacyText, kind, minAppVersion }
-releases/{versionCode}            { versionName, channel, rolloutPercent, notes, sha256, size, flavor, createdAt }
+releases/{versionCode}            { versionName, channel, rolloutPercent, notes, sha256, size, createdAt }
 announcements/{id}                { title, body, audience, startsAt, endsAt, minAppVersion }
 users/{uid}                       { createdAt, plan, roles (read-only mirror), lastSeenVersion, banned }
 users/{uid}/private/quota         { day, voiceSeconds, textCalls, embedCalls }   // sirf server likhe
@@ -279,7 +279,7 @@ auditLog/{id}                     { actor, action, target, before, after, at }
 ### 6.3 Console me kya nahi hoga
 
 User ki memory, knowledge documents, chats, user ki API keys, GitHub tokens, signing keys, server secrets. Ye kabhi
-Firestore me nahi jayenge. Isse privacy story simple rehti hai aur Play ka Data safety form bhi.
+Firestore me nahi jayenge. Isse privacy story simple rehti hai, aur privacy policy likhna bhi.
 
 ### 6.4 Firestore rules ka shape
 
@@ -317,7 +317,7 @@ CI me chalenge.
 
 ```
 android/
-  app/                    entry, DI graph, navigation, flavors (play/full)
+  app/                    entry, DI graph, navigation, build types (debug/ota/release)
   core/model/             data classes, ToolResult, ConnectorDescriptor
   core/data/              DataStore, ObjectBox (memory, knowledge, chats), EncryptedPrefs
   core/remote/            RemoteConfigRepository, ContentRepository (Firestore), bundled defaults
@@ -327,7 +327,7 @@ android/
   feature/tools/          ToolRegistry, ToolHandler per group (calls, sms, calendar, screen, ...)
   feature/connectors/     ConnectorRegistry, ConnectorsScreen, PermissionBroker
   feature/knowledge/      import, chunking, embedding (via api), search
-  feature/memory/, feature/settings/, feature/updates/ (sirf full flavor)
+  feature/memory/, feature/settings/, feature/updates/
 ```
 
 - **Hilt** for DI, isse `AssistantViewModel` ke 20+ dependencies constructor se aayengi aur test aasaan hoga.
@@ -344,7 +344,6 @@ data class ConnectorDescriptor(
     val tools: List<ToolSpec>,
     val runtimePermissions: List<PermissionSpec>,   // har tool ki apni, just-in-time
     val specialAccess: SpecialAccess?,              // ACCESSIBILITY, NOTIFICATION_LISTENER, USAGE, EXACT_ALARM, WRITE_SETTINGS, DND
-    val flavors: Set<Flavor>,                       // PLAY, FULL
     val minSdk: Int = 26,
 )
 
@@ -355,7 +354,7 @@ interface ToolHandler {
 ```
 
 Text (title, description, privacy line) Firestore `connectors/{id}` se, logic code me. Tool declarations Gemini ko
-`ToolRegistry` se jaayengi, `tools_disabled` aur flavor filter lagake.
+`ToolRegistry` se jaayengi, `tools_disabled` filter lagake.
 
 ### 7.3 PermissionBroker
 
@@ -375,10 +374,20 @@ interface PermissionBroker {
 - `DENIED_FOREVER` (shouldShowRationale false + denied): App info deep link.
 - Special access ke liye guided steps, Android 13+ sideload par "Allow restricted settings" step pehle.
 
-### 7.4 Flavors aur package name
+### 7.4 Build types, signing aur package name
 
-| | `play` | `full` |
-|---|---|---|
+Website distribution hai, to `play` flavor nahi banega. Ek hi build, teen build types: `debug`, `ota` (abhi ka naam, baad me `release`)
+aur `release`. SMS, call log, accessibility automation aur `REQUEST_INSTALL_PACKAGES` sab rehte hain.
+
+- **Release key:** asli keystore banao, password manager + offline backup me rakho, CI me base64 secret. **Ye key kabhi
+  khoni nahi chahiye**, kyunki iske bina koi update nahi de sakte. Memory note wala "never replace" rule ab nayi key par lagega.
+- **Key badalne ka asar:** abhi installed apps debug key se sign hain. Nayi key se signature match nahi hoga, to existing
+  phones ko ek baar naya install karna padega (uninstall, install). Memory, knowledge aur settings ke export ka rasta pehle sochna hoga.
+- **Package name:** `com.assistant.app` rakh sakte ho (Play par clash ka darr nahi). Rename karna ho to key badalne ke
+  saath hi karo, taaki reinstall ek hi baar ho. Rename par naya Firebase app, naya SHA aur nayi `google-services.json` chahiye.
+- **Update trust:** `latest.json` me sha256 already hai. Download page par bhi SHA-256 aur signing certificate fingerprint dikhao.
+
+---|---|---|
 | Distribution | Google Play | `dl.devxjitin.dev`, in-app updater |
 | SMS read/send, call log | Nahi (ya intent se SMS app kholna) | Haan |
 | Accessibility screen control | Prominent disclosure ke saath, `isAccessibilityTool=false`, Play Console declaration | Haan |
@@ -401,18 +410,17 @@ interface PermissionBroker {
 flowchart LR
   PR["Pull request"] --> CHK["checks.yml<br/>unit tests, lint, detekt,<br/>Lambda pytest, rules emulator tests,<br/>schema validation"]
   CHK -->|merge| MAIN["main"]
-  MAIN --> BUILD["android-release.yml<br/>AAB + full APK, release key"]
-  BUILD --> INT["Play internal track<br/>+ S3 channel=internal"]
-  INT -->|"manual promote (console ya workflow_dispatch)"| BETA["Play closed testing<br/>+ channel=beta"]
-  BETA -->|"staged 10% -> 50% -> 100%"| PROD["Play production<br/>+ channel=stable"]
+  MAIN --> BUILD["android-release.yml<br/>signed APK, release key"]
+  BUILD --> INT["S3 channel=internal"]
+  INT -->|"manual promote (console ya workflow_dispatch)"| BETA["channel=beta"]
+  BETA -->|"rollout 10% -> 50% -> 100%"| PROD["channel=stable<br/>(dl.devxjitin.dev)"]
   MAIN -->|"paths: infra/** mcp/**"| SAM["backend.yml<br/>sam deploy (OIDC)"]
   MAIN -->|"paths: firebase/** console/**"| FB["firebase.yml<br/>rules, indexes, RC template, hosting"]
 ```
 
-- Abhi wala "har push sab phones par" khatam. `main` sirf internal channel tak jaata hai (aap aur testers).
+- Abhi wala "har push sab phones par" khatam. `main` sirf internal channel tak jaata hai (aap aur testers). Rollout percent `releases/{versionCode}` me hai, updater apne device id ke hash se decide kare.
 - Version code: `versionCode` ab CI run number se ya `git rev-list --count` se, minutes-since-1970 wala tareeka hata do.
-- Play upload: Gradle Play Publisher ya `r0adkll/upload-google-play`, Play service account JSON ki jagah Workload
-  Identity Federation ho sake to wahi.
+- APK upload: GitHub OIDC se AWS role assume karke S3 par, `releases` Lambda `latest.json` aur channel update kare. Koi Play credentials nahi.
 - Firebase deploy: GitHub OIDC se Google Workload Identity Federation, koi JSON key nahi.
 - AWS: existing `ultron-ota-publish` OIDC role, SAM deploy ke liye permissions badhao, root kabhi CI me nahi.
 - Path filters taaki web/infra change par APK na bane (pichle commit me ye sahi kiya tha, wahi rakho).
@@ -425,7 +433,7 @@ DNS name.com par hi rakho (free hai). Records:
 
 | Host | Type | Target | Kya |
 |---|---|---|---|
-| `devxjitin.dev` | A / TXT | Firebase Hosting values | Website, privacy policy, terms (Play ke liye privacy URL zaroori) |
+| `devxjitin.dev` | A / TXT | Firebase Hosting values | Website, privacy policy, terms (download page ke trust ke liye) |
 | `www` | CNAME | Firebase Hosting | Redirect apex par |
 | `console` | CNAME / A | Firebase Hosting (2nd site) | Admin console |
 | `api` | CNAME | API Gateway regional domain | AWS API, ACM cert (DNS validation CNAME bhi name.com me) |
@@ -474,12 +482,12 @@ DNS name.com par hi rakho (free hai). Records:
 | Phase | Kaam | Andaza |
 |---|---|---|
 | **0. Security** (ho gaya, section 13) | S1 root se IAM Identity Center, S6 API key restriction, S7 Firestore cleanup, Budgets alarm, `google-workspace-mcp` aur unused Function URLs band | 1 din |
-| **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore, naya package + flavors skeleton | 1 hafta |
+| **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore (naya package optional) | 1 hafta |
 | **2. Backend** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
 | **3. Remote content** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
 | **4. Console** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
 | **5. App refactor** | Hilt, modules, `VoiceSessionService`, `ToolRegistry`, `ConnectorRegistry`, `PermissionBroker`, onboarding | 2-3 hafte (feature by feature, har step par tests) |
-| **6. Play launch** | Website + privacy policy, Data safety form, permission declarations, internal, closed testing (Play ke naye personal accounts ke liye closed test me testers ki shart hai), production | 2-4 hafte |
+| **6. Website launch** | `devxjitin.dev` landing, download page (SHA-256, signing fingerprint), privacy policy, terms, Play Protect aur "unknown app" FAQ, in-app updater test, Android developer verification rules check | 1-2 hafte |
 
 Har phase alag branch + PR, aur Phase 0 sabse pehle kyunki wo aaj ka risk hai.
 
@@ -512,9 +520,32 @@ Commits `194d203` (docs aur Firestore rules) aur `7e52801` (app code). Push ya P
 | Crashlytics, Analytics | Dependencies aur Gradle plugin add. Crashlytics plugin sirf tab lagta hai jab `google-services.json` ho |
 | PR checks | `.github/workflows/checks.yml`, PR par unit tests, lint aur Lambda tests |
 | Verification | `compileDebugKotlin`, `compileOtaKotlin` aur `testDebugUnitTest` pass. Lint aur phone par test nahi hua |
-| Firebase console steps | **Baaki (aap)**: Anonymous auth enable, SHA-256 `FB:11:8C:42:FC:C4:E6:19:6F:34:9D:52:66:FE:C7:FD:6B:49:F6:E1:6C:EC:0C:B7:C0:E7:5B:4F:53:CB:D0:0C` Firebase app me add, App Check me Play Integrity register aur debug token add, Crashlytics enable |
+| Firebase console steps | **App Check aapne kiya, baaki confirm karo**: Anonymous auth enable, SHA-256 `FB:11:8C:42:FC:C4:E6:19:6F:34:9D:52:66:FE:C7:FD:6B:49:F6:E1:6C:EC:0C:B7:C0:E7:5B:4F:53:CB:D0:0C` Firebase app me add, App Check me Play Integrity register aur debug token add, Crashlytics enable |
 | App Check enforcement | **Abhi on mat karo.** Pehle phone par voice session test karo, phir AI Logic aur Firestore par enforce karo |
-| Release keystore | **Baaki.** Asli release key banani hai, aapke decision ke saath, key kabhi khoni nahi chahiye |
-| Naya package name aur flavors | **Baaki.** `dev.devxjitin.ultron` par jane se purani install update nahi hogi, naya Firebase app aur naya SHA chahiye. Aapka decision |
+| Release keystore | **Baaki.** Website distribution ke liye zaroori. Asli key banani hai, backup ke saath. Key badalne par ek baar reinstall |
+| Package name | **Optional ab.** `com.assistant.app` rakh sakte ho. Rename karna ho to key badalne ke saath hi |
+| Flavors | **Hata diya.** `play` flavor nahi banega, ek hi full build (section 15) |
 
 **Dhyan:** `main` par push karte hi OTA APK sab phones par jaata hai (`publish-ota.yml`). Isliye PR banao, test karo, phir merge.
+
+---
+
+## 15. Distribution decision: website, Play Store nahi (2026-11-02)
+
+Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjitin.dev`) se milegi aur in-app updater se update hogi.
+
+**Isse kya badla**
+- `play` flavor, Play Console, Data safety form, Play App Signing sab hata diye. Ek hi `full` build.
+- Play ki permission policy lagu nahi, to SMS, call log, accessibility automation aur self-update rehte hain.
+- Phase 6 ab "Website launch" hai.
+- Release key aur download page ka trust (SHA-256, fingerprint) ab hamari zimmedari hai.
+
+**App Check ke liye zaroori setting**
+- Firebase docs ke hisaab se built-in Play Integrity provider Play ke bahar install hui app ke saath bhi chal sakta hai, lekin default me `PLAY_RECOGNIZED` maangta hai jo website wali APK ko milega hi nahi.
+- Console me **App Check > Apps > Play Integrity** me `PLAY_RECOGNIZED` aur `LICENSED` required mat rakho. Sirf **device integrity** rakho. TTL 1 ghanta.
+- Ek doc (custom provider wala) kehta hai ki built-in provider sirf Play apps ke liye hai, dono docs me farak hai. **Enforce karne se pehle sideloaded APK se phone par test zaroor karo.** Fail ho to custom App Check provider (server-side, AWS Lambda) fallback hai.
+- Rooted ya custom ROM phones ka device integrity fail ho sakta hai, to wahan Gemini access band hoga.
+
+**Dhyan rakhne wali baatein**
+- Play Protect "unknown app" warning dikha sakta hai, download page par FAQ rakho.
+- Google ki sideloaded apps ke liye developer verification ki yojana hai. Timeline pakki nahi pata, `developer.android.com` par check karo, kyunki isse distribution ke rules badal sakte hain.
