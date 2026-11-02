@@ -483,7 +483,7 @@ DNS name.com par hi rakho (free hai). Records:
 |---|---|---|
 | **0. Security** (ho gaya, section 13) | S1 root se IAM Identity Center, S6 API key restriction, S7 Firestore cleanup, Budgets alarm, `google-workspace-mcp` aur unused Function URLs band | 1 din |
 | **1. Foundation** (code ho gaya, console steps aur key/package baaki, section 14) | Firebase Auth + App Check (app + AI Logic enforce), Crashlytics/Analytics, PR checks workflow, release keystore (naya package optional) | 1 hafta |
-| **2. Backend** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
+| **2. Backend (core done)** | SAM stack, `api.devxjitin.dev`, JWT authorizer, `releases`, `web-extract`, `embed` routes, app me `ApiClient`, path tokens hatao | 1 hafta |
 | **3. Remote content** | `contracts/`, Remote Config template, Firestore schema + rules + emulator tests, `RemoteConfigRepository`/`ContentRepository` with bundled defaults | 1 hafta |
 | **4. Console** | `console.devxjitin.dev`: prompts, skills, connectors, releases, flags, audit log | 1-2 hafte |
 | **5. App refactor** | Hilt, modules, `VoiceSessionService`, `ToolRegistry`, `ConnectorRegistry`, `PermissionBroker`, onboarding | 2-3 hafte (feature by feature, har step par tests) |
@@ -560,7 +560,7 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | API stack | Deploy ho gaya. CloudFormation stack `ultron-api` (`infra/api.yaml`, SAM template, SAM CLI ke bina `aws cloudformation package/deploy` se). 10 naye resources, purane resources me koi badlav nahi |
 | API URL | `https://api.devxjitin.dev` (execute-api URL `https://uep4ytt3l9.execute-api.us-east-1.amazonaws.com` bhi chalta hai; HTTP API, Firebase JWT authorizer, throttle 20 rps burst 40) |
 | Routes | `GET /v1/releases/latest` (Lambda `ultron-api-releases`), `POST /v1/web/mcp` (Lambda `ultron-api-web-extract`) |
-| Auth test | Bina token aur fake token par `401` (verify kiya). **Asli Firebase token se `200` abhi test nahi hua**, wo phone par app se hoga |
+| Auth test | Bina token aur fake token par `401` (verify kiya). Phone par asli Firebase token ke saath updater aur web reader chal gaye (user ne verify kiya, 2026-11-02) |
 | Lambdas | Dono me `JWT_AUTH=1` mode. Purana secret-path mode as-it-is, to purani Function URLs aur purane phones nahi tootte |
 | App | `ApiClient` (Firebase ID token), `AppUpdater` pehle API phir purana URL, `WebExtractClient` pehle API phir purana. `API_BASE_URL` build config me default set |
 | Tests | Lambda tests 24 pass (2 naye JWT tests), `compileOtaKotlin` aur `testDebugUnitTest` pass |
@@ -568,3 +568,5 @@ Ultron Play Store par nahi jayega, APK `devxjitin.dev` (CloudFront, `dl.devxjiti
 | `embed` route | **Baaki.** Server-side Gemini key chahiye (SSM SecureString), wo aap dogey |
 | Purani Function URLs band karna | **Baaki.** Tab jab sab phones naye build par aa jayein |
 | App Check token verification Lambda me | **Baaki.** Abhi sirf Firebase JWT check hota hai |
+
+**Phase 2 core complete.** `embed` route aur App Check verification Lambda me Phase 3 ke saath hoga. Purani Function URLs tab band hongi jab sab phones naye build par aa jayein.
