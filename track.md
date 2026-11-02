@@ -499,3 +499,4 @@
 [2026-11-02 20:17] [Claude] [Add: Google sign-in, Razorpay subscription (199/999/1799), billing Lambda + DynamoDB]
 [2026-11-02 20:40] [Claude] [Update: Razorpay test plans, SSM keys, ultron-api deploy with billing Lambda]
 [2026-11-02 20:46] [Claude] [Docs: Razorpay test webhook set, Firebase Google sign-in baaki]
+[2026-11-02 21:06] [Claude] [Update: GOOGLE_WEB_CLIENT_ID local + CI secret; SHA-1 doosre project me atka]

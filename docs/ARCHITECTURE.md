@@ -642,7 +642,11 @@ Setup jo abhi baaki hai (ek baar):
 
 Status (2026-11-02): step 3, 4 aur 5 ho gaye (test mode). Plans `plan_TvLmXcUby3aa5w` (monthly),
 `plan_TvLmXs3OS99lzM` (6 months), `plan_TvLmY52xpcSDdR` (yearly). SSM me teeno parameters, `ultron-api` stack deploy
-(billing Lambda + table add, console wala admin Lambda hata). Step 6 (Razorpay webhook, test mode) bhi ho gaya. Step 1 aur 2 baaki.
+(billing Lambda + table add, console wala admin Lambda hata). Step 6 (Razorpay webhook, test mode) bhi ho gaya. Step 1: Google provider pehle se on tha, `GOOGLE_WEB_CLIENT_ID`
+local.properties aur CI secret me daal diya. **Atka hua:** debug keystore ka SHA-1 Ultron Firebase app me add nahi hota,
+kyunki `com.assistant.app` + is SHA-1 ka Android OAuth client kisi doosre Google Cloud project me hai (nira-695fe aur
+voice-assistant-studio me nahi mila). Wo client hataye bina Google sign-in phone par fail hoga. Step 2
+(`KNOWLEDGE_API_KEY`) baaki, uske bina knowledge search band rahega.
 
 Seema: Gemini call Firebase AI Logic se seedha phone se jaati hai, to lock app ke andar hai, server par nahi. Patch kiya
 hua APK lock tod sakta hai. Pakka server-side lock chahiye to Gemini ko apne backend ke peeche le jaana hoga (alag kaam).
