@@ -498,3 +498,4 @@
 [2026-11-02 20:05] [Claude] [Remove: console, remote content, Skills/Developer pages; app me sirf connectors editable]
 [2026-11-02 20:17] [Claude] [Add: Google sign-in, Razorpay subscription (199/999/1799), billing Lambda + DynamoDB]
 [2026-11-02 20:40] [Claude] [Update: Razorpay test plans, SSM keys, ultron-api deploy with billing Lambda]
+[2026-11-02 20:46] [Claude] [Docs: Razorpay test webhook set, Firebase Google sign-in baaki]
