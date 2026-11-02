@@ -490,3 +490,4 @@
 [2026-11-02 15:30] [Claude] [Add: Phase 3 wiring, remote timeouts/models, force-update screen, ContentRepository; rules + Remote Config deploy]
 [2026-11-02 16:05] [Claude] [Update: admin claim set, prompts/v1 + config/active seed, Firestore App Check enforced]
 [2026-11-02 16:40] [Claude] [Update: prompts/v2 publish kiya (naya greeting), config/active v2, remote prompt test]
+[2026-11-02 17:55] [Claude] [Fix: saved default greeting/prompt remote content ko override kar rahe the]
