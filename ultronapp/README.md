@@ -15,12 +15,12 @@ It is plain HTML and ES modules, so there is nothing to build.
 
 ## Setup
 
-1. Firebase console, Project settings, Your apps: add a Web app if there is none, and copy its `apiKey` into `config.js`.
+1. The Web app "Ultron Control" already exists; its `apiKey` is in `config.js`.
    Use that key, not the Android one, which is restricted to the phone app.
 2. Deploy the API stack with the two new parameters:
    ```bash
    aws cloudformation deploy --template-file packaged.yaml --stack-name ultron-api --capabilities CAPABILITY_IAM \
-     --parameter-overrides AdminEmails=you@example.com AdminOrigins=https://ultronapp.web.app
+     --parameter-overrides AdminEmails=you@example.com AdminOrigins=https://ultronapp-admin.web.app
    ```
    (see the header of `infra/api.yaml` for the package step).
 3. Firebase console, Authentication, Settings, Authorized domains: add the domain Ultronapp is served from.

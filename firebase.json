@@ -3,6 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
+    "site": "ultronapp-admin",
     "public": "ultronapp",
     "ignore": ["README.md", "firebase.json", "**/.*"],
     "headers": [

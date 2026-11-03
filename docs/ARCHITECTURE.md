@@ -830,6 +830,6 @@ activate hone par server se wahi laa kar Settings > Activation me dikhati hai.
 | App | `LicenseStatus` me `name`, `email`, `phone`, `activatedAt`, `durationDays` aaye. Purana server jawab bhi parse hota hai |
 | Allow move | Din me ek move wali rok hatane ke liye `movedAt = 0`. Phone tab tak bandha rehta hai jab tak naya phone activate na kare |
 
-Deploy. Stack update me `AdminEmails` (comma separated Google emails) aur `AdminOrigins` (jaise `https://ultronapp.web.app`) do.
+Deploy. Stack update me `AdminEmails` (comma separated Google emails) aur `AdminOrigins` (jaise `https://ultronapp-admin.web.app`) do.
 Firebase console me ek Web app banao, uski `apiKey` `ultronapp/config.js` me daalo, Hosting ka domain Authentication > Authorized
 domains me add karo, phir `firebase deploy --only hosting`. Detail `ultronapp/README.md` me.
