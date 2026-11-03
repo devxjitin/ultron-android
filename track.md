@@ -529,3 +529,4 @@
 [2026-11-03 21:03] [Claude] [Remove: UPDATE_URL APK se hataya, updater sirf Ultron API se, phone pe test]
 [2026-11-03 21:03] [Claude] [Remove: web-extract-mcp aur ultron-updates Function URLs AWS se hataye, Lambdas 14 din rakhe]
 [2026-11-03 21:08] [Claude] [Update: App Check enforce on, infra se legacy URLs hataye, CI LOCAL_PROPERTIES secret chhota kiya]
+[2026-11-03 21:16] [Claude] [Update: screen/navigation default off, GitHub sign-in scope read:user only]

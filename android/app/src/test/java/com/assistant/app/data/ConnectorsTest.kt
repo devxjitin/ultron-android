@@ -16,6 +16,13 @@ class ConnectorsTest {
         assertEquals(names.size, names.toSet().size)
     }
 
+    @Test fun screenAndNavigationAreOffOnAFreshInstall() {
+        val on = effectiveDeviceTools(null)
+        PhoneConnectors.all.filter { it.id == "screen" || it.id == "navigation" }.forEach { connector ->
+            connector.tools.forEach { assertTrue("${it.functionName} should be off", it !in on) }
+        }
+    }
+
     /** Every extra tool makes the Live setup bigger and gives the model one more wrong choice. */
     @Test fun allConnectorsTogetherStayUnderTheToolCap() {
         val settings = AssistantSettings(enabledDeviceTools = PhoneConnectors.all.flatMap { it.tools }.toSet())

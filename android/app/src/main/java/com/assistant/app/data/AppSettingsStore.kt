@@ -38,9 +38,12 @@ SPEECH
 
 const val DEFAULT_ASSISTANT_NAME = "Ultron"
 
-/** Connectors that are on before the user has changed anything. Navigation and screen only work once accessibility is allowed, which asks the user. */
+/**
+ * Connectors that are on before the user has changed anything. Navigation and screen control let the assistant read and
+ * tap other apps, so they stay off until the user adds them in Connectors.
+ */
 val DEFAULT_CONNECTOR_IDS = listOf(
-    "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather", "navigation", "screen"
+    "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather"
 )
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
@@ -56,8 +59,12 @@ private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCo
 const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
 const val MAX_GREETING_LENGTH = 60
-/** OAuth scopes requested at GitHub sign-in: profile and private repositories. The app only reads. */
-const val GITHUB_OAUTH_SCOPE = "repo read:user"
+/**
+ * OAuth scope requested at GitHub sign-in: the profile only. The app never writes to GitHub, so it does not ask for the
+ * "repo" scope (which also grants write access); public repositories are readable with this token. Private repositories
+ * need a GitHub App with read-only permissions as the sign-in client; a GitHub App ignores this value.
+ */
+const val GITHUB_OAUTH_SCOPE = "read:user"
 
 const val DEFAULT_RETRIEVAL_CHUNK_LIMIT = 5
 const val MIN_RETRIEVAL_CHUNK_LIMIT = 1
