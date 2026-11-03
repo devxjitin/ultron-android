@@ -813,3 +813,23 @@ hain, jaise `307fc6f` se pehle the. Firestore remote content, Remote Config aur 
 Deploy notes. `ultron-subscriptions` table `DeletionPolicy: Retain` hai, stack update ke baad bhi AWS me rahegi, data chahiye na ho
 to haath se delete karna. SSM `/ultron/razorpay/*` parameters aur Razorpay webhook bhi ab kaam ke nahi, unhe aap band kar sakte ho.
 `GOOGLE_WEB_CLIENT_ID` ab app use nahi karti.
+
+## 22. Ultronapp, activation keys ka admin web app (2026-11-03)
+
+Keys ab script ke bajay browser se manage hoti hain. `ultronapp/` ek static web app hai (koi build step nahi), Google sign-in
+ke baad keys banati, dikhati aur edit karti hai. Buyer ki details (name, email, phone) key ke saath store hoti hain aur app
+activate hone par server se wahi laa kar Settings > Activation me dikhati hai.
+
+| Cheez | Ab kya hai |
+|---|---|
+| Web app | `ultronapp/` (HTML + ES modules). Firebase Auth Google login, Firebase Hosting (`firebase.json`). `?demo=1` localhost par fake data ke saath chalta hai |
+| Admin API | `mcp/license-admin` Lambda (`ultron-api-license-admin`): `GET/POST /v1/admin/licenses`, `PATCH /v1/admin/licenses/{id}`, `POST .../{id}/allow-move` |
+| Access | API Gateway ka JWT check har Firebase user (anonymous bhi) ko pass karta hai, isliye Lambda khud `email` verified hona aur `ADMIN_EMAILS` me hona check karta hai. Khali list matlab koi nahi |
+| CORS | Sirf `AdminOrigins` (Ultronapp ka origin) ko. Phone app browser nahi hai, usko farq nahi padta |
+| Items | Purane fields wahi. Naye optional: `name`, `email`, `phone`, `note`, `createdAt`, `hint` (key ke aakhri 4 chars, list me dikhane ke liye). Full key sirf banate waqt ek baar dikhti hai |
+| App | `LicenseStatus` me `name`, `email`, `phone`, `activatedAt`, `durationDays` aaye. Purana server jawab bhi parse hota hai |
+| Allow move | Din me ek move wali rok hatane ke liye `movedAt = 0`. Phone tab tak bandha rehta hai jab tak naya phone activate na kare |
+
+Deploy. Stack update me `AdminEmails` (comma separated Google emails) aur `AdminOrigins` (jaise `https://ultronapp-admin.web.app`) do.
+Firebase console me ek Web app banao, uski `apiKey` `ultronapp/config.js` me daalo, Hosting ka domain Authentication > Authorized
+domains me add karo, phir `firebase deploy --only hosting`. Detail `ultronapp/README.md` me.

@@ -2,7 +2,6 @@
 # local.properties is gitignored and must never be committed.
 
 sdk.dir=/path/to/Android/sdk
-GEMINI_API_KEY=your_gemini_api_key_here
 
 # Release signing (needed only for `assembleRelease` / `bundleRelease`).
 # NOTE: this project's actual existing keystore is keystore/nivi-release.jks (see
@@ -20,7 +19,3 @@ RELEASE_KEY_PASSWORD=your_key_password_here
 
 # Public client id of a GitHub OAuth App (Device Flow enabled) for "Sign in with GitHub". Not a secret.
 GITHUB_CLIENT_ID=
-
-
-# Update server on AWS (includes its access token); lets the app update itself. See scripts/publish-update.ps1.
-UPDATE_URL=

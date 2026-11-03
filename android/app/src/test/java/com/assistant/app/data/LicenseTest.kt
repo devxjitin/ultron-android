@@ -32,6 +32,26 @@ class LicenseTest {
         assertFalse(isUsableOffline(null, checkedAt = 1_000, nowSeconds = 2_000))
     }
 
+    @Test fun `buyer details come from the server answer and survive the cache`() {
+        val json = JSONObject()
+            .put("active", true).put("plan", "yearly").put("expiresAt", 10_000_000).put("reason", "")
+            .put("name", "Asha Verma").put("email", "asha@example.com").put("phone", "+91 98765 43210")
+            .put("activatedAt", 5_000_000).put("durationDays", 365)
+        val status = LicenseStatus.fromJson(json)
+        assertEquals("Asha Verma", status.name)
+        assertEquals("asha@example.com", status.email)
+        assertEquals("+91 98765 43210", status.phone)
+        assertEquals(5_000_000L, status.activatedAt)
+        assertEquals(365, status.durationDays)
+        assertEquals(status, LicenseStatus.fromJson(JSONObject(LicenseStatus.toJson(status))))
+    }
+
+    @Test fun `an older server answer without buyer details still parses`() {
+        val status = LicenseStatus.fromJson(JSONObject("""{"active":true,"plan":"yearly","expiresAt":10000000,"reason":""}"""))
+        assertEquals(active, status)
+        assertEquals("", status.name)
+    }
+
     @Test fun `status survives the cache round trip`() {
         val back = LicenseStatus.fromJson(JSONObject(LicenseStatus.toJson(active.copy(reason = "moved"))))
         assertEquals(active.copy(reason = "moved"), back)

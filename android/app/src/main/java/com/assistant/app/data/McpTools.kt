@@ -32,5 +32,8 @@ fun decodeMcpTools(json: String?): List<McpToolSpec> = runCatching {
     }
 }.getOrDefault(emptyList())
 
-/** Every tool a connected server offers is used; there are no per-tool switches. */
-fun effectiveMcpTools(tools: List<McpToolSpec>): Set<String> = tools.map { it.name }.toSet()
+/**
+ * The app only reads from GitHub, so only tools the server marks read-only are used, whatever the server was asked
+ * to hide. A tool that says nothing about itself is treated as one that can change data. There are no per-tool switches.
+ */
+fun effectiveMcpTools(tools: List<McpToolSpec>): Set<String> = tools.filter { it.readOnly }.map { it.name }.toSet()

@@ -36,7 +36,7 @@ object AppUpdater {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    val isConfigured: Boolean get() = ApiClient.isConfigured || BuildConfig.UPDATE_URL.isNotBlank()
+    val isConfigured: Boolean get() = ApiClient.isConfigured
 
     /** Success(null) means this build is already the newest one (or nothing has been published yet). */
     suspend fun check(): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
@@ -52,7 +52,6 @@ object AppUpdater {
                         }
                     }
                 } catch (e: Exception) {
-                    // The Ultron API is tried first; if it cannot answer, the older server gets a turn.
                     lastFailure = e
                     continue
                 }
@@ -71,7 +70,7 @@ object AppUpdater {
         }
     }
 
-    /** The Ultron API first (needs the user's Firebase token), then the older secret-URL server when the build has one. */
+    /** The Ultron API, which needs the user's Firebase token; nothing is requested when they are not signed in. */
     private fun latestRequests(): List<Request> = buildList {
         if (ApiClient.isConfigured) {
             ApiClient.authHeader()?.let { auth ->
@@ -80,7 +79,6 @@ object AppUpdater {
                     .build())
             }
         }
-        if (BuildConfig.UPDATE_URL.isNotBlank()) add(Request.Builder().url(BuildConfig.UPDATE_URL).build())
     }
 
     /** Downloads the build to the app's cache and verifies it; [onProgress] gets 0..1. */

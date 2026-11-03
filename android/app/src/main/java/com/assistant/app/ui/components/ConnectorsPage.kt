@@ -559,7 +559,7 @@ private val InfoById: Map<String, Info> = mapOf(
         "Your phone, which asks YouTube directly"
     ),
     "github" to Info(
-        "Lets the assistant work with your GitHub: search repositories and code, read files, issues, pull requests and commits, and make changes with the tools GitHub offers. Every tool GitHub's server provides is used, including ones that change data.",
+        "Lets the assistant work with your GitHub: search repositories and code, read files, issues, pull requests and commits. It only reads: tools that change data are never used, and the sign-in asks for no write access.",
         "Sign in with GitHub. A code is copied and GitHub opens in your browser.",
         "Requests go to GitHub's own MCP server with your sign-in token, which is kept encrypted on this phone. Repository text is untrusted and never treated as instructions.",
         "GitHub's MCP server"

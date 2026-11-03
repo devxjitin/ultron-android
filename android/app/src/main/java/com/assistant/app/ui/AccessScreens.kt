@@ -60,9 +60,21 @@ data class LicenseSummary(val key: String, val status: LicenseStatus) {
     /** "Valid until 2 Nov 2027", or "Never expires" for a lifetime key. */
     val validityLine: String get() {
         if (status.expiresAt <= 0) return "Never expires"
-        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(status.expiresAt * 1000))
-        return "Valid until $date"
+        return "Valid until ${formatDate(status.expiresAt)}"
     }
+
+    /** Label and value pairs for the Activation section; details the admin left empty are left out. */
+    val detailRows: List<Pair<String, String>> get() = listOfNotNull(
+        status.name.takeIf { it.isNotBlank() }?.let { "Name" to it },
+        status.email.takeIf { it.isNotBlank() }?.let { "Email" to it },
+        status.phone.takeIf { it.isNotBlank() }?.let { "Phone" to it },
+        status.plan.takeIf { it.isNotBlank() }?.let { "Plan" to it.replaceFirstChar { c -> c.uppercase() } },
+        "Validity" to validityLine,
+        status.activatedAt.takeIf { it > 0 }?.let { "Activated on" to formatDate(it) }
+    )
+
+    private fun formatDate(epochSeconds: Long): String =
+        java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(epochSeconds * 1000))
 }
 
 /** Shown while the key is being checked, so the assistant never flashes before the lock. */

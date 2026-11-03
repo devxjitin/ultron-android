@@ -95,6 +95,17 @@ class LicenseTests(unittest.TestCase):
         self.assertEqual(200, code)
         self.assertEqual({"active": False, "plan": "", "expiresAt": 0, "reason": "unknown_key"}, body)
 
+    def test_answer_carries_the_buyer_details(self):
+        self.add(name="Asha", email="asha@example.com", phone="+91 98765 43210")
+        body = call(request("/v1/license/activate"))[1]
+        self.assertEqual(("Asha", "asha@example.com", "+91 98765 43210", 365), (body["name"], body["email"], body["phone"], body["durationDays"]))
+        self.assertGreater(body["activatedAt"], 0)
+
+    def test_answer_has_empty_details_when_none_were_entered(self):
+        self.add()
+        body = call(request("/v1/license/activate"))[1]
+        self.assertEqual(("", "", ""), (body["name"], body["email"], body["phone"]))
+
     def test_first_activation_binds_and_starts_the_clock(self):
         self.add()
         before = int(time.time())
