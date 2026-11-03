@@ -1,0 +1,59 @@
+# Purani Function URLs hatane ka plan
+
+Ye plan 2026-11-03 ko AWS ki read-only jaanch (us-east-1, account 143920986615) ke baad likha gaya hai. Is jaanch me kuch badla nahi gaya.
+
+## Abhi kya live hai
+
+| Function | Function URL auth | Pichle 14 din me chali | Aakhri baar | APK me URL? |
+|---|---|---|---|---|
+| `web-extract-mcp` | NONE (path token) | 13 baar | 2026-10-26 | Nahi, `b6d07f4` me hata diya |
+| `google-workspace-mcp` | NONE (path token) | 519 baar | 2026-10-28 | Nahi, app me kahin wire nahi hai |
+| `ultron-updates` | NONE (path token) | 623 baar | 2026-11-02 | Haan, `UPDATE_URL` (`AppUpdater.kt:83`) |
+| `ultron-api-web-extract` (naya) | Nahi hai, API Gateway ke peeche | 0 baar | - | `/v1/web/mcp` |
+
+Do baatein jo plan ko badalti hain:
+
+1. `google-workspace-mcp` bhi open Function URL ke saath live hai. Pehle review me ye chhoot gaya tha. Ye Google OAuth token forward karta hai, to iske path token ka leak hona sabse bura hai.
+2. Naya `ultron-api-web-extract` 14 din me ek baar bhi nahi chala. Ya to phones abhi purane build pe hain, ya `/v1/web/mcp` ka route sach me kaam nahi karta. Purana URL hatane se pehle ye pakka karna zaroori hai, nahi to web page reader band ho sakta hai.
+
+## Order
+
+**Step 0, naye path ko jaancho (pehle, kuch delete nahi)**
+
+- Naye build ko phone pe install karo aur "is page ka summary do" jaisa kuch bolo.
+- CloudWatch me `ultron-api-web-extract` ke invocations dekho. Ek invocation dikhni chahiye, aur reply me page ka text aana chahiye.
+- Agar nahi chala, to pehle route ya authorizer theek karo. Aage mat badho.
+
+**Step 1, `google-workspace-mcp` band karo (sabse jaldi)**
+
+- App me ye connector hai hi nahi, aur 6 din se koi call nahi aayi.
+- Function URL config delete karo, Lambda abhi rehne do. Isse URL turant dead ho jata hai aur wapas banana ek command hai.
+- 14 din error alarm ya CloudWatch me koi complaint na aaye to Lambda, role `google-workspace-mcp-role` aur log group delete karo.
+- Repo me: `mcp/google-workspace/` aur `infra/ultron.yaml` ke Google wale resources hatao (ye alag commit me, jab Step 1 confirm ho jaye).
+
+**Step 2, `web-extract-mcp` band karo**
+
+- Shart: Step 0 pass ho chuka ho, aur naya APK kam se kam 7 din ek jaise users pe chala ho.
+- Function URL config delete karo. 14 din baad Lambda aur uska role/log group.
+- `mcp/web-extract/` ka code `ultron-api-web-extract` ke liye chahiye, use mat hatao. Sirf purani hand-made function hatani hai.
+
+**Step 3, `ultron-updates` aur `UPDATE_URL` (sabse last)**
+
+- Ye tab tak nahi hata sakte jab tak saare phones naye APK pe na aa jayein, kyunki purane APK isi URL se update dhundhte hain. Abhi bhi roz 3 se 120 calls aa rahi hain.
+- Pehle ek release banao jisme `UPDATE_URL` build se hata ho (`AppUpdater.kt` ab sirf `ApiClient` se chale), aur use OTA se phones tak pahunchao.
+- `ultron-updates` ke invocations 14 din tak zero hone ka intezaar karo. Tab Function URL, phir Lambda delete karo.
+- Releases ka S3 bucket mat chhedo, naya API wahi use karta hai.
+
+## Rollback
+
+- Function URL delete karna ulta ho sakta hai, magar URL badal jata hai (naya random id). Isliye Step 1 aur 2 me pehle sirf URL hata rahe hain, Lambda nahi.
+- Delete se pehle Lambda ka zip ya code S3 pe save rakho.
+
+## Jo tumhe karna hai, mujhe AWS pe kuch delete karne ki permission chahiye
+
+Maine AWS pe sirf padha hai. Delete ya URL hatana tumhari "haan" ke baad hi karunga, ek ek step karke.
+
+## Related cheezein
+
+- CI ka `LOCAL_PROPERTIES` secret check karo ki usme `WEB_EXTRACT_URL`, `UPDATE_URL` ya Gemini keys to nahi hain. Hain to hata do, aur path tokens rotate karo.
+- `docs/ARCHITECTURE.md` ke T3 aur S3 rows is plan ke baad update honge.
