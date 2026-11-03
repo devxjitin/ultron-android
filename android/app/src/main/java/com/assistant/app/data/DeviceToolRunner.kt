@@ -1414,7 +1414,7 @@ class DeviceToolRunner(
         // No chooser: Android opens the user's default app for this kind of file, and only asks when none is set.
         val view = Intent(Intent.ACTION_VIEW).setDataAndType(file.uri, file.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         return try {
-            start(FileOpeners.apply(app, view, file.mime))
+            start(view)
             "status=ok\nOpened ${file.name} in the default app."
         } catch (e: ActivityNotFoundException) {
             "status=unavailable\nNo app on the phone can open ${file.name}."
