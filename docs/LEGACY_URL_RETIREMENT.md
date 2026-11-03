@@ -76,3 +76,20 @@ Abhi bhi baaki hai:
 ### Phone test (2026-11-03 20:58 IST, debug build `adb install -r` ke baad)
 
 Pass. Phone ne Firebase token ke saath `/v1/web/mcp` pe teen calls ki (15:28 UTC): `initialize` (99 ms), `notifications/initialized` (2 ms) aur `tools/call` (1.9 s, page padha). `ultron-api-web-extract` pe 0 errors, aur purana `web-extract-mcp` pe 0 calls, yaani naya build sirf naye raaste se gaya. Step 0 ho gaya, Step 1 ab ho sakta hai. Step 2 ke liye ab bhi chahiye ki naya APK baaki phones pe kuch din chale.
+
+## Step 1 ho gaya (2026-11-03)
+
+`google-workspace-mcp` ka Function URL delete kar diya (us-east-1). Lambda, uska role aur log group abhi hain. Purani URL ab HTTP 403 deti hai.
+
+Rollback agar zaroorat pade (URL ka host badal jayega, kyunki naya id banta hai):
+
+```
+aws lambda create-function-url-config --function-name google-workspace-mcp --auth-type NONE --invoke-mode BUFFERED --region us-east-1
+```
+
+Isme resource policy pehle se hai, to sirf URL config dobara banana kaafi hai.
+
+Baaki:
+
+- 14 din (2026-11-17) tak koi complaint ya error na aaye to Lambda `google-workspace-mcp`, role `google-workspace-mcp-role` aur uska log group delete karo.
+- Uske baad repo se `mcp/google-workspace/` aur `infra/ultron.yaml` ke Google resources hatao. Template abhi bhi is URL ko declare karta hai, aur use us stack pe deploy mat karo, warna URL wapas aa jayega.
