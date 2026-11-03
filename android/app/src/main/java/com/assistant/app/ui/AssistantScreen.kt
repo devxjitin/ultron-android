@@ -61,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.components.AboutPage
 import com.assistant.app.ui.components.StoragePage
+import com.assistant.app.ui.components.SkillsPage
+import com.assistant.app.data.SkillRegistry
 import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
@@ -92,7 +94,7 @@ import com.assistant.app.data.DeviceTool
 import com.assistant.app.viewmodel.AssistantUiState
 import com.assistant.app.viewmodel.VoiceState
 
-private val SETTINGS_PAGES = setOf(AppPage.SETTINGS, AppPage.KNOWLEDGE)
+private val SETTINGS_PAGES = setOf(AppPage.SETTINGS, AppPage.KNOWLEDGE, AppPage.DEVELOPER)
 
 @Composable
 fun AssistantScreen(
@@ -106,6 +108,7 @@ fun AssistantScreen(
     onRequestPermission: () -> Unit,
     onOpenAppSettings: () -> Unit = {},
     onSettingsTapped: () -> Unit,
+    onDeveloperTapped: () -> Unit = {},
     onAboutTapped: () -> Unit = {},
     onKnowledgeTapped: () -> Unit = {},
     onHomeTapped: () -> Unit = {},
@@ -117,10 +120,15 @@ fun AssistantScreen(
     onUpdateNow: () -> Unit = {},
     onUsageTapped: () -> Unit = {},
     onStorageTapped: () -> Unit = {},
+    onSkillsTapped: () -> Unit = {},
+    onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
+    onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
+    onSkillDeleted: (String) -> Unit = {},
     onClearCache: () -> Unit = {},
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
+    onDismissAgentPromptUpdate: () -> Unit = {},
     onAddMemory: (String) -> Unit = {},
     onUpdateMemory: (String, String) -> Unit = { _, _ -> },
     onDeleteMemory: (String) -> Unit = {},
@@ -132,11 +140,17 @@ fun AssistantScreen(
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
     onRequestConnectorPermissions: (List<String>) -> Unit = {},
     onDismissSettings: () -> Unit,
+    onClearApiKey: () -> Unit,
+    onClearEmbeddingApiKey: () -> Unit,
+    onLiveModelSelected: (String) -> Unit,
     onVoiceSelected: (String) -> Unit,
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
+    onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
+    onGeneratePromptFromKnowledgeBase: () -> Unit,
+    onDismissPromptGenerationError: () -> Unit,
     onAddKnowledgeDocument: (String, String) -> Unit,
     onUpdateKnowledgeDocument: (String, String, String) -> Unit,
     onDeleteKnowledgeDocument: (String) -> Unit,
@@ -145,8 +159,8 @@ fun AssistantScreen(
     onDismissKnowledgeDocumentError: () -> Unit,
     onDismissToast: () -> Unit,
     voiceLevel: () -> Float = { 0f },
-    account: AccountSummary? = null,
-    onSignOut: () -> Unit = {},
+    license: LicenseSummary? = null,
+    onRemoveLicense: () -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(com.assistant.app.ui.theme.AssistantBackground)) {
         val availableHeight = maxHeight
@@ -155,7 +169,7 @@ fun AssistantScreen(
         val compact = availableHeight < 480.dp
         // NavTab and AppPage share their names, so the menu row for a page is found by name.
         val currentTab = NavTab.valueOf(uiState.page.name)
-        // Settings and Knowledge are one page. While it fades out the state already points elsewhere,
+        // Settings, Knowledge and Developer are one page. While it fades out the state already points elsewhere,
         // so it keeps showing the sub-page it was last on instead of jumping to another one mid-animation.
         val lastSettingsPage = remember { arrayOf(AppPage.SETTINGS) }
         if (uiState.page in SETTINGS_PAGES) lastSettingsPage[0] = uiState.page
@@ -166,10 +180,20 @@ fun AssistantScreen(
         LaunchedEffect(sessionActive) {
             sessionStartMs = if (sessionActive) System.currentTimeMillis() else null
         }
+        // Exits that would drop an unsaved Developer draft wait for Save/Discard first.
+        // Settings <-> Knowledge keeps the same page (and draft), so it isn't guarded.
+        var settingsDirty by remember { mutableStateOf(false) }
+        var pendingNav by remember { mutableStateOf<(() -> Unit)?>(null) }
+        val guardedNav: (() -> Unit) -> Unit = { action ->
+            when {
+                uiState.page in SETTINGS_PAGES && settingsDirty -> pendingNav = action
+                else -> action()
+            }
+        }
         val scope = rememberCoroutineScope()
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         // Back from any other page goes to the home screen.
-        BackHandler(enabled = currentTab != NavTab.HOME && !drawerState.isOpen) { onHomeTapped() }
+        BackHandler(enabled = currentTab != NavTab.HOME && !drawerState.isOpen) { guardedNav(onHomeTapped) }
         // Back with the menu open closes the menu instead of leaving the app.
         BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
         // Inside Connectors, back from the browse view returns to the added connectors first.
@@ -181,14 +205,16 @@ fun AssistantScreen(
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
-                        NavTab.HOME -> onHomeTapped()
-                        NavTab.USAGE -> onUsageTapped()
-                        NavTab.STORAGE -> onStorageTapped()
-                        NavTab.KNOWLEDGE -> onKnowledgeTapped()
-                        NavTab.CONNECTORS -> onConnectorsTapped()
-                        NavTab.MEMORY -> onMemoryTapped()
-                        NavTab.SETTINGS -> onSettingsTapped()
-                        NavTab.ABOUT -> onAboutTapped()
+                        NavTab.HOME -> guardedNav(onHomeTapped)
+                        NavTab.USAGE -> guardedNav(onUsageTapped)
+                        NavTab.STORAGE -> guardedNav(onStorageTapped)
+                        NavTab.SKILLS -> guardedNav(onSkillsTapped)
+                        NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
+                        NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
+                        NavTab.MEMORY -> guardedNav(onMemoryTapped)
+                        NavTab.SETTINGS -> guardedNav(onSettingsTapped)
+                        NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
+                        NavTab.ABOUT -> guardedNav(onAboutTapped)
                     }
                 },
                 modifier = drawerModifier.windowInsetsPadding(WindowInsets.displayCutout)
@@ -198,8 +224,8 @@ fun AssistantScreen(
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout)) {
         AnimatedContent(
             targetState = currentTab,
-            // Settings and Knowledge share one page.
-            contentKey = { if (it == NavTab.KNOWLEDGE) NavTab.SETTINGS else it },
+            // Settings, Knowledge and Developer share one page, so switching between them keeps an unsaved draft.
+            contentKey = { if (it == NavTab.KNOWLEDGE || it == NavTab.DEVELOPER) NavTab.SETTINGS else it },
             transitionSpec = {
                 (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 30 }) togetherWith fadeOut(tween(110))
             },
@@ -286,9 +312,13 @@ fun AssistantScreen(
                 )
             }
 
-            if (tab in listOf(NavTab.USAGE, NavTab.STORAGE, NavTab.ABOUT)) {
+            if (tab in listOf(NavTab.SKILLS, NavTab.USAGE, NavTab.STORAGE, NavTab.ABOUT)) {
                 val pageModifier = Modifier.padding(top = topReserve)
                 when (tab) {
+                    NavTab.SKILLS -> {
+                        val skills by SkillRegistry.entries.collectAsState()
+                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
+                    }
                     NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                     NavTab.STORAGE -> StoragePage(
                         memoryCount = uiState.memories.size,
@@ -315,16 +345,28 @@ fun AssistantScreen(
                 }
             }
 
-            if (tab in listOf(NavTab.SETTINGS, NavTab.KNOWLEDGE)) {
+            if (tab in listOf(NavTab.SETTINGS, NavTab.KNOWLEDGE, NavTab.DEVELOPER)) {
                 SettingsPage(
                     modifier = Modifier.padding(top = topReserve),
                     page = lastSettingsPage[0],
+                    currentApiKey = uiState.currentApiKey,
+                    currentEmbeddingApiKey = uiState.currentEmbeddingApiKey,
                     settings = uiState.settings,
+                    onLiveModelSelected = onLiveModelSelected,
                     onVoiceSelected = onVoiceSelected,
                     onLanguageSelected = onLanguageSelected,
                     onMicSensitivitySelected = onMicSensitivitySelected,
                     onBargeInToggled = onBargeInToggled,
                     onOwnerNameChanged = onOwnerNameChanged,
+                    onClearApiKey = onClearApiKey,
+                    onClearEmbeddingApiKey = onClearEmbeddingApiKey,
+                    onSaveDeveloperChanges = onSaveDeveloperChanges,
+                    isSavingDeveloper = uiState.isSavingDeveloperSettings,
+                    isGeneratingPrompt = uiState.isGeneratingPrompt,
+                    generatedPromptDraft = uiState.generatedPromptDraft,
+                    promptGenerationError = uiState.promptGenerationError,
+                    onGeneratePromptFromKnowledgeBase = onGeneratePromptFromKnowledgeBase,
+                    onDismissPromptGenerationError = onDismissPromptGenerationError,
                     knowledgeDocuments = uiState.knowledgeDocuments,
                     isSavingKnowledgeDocument = uiState.isSavingKnowledgeDocument,
                     knowledgePreparationStage = uiState.knowledgePreparationStage,
@@ -340,8 +382,11 @@ fun AssistantScreen(
                     onUploadMarkdownFile = onUploadMarkdownFile,
                     onDismissKnowledgeDocumentError = onDismissKnowledgeDocumentError,
                     onDismiss = onDismissSettings,
-                    account = account,
-                    onSignOut = onSignOut
+                    license = license,
+                    onRemoveLicense = onRemoveLicense,
+                    onDirtyChanged = { settingsDirty = it },
+                    pendingNavigation = pendingNav,
+                    onPendingNavigationHandled = { pendingNav = null }
                 )
             }
 
@@ -420,6 +465,40 @@ fun AssistantScreen(
                 .padding(bottom = 116.dp)
         )
 
+        if (uiState.restartRequestId > 0) {
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Restarting app") },
+                text = { Text("Developer changes are saved. Applying them now…") },
+                confirmButton = {},
+                dismissButton = {}
+            )
+        }
+
+        if (uiState.isUpdatingAgentPrompt) {
+            AlertDialog(
+                onDismissRequest = onDismissAgentPromptUpdate,
+                title = { Text("Updating") },
+                text = {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = AssistantAccent
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text("Updating your assistant with the new information. This can take a moment.")
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = onDismissAgentPromptUpdate) { Text("Continue in background") }
+                },
+                dismissButton = {}
+            )
+        }
+
         }
         }
 
@@ -479,7 +558,7 @@ private fun StatusLine(
         !hasMicPermission -> strings.micRationale to AssistantError
         uiState.voiceState == VoiceState.ERROR ->
             (uiState.errorMessage ?: "Something went wrong") to AssistantError
-        !uiState.hasApiKey -> "This build is not set up to reach the assistant yet." to AssistantError
+        !uiState.hasApiKey -> "The assistant isn't set up yet. Add a Gemini API key in Developer settings." to AssistantError
         uiState.voiceState == VoiceState.CONNECTING -> strings.connectingCancel to AssistantTextSecondary
         uiState.voiceState == VoiceState.RESETTING -> strings.refreshingCancel to AssistantTextSecondary
         uiState.isMicMuted && uiState.voiceState == VoiceState.LISTENING -> strings.micMuted to AssistantError

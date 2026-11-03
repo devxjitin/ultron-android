@@ -507,3 +507,4 @@
 [2026-11-02 22:05] [Claude] [Add: billing daily sweep Lambda event, route throttles in api.yaml, test]
 [2026-11-02 22:08] [Claude] [Add: App Check token verify in web-extract + releases Lambdas (log mode), app sends header]
 [2026-11-02 22:13] [Claude] [Add: on-screen confirm for SMS/calls after untrusted content (ActionGuard)]
+[2026-11-03 09:35] [Claude] [Update: Razorpay/Google sign-in hata, activation key lock, Skills+Developer page wapas]

@@ -3,11 +3,8 @@ package com.assistant.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,46 +15,57 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.assistant.app.data.BillingPlan
-import com.assistant.app.data.SubscriptionStatus
+import com.assistant.app.data.LicenseKey
+import com.assistant.app.data.LicenseStatus
 import com.assistant.app.ui.components.AppIconTile
 import com.assistant.app.ui.theme.AppButtonShape
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantBackground
 import com.assistant.app.ui.theme.AssistantError
-import com.assistant.app.ui.theme.AssistantSurfaceElevated
+import com.assistant.app.ui.theme.AssistantFieldBackground
+import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 import com.assistant.app.viewmodel.AccessState
 
-/** The signed-in account as Settings shows it. */
-data class AccountSummary(val email: String, val status: SubscriptionStatus) {
-    /** "1 year plan, renews on 2 Nov 2027" or similar; empty when nothing is known. */
-    val planLine: String get() {
-        val plan = status.billingPlan?.label?.let { "$it plan" } ?: return ""
-        if (status.currentEnd <= 0) return plan
-        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(status.currentEnd * 1000))
-        return if (status.status == "cancelled") "$plan, ends on $date" else "$plan, renews on $date"
+/** The activated key as Settings shows it. */
+data class LicenseSummary(val key: String, val status: LicenseStatus) {
+    val maskedKey: String get() = LicenseKey.masked(key)
+
+    /** "Valid until 2 Nov 2027", or "Never expires" for a lifetime key. */
+    val validityLine: String get() {
+        if (status.expiresAt <= 0) return "Never expires"
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(status.expiresAt * 1000))
+        return "Valid until $date"
     }
 }
 
-/** Shown while the subscription is being checked, so the assistant never flashes before the lock. */
+/** Shown while the key is being checked, so the assistant never flashes before the lock. */
 @Composable
 fun AccessCheckingScreen() {
     AccessFrame {
@@ -66,67 +74,45 @@ fun AccessCheckingScreen() {
 }
 
 @Composable
-fun SignInScreen(state: AccessState.SignedOut, enabled: Boolean, onSignIn: () -> Unit) {
+fun ActivationScreen(state: AccessState.NeedsKey, storeUrl: String, onActivate: (String) -> Unit, onOpenStore: () -> Unit) {
+    var input by rememberSaveable { mutableStateOf("") }
     AccessFrame {
-        Heading("Welcome to Ultron", "Sign in with your Google account. Your plan stays with the account, even if you reinstall the app.")
-        Spacer(Modifier.height(28.dp))
+        Heading("Activate Ultron", "Enter the activation key you got after buying Ultron on the website store. It works on one phone at a time.")
+        Spacer(Modifier.height(24.dp))
+        TextField(
+            value = input,
+            onValueChange = { input = it.take(40) },
+            placeholder = { Text("ULTR-XXXX-XXXX-XXXX-XXXX", color = AssistantTextMuted) },
+            singleLine = true,
+            enabled = !state.busy,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false,
+                imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (input.isNotBlank()) onActivate(input) }),
+            shape = RoundedCornerShape(16.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = AssistantFieldBackground,
+                unfocusedContainerColor = AssistantFieldBackground,
+                disabledContainerColor = AssistantFieldBackground,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                cursorColor = AssistantAccent,
+                focusedTextColor = AssistantTextPrimary,
+                unfocusedTextColor = AssistantTextPrimary,
+                disabledTextColor = AssistantTextSecondary
+            ),
+            modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(16.dp))
+        )
+        Spacer(Modifier.height(14.dp))
         PrimaryButton(
-            text = if (state.busy) "Signing in…" else "Continue with Google",
-            enabled = enabled && !state.busy,
-            onClick = onSignIn
+            text = if (state.busy) "Activating…" else "Activate",
+            enabled = !state.busy && input.isNotBlank(),
+            onClick = { onActivate(input) }
         )
         state.error?.let { ErrorLine(it) }
-    }
-}
-
-@Composable
-fun PaywallScreen(
-    state: AccessState.Locked,
-    onBuy: (BillingPlan) -> Unit,
-    onRefresh: () -> Unit,
-    onSignOut: () -> Unit
-) {
-    AccessFrame {
-        Heading("Choose your plan", "Ultron works with an active plan. Pay with UPI, card or net banking; it renews on its own and you can cancel anytime.")
-        Spacer(Modifier.height(24.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            BillingPlan.entries.forEach { plan ->
-                PlanCard(plan, best = plan == BillingPlan.YEARLY, busy = state.busyPlan == plan,
-                    enabled = state.busyPlan == null) { onBuy(plan) }
-            }
-        }
-        state.error?.let { ErrorLine(it) }
-        Spacer(Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onRefresh, enabled = state.busyPlan == null) { Text("Refresh", color = AssistantAccent) }
-            TextButton(onClick = onSignOut, enabled = state.busyPlan == null) { Text("Sign out", color = AssistantTextMuted) }
-        }
-        if (state.email.isNotBlank()) {
-            Text("Signed in as ${state.email}", color = AssistantTextMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
-        }
-    }
-}
-
-@Composable
-private fun PlanCard(plan: BillingPlan, best: Boolean, busy: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        Modifier.fillMaxWidth().clip(shape)
-            .background(AssistantSurfaceElevated, shape)
-            .border(BorderStroke(1.dp, AssistantAccent.copy(alpha = if (best) 0.7f else 0.25f)), shape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(plan.label, color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            val note = if (plan.months > 1) "Rs ${plan.perMonthRupees} a month" else "Billed every month"
-            Text(if (best) "$note, best value" else note, color = AssistantTextMuted, fontSize = 12.sp)
-        }
-        if (busy) {
-            CircularProgressIndicator(color = AssistantAccent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-        } else {
-            Text("Rs ${plan.priceRupees}", color = AssistantAccent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        if (storeUrl.isNotBlank()) {
+            Spacer(Modifier.height(18.dp))
+            TextButton(onClick = onOpenStore) { Text("Don't have a key? Buy one on the store", color = AssistantAccent) }
         }
     }
 }

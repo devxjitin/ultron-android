@@ -8,7 +8,7 @@ object AssistantOptions {
 
     data class LiveModel(val id: String, val label: String)
 
-    /** Live API models this build knows about. The first one is the model every session uses. */
+    /** Live API models the user can choose between in Developer settings. The first one is the default. */
     val liveModels: List<LiveModel> = listOf(
         LiveModel("gemini-3.8-live", "Gemini 3.8 Live"),
         LiveModel("gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (preview)")
@@ -16,6 +16,7 @@ object AssistantOptions {
 
     val defaultLiveModel: String = liveModels.first().id
 
+    fun isApprovedLiveModel(id: String): Boolean = liveModels.any { it.id == id }
 
     data class Voice(val name: String, val gender: String, val style: String)
 

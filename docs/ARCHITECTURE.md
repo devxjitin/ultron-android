@@ -792,3 +792,24 @@ flowchart LR
 | Live se pehle | P10 checklist: live plans, live keys SSM me, live webhook secret, Razorpay KYC, price match test, ek asli Rs 199 payment aur refund test | Aap + main |
 | Live se pehle | T2 release key, T5 SMS/call/accessibility confirmation | Main |
 | Baad me | 20.4 entitlement server, P8 offline grace, P9 refunds, T6 action pinning | Main |
+
+## 21. Decision: website store + activation key, app me Razorpay nahi (2026-11-03)
+
+Section 19 ka Razorpay subscription aur Google sign-in hata diya. Ab kharidari sirf website store par hoti hai, app sirf
+activation key maangti hai. Skills page, Developer page (prompt, greeting, API keys, model picker) phir se phone par editable
+hain, jaise `307fc6f` se pehle the. Firestore remote content, Remote Config aur force-update screen wapas nahi aaye.
+
+| Cheez | Ab kya hai |
+|---|---|
+| App lock | `AccessViewModel` + `ActivationScreen`. Key `ULTR-XXXX-XXXX-XXXX-XXXX` (Crockford base32, 80 bit). Ek key ek phone par ek waqt me |
+| Backend | `mcp/license` Lambda (`ultron-api-license`) + DynamoDB `ultron-licenses`, key ka sirf SHA-256 store hota hai |
+| Routes | `POST /v1/license/activate` aur `POST /v1/license/status`, dono Firebase JWT ke peeche. Activate ka throttle 1 rps, burst 5 |
+| Device badalna | Activate naye phone (naya Firebase uid) par key move kar deta hai, purana phone agle status check par lock. Din me ek hi move |
+| Expiry | `durationDays` pehli activation se ginte hain, `0` matlab kabhi expire nahi. Store chahe to `expiresAt` khud set kar sakta hai |
+| Offline | Aakhri server jawab 7 din tak chalta hai (`LICENSE_OFFLINE_GRACE_SECONDS`), expiry ke baad nahi |
+| Keys banana | Website store paid order par `ultron-licenses` me PutItem kare (fields Lambda ke docstring me). Test ke liye `python scripts/create-license-key.py` |
+| Store link | `STORE_URL` `local.properties` me, activation screen par "Buy one on the store" link. Khali ho to link nahi dikhta |
+
+Deploy notes. `ultron-subscriptions` table `DeletionPolicy: Retain` hai, stack update ke baad bhi AWS me rahegi, data chahiye na ho
+to haath se delete karna. SSM `/ultron/razorpay/*` parameters aur Razorpay webhook bhi ab kaam ke nahi, unhe aap band kar sakte ho.
+`GOOGLE_WEB_CLIENT_ID` ab app use nahi karti.
