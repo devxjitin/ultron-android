@@ -1,5 +1,12 @@
 {
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": "ultronapp",
+    "ignore": ["README.md", "firebase.json", "**/.*"],
+    "headers": [
+      { "source": "**", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
+    ]
   }
 }

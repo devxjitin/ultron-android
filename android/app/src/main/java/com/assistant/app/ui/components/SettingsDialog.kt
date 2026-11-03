@@ -817,7 +817,12 @@ private fun GeneralSettingsContent(
         if (license != null) {
             SettingsHeading("Activation")
             Text(license.maskedKey, color = com.assistant.app.ui.theme.AssistantTextPrimary)
-            Text(license.validityLine, color = AssistantTextMuted)
+            license.detailRows.forEach { (label, value) ->
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Text(label, color = AssistantTextMuted, modifier = Modifier.weight(0.35f))
+                    Text(value, color = com.assistant.app.ui.theme.AssistantTextPrimary, modifier = Modifier.weight(0.65f))
+                }
+            }
             TextButton(onClick = { confirmingRemoveLicense = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
                 Text("Remove key from this phone", color = AssistantError)
             }

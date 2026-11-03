@@ -5,7 +5,9 @@ Routes (behind the Ultron HTTP API; each carries a Firebase ID token that API Ga
   POST /v1/license/status    {"key"} -> status for the caller without moving the key
 
 Both answer 200 with {"active", "plan", "expiresAt", "reason"}; "reason" says why a key is not active (unknown_key,
-expired, revoked, moved, moved_recently). Only malformed requests get a 4xx.
+expired, revoked, moved, moved_recently). Only malformed requests get a 4xx. For a key that exists the answer also carries
+the buyer details the admin entered in Ultronapp: "name", "email", "phone", "activatedAt", "durationDays" (empty or 0 when
+not set). Only the holder of the key can ask, so these are not secret from them.
 
 One DynamoDB item per key, keyed by the SHA-256 of the normalized key so the table never holds a usable key:
   keyHash      S  primary key
@@ -16,7 +18,9 @@ One DynamoDB item per key, keyed by the SHA-256 of the normalized key so the tab
   uid          S  Firebase uid of the device the key is on, absent until activated
   activatedAt  N  first activation
   movedAt      N  last time the key moved to another device
-The store (or scripts/create-license-key.py) writes the first four; this Lambda writes the rest.
+  name, email, phone S  buyer details, optional (written by the store, Ultronapp or scripts/create-license-key.py)
+The store (or Ultronapp, or scripts/create-license-key.py) writes the first four and the buyer details; this Lambda writes
+the rest.
 
 Env vars: TABLE.
 """
@@ -77,12 +81,21 @@ def _uid(event):
 
 
 def _answer(item, active, reason=""):
-    return _resp(200, {
+    body = {
         "active": active,
         "plan": str(item.get("plan", "")) if item else "",
         "expiresAt": int(item.get("expiresAt", 0)) if item else 0,
         "reason": reason,
-    })
+    }
+    if item:
+        body.update({
+            "name": str(item.get("name", "")),
+            "email": str(item.get("email", "")),
+            "phone": str(item.get("phone", "")),
+            "activatedAt": int(item.get("activatedAt", 0)),
+            "durationDays": int(item.get("durationDays", 0)),
+        })
+    return _resp(200, body)
 
 
 def _unusable_reason(item, now):

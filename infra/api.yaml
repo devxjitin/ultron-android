@@ -34,6 +34,14 @@ Parameters:
     Default: log
     AllowedValues: [off, log, enforce]
     Description: log records a missing or bad App Check token but lets the request run; enforce refuses it with 401.
+  AdminEmails:
+    Type: String
+    Default: ""
+    Description: Comma separated Google emails allowed to use Ultronapp (the activation key admin). Empty locks everyone out.
+  AdminOrigins:
+    Type: CommaDelimitedList
+    Default: "http://localhost:8080"
+    Description: Web origins of Ultronapp allowed to call the admin routes, such as https://ultronapp.web.app. No trailing slash.
 
 Conditions:
   HasDomain: !And
@@ -64,6 +72,12 @@ Resources:
               issuer: !Sub "https://securetoken.google.com/${FirebaseProjectId}"
               audience:
                 - !Ref FirebaseProjectId
+      # Only Ultronapp (the browser admin app) needs CORS; the phone app is not a browser and ignores it.
+      CorsConfiguration:
+        AllowOrigins: !Ref AdminOrigins
+        AllowMethods: [GET, POST, PATCH, OPTIONS]
+        AllowHeaders: [authorization, content-type]
+        MaxAge: 600
       DefaultRouteSettings:
         ThrottlingBurstLimit: 40
         ThrottlingRateLimit: 20
@@ -76,6 +90,9 @@ Resources:
         "POST /v1/license/activate":
           ThrottlingBurstLimit: 5
           ThrottlingRateLimit: 1
+        "POST /v1/admin/licenses":
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 2
       Tags:
         project: ultron
 
@@ -212,6 +229,57 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${LicenseFunction}"
+      RetentionInDays: 30
+
+  # Ultronapp's backend: list, create and edit activation keys. Any signed-in Firebase user passes the API's JWT check, so
+  # the Lambda itself only lets the verified emails in AdminEmails through.
+  LicenseAdminFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ultron-api-license-admin
+      CodeUri: ../mcp/license-admin/
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 15
+      Environment:
+        Variables:
+          TABLE: !Ref LicensesTable
+          ADMIN_EMAILS: !Ref AdminEmails
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Scan, dynamodb:PutItem, dynamodb:UpdateItem]
+              Resource: !GetAtt LicensesTable.Arn
+      Events:
+        List:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/admin/licenses
+            Method: GET
+        Create:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/admin/licenses
+            Method: POST
+        Update:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/admin/licenses/{id}
+            Method: PATCH
+        AllowMove:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/admin/licenses/{id}/allow-move
+            Method: POST
+
+  LicenseAdminLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LicenseAdminFunction}"
       RetentionInDays: 30
 
 Outputs:

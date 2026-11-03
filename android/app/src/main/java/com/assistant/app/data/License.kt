@@ -26,14 +26,33 @@ object LicenseKey {
     }
 }
 
-/** What the license Lambda says about a key on this device. [expiresAt] is in epoch seconds, 0 for a key that never expires. */
-data class LicenseStatus(val active: Boolean, val plan: String, val expiresAt: Long, val reason: String) {
+/**
+ * What the license Lambda says about a key on this device. [expiresAt] and [activatedAt] are in epoch seconds, 0 for a key
+ * that never expires or has no activation yet. [name], [email] and [phone] are the buyer details entered in Ultronapp and
+ * are empty when none were set; [durationDays] is the length of the plan, 0 for a lifetime key.
+ */
+data class LicenseStatus(
+    val active: Boolean,
+    val plan: String,
+    val expiresAt: Long,
+    val reason: String,
+    val name: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val activatedAt: Long = 0,
+    val durationDays: Int = 0
+) {
     companion object {
         fun fromJson(json: JSONObject) = LicenseStatus(
             active = json.optBoolean("active"),
             plan = json.optString("plan"),
             expiresAt = json.optLong("expiresAt"),
-            reason = json.optString("reason")
+            reason = json.optString("reason"),
+            name = json.optString("name"),
+            email = json.optString("email"),
+            phone = json.optString("phone"),
+            activatedAt = json.optLong("activatedAt"),
+            durationDays = json.optInt("durationDays")
         )
 
         fun toJson(status: LicenseStatus): String = JSONObject()
@@ -41,6 +60,11 @@ data class LicenseStatus(val active: Boolean, val plan: String, val expiresAt: L
             .put("plan", status.plan)
             .put("expiresAt", status.expiresAt)
             .put("reason", status.reason)
+            .put("name", status.name)
+            .put("email", status.email)
+            .put("phone", status.phone)
+            .put("activatedAt", status.activatedAt)
+            .put("durationDays", status.durationDays)
             .toString()
     }
 }
