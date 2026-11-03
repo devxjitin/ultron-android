@@ -93,3 +93,21 @@ Baaki:
 
 - 14 din (2026-11-17) tak koi complaint ya error na aaye to Lambda `google-workspace-mcp`, role `google-workspace-mcp-role` aur uska log group delete karo.
 - Uske baad repo se `mcp/google-workspace/` aur `infra/ultron.yaml` ke Google resources hatao. Template abhi bhi is URL ko declare karta hai, aur use us stack pe deploy mat karo, warna URL wapas aa jayega.
+
+## Step 2 aur 3 ho gaye (2026-11-03)
+
+App sirf ek phone pe hai, aur uska build (`25603a8`) na `WEB_EXTRACT_URL` use karta hai na `UPDATE_URL`. Install ke baad CloudWatch me purani dono Lambdas pe 0 calls thi, aur update check sirf `ultron-api-releases` se hua. Isliye `web-extract-mcp` aur `ultron-updates` ke Function URL bhi delete kar diye. Dono ab HTTP 403 dete hain. Lambdas, roles aur log groups abhi hain.
+
+Rollback (URL ka host badal jayega, kyunki naya id banta hai):
+
+```
+aws lambda create-function-url-config --function-name web-extract-mcp --auth-type NONE --invoke-mode BUFFERED --region us-east-1
+aws lambda create-function-url-config --function-name ultron-updates --auth-type NONE --invoke-mode BUFFERED --region us-east-1
+```
+
+Baaki:
+
+- 2026-11-17 tak koi error na aaye to `web-extract-mcp`, `ultron-updates`, `google-workspace-mcp` Lambdas, unke roles aur log groups delete karo.
+- `infra/ultron.yaml` ab bhi in URLs ko declare karta hai. Use us stack pe deploy mat karo. Lambdas hatane ke baad template bhi hata do.
+- `ultron-api-web-extract` aur `mcp/web-extract/` rehne do, naya API inhi pe chalta hai.
+- `docs/ARCHITECTURE.md` ke T3 aur S3 rows update karne hain.
