@@ -25,9 +25,6 @@ val localProperties = Properties().apply {
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
-// URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
-// Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
-val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
 
 // Base URL of the Ultron API on AWS (checks the user's Firebase token, so it is not a secret). Overridable from local.properties.
 val apiBaseUrl: String = localProperties.getProperty("API_BASE_URL", "https://api.devxjitin.dev")
@@ -65,7 +62,6 @@ android {
         versionName = appVersionName
 
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
-        buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "STORE_URL", "\"$storeUrl\"")
     }

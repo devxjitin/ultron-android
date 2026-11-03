@@ -283,7 +283,6 @@ All build-time values live in `android/local.properties` and are exposed to the 
 |---|---|---|
 | `sdk.dir` | if `ANDROID_HOME` is unset | Path to the Android SDK. |
 | `GITHUB_CLIENT_ID` | optional | Public client id of a GitHub OAuth App (device flow) for *Sign in with GitHub*. |
-| `UPDATE_URL` | optional | Update server URL, enables in-app updates. |
 
 **Gemini through Firebase.** If `android/app/google-services.json` exists (git-ignored), helper calls use the Firebase AI Logic SDK and the voice session connects through Firebase's endpoint, so no Gemini key is needed in the app. A key typed under Developer settings still wins and uses the direct Gemini API. Embeddings (knowledge base) are not offered by Firebase and keep using their own key.
 | `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | release builds | Release signing configuration. |
