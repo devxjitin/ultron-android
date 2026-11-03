@@ -524,3 +524,4 @@
 [2026-11-03 20:48] [Claude] [Remove: baked Gemini/knowledge keys and legacy WEB_EXTRACT_URL from APK build]
 [2026-11-03 20:50] [Claude] [Docs: purani Function URLs hatane ka plan, google-workspace-mcp bhi live mila]
 [2026-11-03 20:51] [Claude] [Docs: web-extract naye API path ki jaanch, server side theek, phone test baaki]
+[2026-11-03 20:59] [Claude] [Docs: web reader ka phone test pass, naye API se chala, purana URL unused]

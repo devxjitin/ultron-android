@@ -72,3 +72,7 @@ Abhi bhi baaki hai:
 - Phone se asli test (Firebase token ke saath). Ye main nahi kar sakta. Naya build install karke "is page ka summary do" bolo, phir CloudWatch me `ultron-api-web-extract` ki ek invocation dekho.
 - `APP_CHECK_MODE` abhi `log` hai, yaani bina App Check token ke bhi request chal jati hai. Jab saare phones naye build pe aa jayein, ise `enforce` karo.
 - Naya `ultron-api-web-extract` Function URL se bhi bina auth ke band hai (uska koi Function URL nahi hai), jo sahi hai.
+
+### Phone test (2026-11-03 20:58 IST, debug build `adb install -r` ke baad)
+
+Pass. Phone ne Firebase token ke saath `/v1/web/mcp` pe teen calls ki (15:28 UTC): `initialize` (99 ms), `notifications/initialized` (2 ms) aur `tools/call` (1.9 s, page padha). `ultron-api-web-extract` pe 0 errors, aur purana `web-extract-mcp` pe 0 calls, yaani naya build sirf naye raaste se gaya. Step 0 ho gaya, Step 1 ab ho sakta hai. Step 2 ke liye ab bhi chahiye ki naya APK baaki phones pe kuch din chale.
