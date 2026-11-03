@@ -47,24 +47,17 @@ import com.assistant.app.ui.theme.applyWindowColors
 import com.assistant.app.ui.theme.paletteFor
 import com.assistant.app.viewmodel.AssistantViewModel
 import com.assistant.app.data.AccessGate
-import com.assistant.app.network.GoogleAuth
-import com.assistant.app.network.PendingSubscription
 import com.assistant.app.ui.AccessCheckingScreen
-import com.assistant.app.ui.AccountSummary
-import com.assistant.app.ui.PaywallScreen
-import com.assistant.app.ui.SignInScreen
+import com.assistant.app.ui.ActivationScreen
+import com.assistant.app.ui.LicenseSummary
 import com.assistant.app.viewmodel.AccessState
 import com.assistant.app.viewmodel.AccessViewModel
-import com.razorpay.Checkout
-import com.razorpay.PaymentData
-import com.razorpay.PaymentResultWithDataListener
-import org.json.JSONObject
 
 /** A missing declared size passes here; the streaming read enforces the limit in that case. */
 internal fun isPdfWithinLimit(declaredSizeBytes: Long?, maxBytes: Int = 10 * 1024 * 1024): Boolean =
     declaredSizeBytes == null || declaredSizeBytes <= maxBytes
 
-class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
+class MainActivity : ComponentActivity() {
 
     companion object {
         /** Inline base64 PDF requests must stay well under Gemini's ~20 MB request limit. */
@@ -77,12 +70,23 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     // reach the same instance Compose is observing.
     private val viewModel: AssistantViewModel by viewModels()
     private val access: AccessViewModel by viewModels()
-    /** Skips the subscription re-check on the very first start; the access view model already runs one. */
+    /** Skips the key re-check on the very first start; the access view model already runs one. */
     private var startedOnce = false
 
     private fun hasMicPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
+
+    /** Recreates the task after a saved Developer configuration so the next session gets only
+     *  the newly persisted settings and no old Live connection remains active. */
+    private fun restartApp() {
+        viewModel.onAppBackgrounded()
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(launchIntent)
+        finishAffinity()
+    }
 
     /** Reads a bounded PDF intact so Gemini can process its visual document context directly. */
     private fun readKnowledgePdf(uri: Uri): Pair<String, ByteArray>? {
@@ -145,29 +149,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         startedOnce = true
     }
 
-    /** Opens Razorpay Checkout for a subscription the billing API just created. */
-    private fun openCheckout(pending: PendingSubscription, email: String) {
-        val options = JSONObject()
-            .put("name", "Ultron")
-            .put("description", "Ultron subscription")
-            .put("subscription_id", pending.subscriptionId)
-            .put("theme", JSONObject().put("color", "#B3202A"))
-        if (email.isNotBlank()) options.put("prefill", JSONObject().put("email", email))
-        runCatching {
-            Checkout().apply { setKeyID(pending.keyId) }.open(this, options)
-        }.onFailure { access.onPaymentFailed(cancelled = false) }
-    }
-
-    override fun onPaymentSuccess(paymentId: String?, data: PaymentData?) {
-        access.onPaymentSuccess(
-            paymentId = paymentId ?: data?.paymentId.orEmpty(),
-            subscriptionId = data?.data?.optString("razorpay_subscription_id"),
-            signature = data?.signature
-        )
-    }
-
-    override fun onPaymentError(code: Int, response: String?, data: PaymentData?) {
-        access.onPaymentFailed(cancelled = code == Checkout.PAYMENT_CANCELED)
+    private fun openStore() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.STORE_URL))) }
     }
 
 
@@ -188,7 +171,6 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        Checkout.preload(applicationContext)
         // Know the theme before the first frame so the window never flashes the other one.
         val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -310,22 +292,13 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     LaunchedEffect(unlocked) { viewModel.onAccessChanged(unlocked) }
                     when (val gate = accessState) {
                         AccessState.Checking -> { AccessCheckingScreen(); return@Surface }
-                        is AccessState.SignedOut -> {
-                            SignInScreen(gate, enabled = GoogleAuth.isConfigured, onSignIn = { access.signIn(this@MainActivity) })
-                            return@Surface
-                        }
-                        is AccessState.Locked -> {
-                            PaywallScreen(
-                                state = gate,
-                                onBuy = { plan -> access.buy(plan, ::openCheckout) },
-                                onRefresh = { access.refresh() },
-                                onSignOut = { access.signOut(this@MainActivity) }
-                            )
+                        is AccessState.NeedsKey -> {
+                            ActivationScreen(gate, storeUrl = BuildConfig.STORE_URL, onActivate = access::activate, onOpenStore = ::openStore)
                             return@Surface
                         }
                         is AccessState.Active -> Unit
                     }
-                    val account = accessState as AccessState.Active
+                    val active = accessState as AccessState.Active
 
                     val uiState by viewModel.uiState.collectAsState()
                     LaunchedEffect(uiState.permissionRequestId) {
@@ -339,6 +312,13 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                 ?: android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                         }
                     }
+                    LaunchedEffect(uiState.restartRequestId) {
+                        if (uiState.restartRequestId > 0) {
+                            delay(900)
+                            restartApp()
+                        }
+                    }
+
                     val voiceLevel = viewModel.voiceLevel.collectAsState()
                     AssistantScreen(
                         uiState = uiState,
@@ -360,14 +340,20 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         onConnectorsTapped = { viewModel.onConnectorsTapped() },
                         onInstallUpdate = { viewModel.onInstallUpdate() },
                         onDismissUpdate = { viewModel.onDismissUpdate() },
+                        onConfirmAction = { viewModel.onConfirmationAnswer(it) },
                         onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
                         onUpdateNow = { viewModel.onUpdateNow() },
                         onUsageTapped = { viewModel.onUsageTapped() },
                         onStorageTapped = { viewModel.onStorageTapped() },
+                        onSkillsTapped = { viewModel.onSkillsTapped() },
+                        onSkillToggled = { name, on -> viewModel.onSkillToggled(name, on) },
+                        onSkillSaved = { name, description, body -> viewModel.onSkillSaved(name, description, body) },
+                        onSkillDeleted = { viewModel.onSkillDeleted(it) },
                         onClearCache = { viewModel.onClearCache() },
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
+                        onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
                         onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
@@ -388,13 +374,30 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             )
                         },
                         onSettingsTapped = { viewModel.onSettingsTapped() },
+                        onDeveloperTapped = { viewModel.onDeveloperTapped() },
                         onAboutTapped = { viewModel.onAboutTapped() },
                         onDismissSettings = { viewModel.onDismissSettings() },
+                        onClearApiKey = { viewModel.onClearApiKey() },
+                        onClearEmbeddingApiKey = { viewModel.onClearEmbeddingApiKey() },
+                        onLiveModelSelected = { id -> viewModel.onLiveModelSelected(id) },
                         onVoiceSelected = { voice -> viewModel.onVoiceSelected(voice) },
                         onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
                         onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
+                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, documentPrompt, retrievalLimit ->
+                            viewModel.onSaveDeveloperChanges(
+                                name,
+                                greeting,
+                                apiKey,
+                                embeddingApiKey,
+                                systemPrompt,
+                                documentPrompt,
+                                retrievalLimit
+                            )
+                        },
+                        onGeneratePromptFromKnowledgeBase = { viewModel.onGeneratePromptFromKnowledgeBase() },
+                        onDismissPromptGenerationError = { viewModel.onDismissPromptGenerationError() },
                         onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
                         onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
                         onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },
@@ -404,8 +407,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         },
                         onDismissKnowledgeDocumentError = { viewModel.onDismissKnowledgeDocumentError() },
                         onDismissToast = { viewModel.onDismissToast() },
-                        account = AccountSummary(account.email, account.status),
-                        onSignOut = { access.signOut(this@MainActivity) },
+                        license = LicenseSummary(active.key, active.status),
+                        onRemoveLicense = { access.removeKey() },
                     )
                 }
             }

@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 
+import appcheck
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -40,6 +41,10 @@ def _routed(event):
 def lambda_handler(event, context):
     if not _routed(event):
         return _resp(404, {"error": "not found"})
+    if os.environ.get("JWT_AUTH") == "1":
+        refused = appcheck.check(event)
+        if refused:
+            return refused
     try:
         info = json.loads(s3.get_object(Bucket=BUCKET, Key="latest.json")["Body"].read())
     except ClientError as e:

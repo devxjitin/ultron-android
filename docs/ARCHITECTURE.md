@@ -1,57 +1,83 @@
 # Ultron, production architecture (v2)
 
-Review date 2026-11-02, checkout `6fbc1f4` (main). Ye document poore project ka review hai (Android app, connectors,
-permissions, AWS, Firebase, CI/CD) aur uske baad ek production-ready architecture jo sab users ke liye chal sake.
-Decisions maine le liye hain, har decision ke saath "kyun" likha hai. Kuch bhi abhi code me change nahi kiya gaya.
+Pehla review 2026-11-02, checkout `6fbc1f4`. Doosra review (security, payment, architecture) 2026-11-02, checkout
+`2640d3c` (main), section 20 me. Ye document poore project ka review hai (Android app, connectors, permissions, AWS,
+Firebase, CI/CD, Razorpay billing) aur production-ready architecture ka plan.
+
+Section 3 ke findings pehle review ke hain, unka aaj ka status section 20.1 me hai. Section 6 aur 18 (remote content,
+console) section 19 ke decision se wapas liye gaye, wo sirf history ke liye rakhe hain.
 
 ---
 
-## 1. Short me verdict
+## 1. Short me verdict (2026-11-02, doosra review)
 
-App ka core (voice loop, 80+ device tools, on-device memory aur knowledge base, ObjectBox vector search) kaafi
-mazboot hai aur tests bhi ache hain. Problem architecture ki nahi, **platform ki** hai. Abhi Ultron ek "single owner,
-single phone" app ki tarah bana hai:
+Pehle review ke baad bahut kuch theek ho gaya: Firebase Auth (Google sign-in), App Check (AI Logic par enforced), API
+Gateway + Firebase JWT, AWS root se IAM user, Firestore deny-all, PR checks. Ab sabse bade risk **paise ke** hain, code
+ke nahi:
 
-- Koi user identity nahi (no Auth), to per-user quota, ban, ya data ka owner kuch bhi possible nahi.
-- Gemini access Firebase AI Logic se hai, lekin App Check nahi hai, to `google-services.json` ki API key se koi bhi
-  aapka Gemini quota jala sakta hai.
-- Secrets APK ke andar hain (update URL token, web-extract token). APK decompile karo, token mil jayega.
-- APK **debug key** se sign hota hai, aur `main` par har push seedha sab phones par chala jaata hai, bina tests ke.
-- AWS CLI **root account** se logged in hai.
-- Sab kuch hardcoded hai (models, prompts, limits, connectors), isliye har chhoti cheez ke liye nayi APK.
+- Subscription lock sirf app ke andar hai. Gemini call phone se seedha Firebase AI Logic jaati hai, to patched APK ya
+  App Check ke kamzor setting (sirf device integrity) ke saath bina paise ke Gemini chal sakta hai. Bill aapka.
+- `KNOWLEDGE_API_KEY` (aur `GEMINI_API_KEY`) build time par APK me baked hote hain. Section 19 ka step 2 karte hi ek
+  asli Gemini key APK me chali jayegi.
+- Billing Lambda me double charge aur "paisa kata par app locked" wale raaste hain, aur webhook miss ho to user hamesha
+  active reh sakta hai (section 20.2).
+- `main` branch protected nahi hai aur har push debug key se sign hokar sab phones par jaata hai. GitHub account gaya
+  to malicious update sab phones par, jinke paas SMS, call aur accessibility permission hai.
+- Purani Function URLs (path token APK me) abhi bhi live hain.
 
-Production ke liye plan simple hai: **Firebase = identity + config + content + admin console**, **AWS = server compute
-+ file delivery**, **Android = thin, modular client jo remote config se chalta hai aur offline bhi kaam kare.**
+Fix ka order section 20.4 me hai.
 
 ---
 
-## 2. Current architecture (jo abhi hai)
+## 2. Current architecture (2026-11-02, `2640d3c`)
 
 ```mermaid
 flowchart LR
-  subgraph Phone["Android app (com.assistant.app)"]
-    VM["AssistantViewModel<br/>2484 lines: voice, tools, GitHub,<br/>updates, knowledge, usage, settings"]
-    DTR["DeviceToolRunner<br/>1457 lines"]
+  subgraph Phone["Android app (com.assistant.app, debug key signed)"]
+    ACC["AccessViewModel<br/>Google sign-in, subscription lock<br/>(AccessGate, client-side)"]
+    VM["AssistantViewModel<br/>voice, tools, knowledge, updates"]
+    DTR["DeviceToolRunner<br/>SMS, calls, screen, files ..."]
     OB[("ObjectBox + DataStore<br/>memory, knowledge, chats")]
-    KS[("EncryptedSharedPrefs<br/>user Gemini key, KB key, GitHub token")]
+    RZC["Razorpay Checkout SDK"]
   end
-  VM -->|"Firebase AI Logic (no App Check)"| GEM["Gemini Live / Flash"]
-  VM -->|"user ki apni key (optional)"| GEM
-  VM -->|"user ki KB key"| EMB["Gemini embeddings"]
-  VM -->|"PAT"| GH["api.githubcopilot.com/mcp"]
-  VM -->|"token in APK"| WX["Lambda web-extract-mcp<br/>(Function URL, auth NONE)"]
-  VM -->|"token in APK"| UPD["Lambda ultron-updates"] --> S3[("S3 ultron-app-updates")]
-  CI["GitHub Actions<br/>har main push"] -->|"debug key APK"| S3
-  GW["Lambda google-workspace-mcp"]:::dead
-  classDef dead stroke-dasharray: 5 5
+  subgraph Firebase["Firebase ultron-5350c"]
+    AUTH["Auth: Google + anonymous"]
+    AC["App Check: Play Integrity<br/>(device integrity only)"]
+    AIL["AI Logic: Gemini Live / Flash"]
+    FS[("Firestore: deny-all")]
+  end
+  subgraph AWS["AWS us-east-1"]
+    APIGW["HTTP API api.devxjitin.dev<br/>Firebase JWT, 20 rps shared"]
+    REL["ultron-api-releases"]
+    WXN["ultron-api-web-extract"]
+    BILL["ultron-api-billing"]
+    DDB[("DynamoDB ultron-subscriptions")]
+    SSM[("SSM: Razorpay keys")]
+    S3[("S3 ultron-app-updates")]
+    OLD["Legacy Function URLs<br/>ultron-updates, web-extract-mcp<br/>(path token in APK)"]:::legacy
+  end
+  ACC --> AUTH
+  VM -->|"App Check token"| AIL
+  VM -->|"KNOWLEDGE_API_KEY baked in APK"| EMB["Gemini embeddings API"]
+  ACC -->|"ID token"| APIGW
+  VM -->|"ID token"| APIGW
+  VM -.->|"fallback"| OLD
+  APIGW --> REL & WXN & BILL
+  REL --> S3
+  BILL --> DDB & SSM
+  BILL <-->|"REST"| RZ["Razorpay"]
+  RZC --> RZ
+  RZ -->|"webhook, HMAC, no JWT"| APIGW
+  CI["GitHub Actions publish-ota<br/>har main push, unprotected branch"] -->|"OIDC role, debug key APK"| S3
+  classDef legacy stroke-dasharray: 5 5
 ```
 
-`google-workspace-mcp` AWS par deployed hai lekin app use nahi karta (koi reference nahi mila). Firebase project
-`ultron-5350c` me Firestore DB aur "Ultron Control" web app abhi bhi registered hain, jabki web panel revert ho chuka hai.
+Gemini traffic AWS se nahi guzarta, isliye server ko pata hi nahi ki kaun kitna use kar raha hai aur kaun paid hai.
+Ye section 20 ka sabse bada point hai.
 
 ---
 
-## 3. Review findings
+## 3. Review findings (pehla review, status section 20.1 me)
 
 Severity: **P0** = users ko dene se pehle zaroor, **P1** = production quality ke liye, **P2** = cleanup.
 
@@ -387,21 +413,6 @@ aur `release`. SMS, call log, accessibility automation aur `REQUEST_INSTALL_PACK
   saath hi karo, taaki reinstall ek hi baar ho. Rename par naya Firebase app, naya SHA aur nayi `google-services.json` chahiye.
 - **Update trust:** `latest.json` me sha256 already hai. Download page par bhi SHA-256 aur signing certificate fingerprint dikhao.
 
----|---|---|
-| Distribution | Google Play | `dl.devxjitin.dev`, in-app updater |
-| SMS read/send, call log | Nahi (ya intent se SMS app kholna) | Haan |
-| Accessibility screen control | Prominent disclosure ke saath, `isAccessibilityTool=false`, Play Console declaration | Haan |
-| `REQUEST_INSTALL_PACKAGES` | Nahi, Play khud update karta hai | Haan |
-| Files | Photo picker / SAF | Media permissions |
-| Exact alarms | `SCHEDULE_EXACT_ALARM` user se | Same |
-
-- Package name: `com.assistant.app` generic hai aur Play par mil hi nahi sakta hoga. Naya
-  `dev.devxjitin.ultron` (play) aur `dev.devxjitin.ultron.full` (full). Iska matlab existing phones ko ek baar naya
-  install karna padega, lekin isi bahane debug key se chhutkara milta hai (purane package par signing badalna possible
-  nahi, sirf APK v3 key rotation se jo API 28+ chahiye aur minSdk 26 hai).
-- Release keystore: ek upload key (Play ke liye) aur ek `full` signing key. Dono password manager + offline backup me.
-  CI me base64 secret. **Ye key kabhi khoni nahi chahiye**, memory note wala rule ab nayi key par lagega.
-
 ---
 
 ## 8. CI/CD aur release flow
@@ -634,7 +645,8 @@ Setup jo abhi baaki hai (ek baar):
 
 1. Firebase console me Authentication > Google provider on karo, OTA aur release keystore ka SHA-1 add karo, web client id
    ko `local.properties` aur CI secret `LOCAL_PROPERTIES` me `GOOGLE_WEB_CLIENT_ID=...` daalo.
-2. `KNOWLEDGE_API_KEY=...` bhi wahin daalo (nahi diya to `GEMINI_API_KEY` use hoga).
+2. ~~`KNOWLEDGE_API_KEY=...` bhi wahin daalo~~ **Mat karo** (2026-11-02 review, P2 in section 20.2). Ye key APK me
+   plain text jaati hai. Embeddings `/v1/embed` proxy se aayenge.
 3. Razorpay test keys se plans banao: `python scripts/razorpay-plans.py`, teen plan id milenge.
 4. SSM me SecureString parameters: `/ultron/razorpay/key_id`, `key_secret`, `webhook_secret`.
 5. `ultron-api` stack teen plan id parameters ke saath deploy karo.
@@ -643,10 +655,161 @@ Setup jo abhi baaki hai (ek baar):
 Status (2026-11-02): step 3, 4 aur 5 ho gaye (test mode). Plans `plan_TvLmXcUby3aa5w` (monthly),
 `plan_TvLmXs3OS99lzM` (6 months), `plan_TvLmY52xpcSDdR` (yearly). SSM me teeno parameters, `ultron-api` stack deploy
 (billing Lambda + table add, console wala admin Lambda hata). Step 6 (Razorpay webhook, test mode) bhi ho gaya. Step 1: Google provider pehle se on tha, `GOOGLE_WEB_CLIENT_ID`
-local.properties aur CI secret me daal diya. **Atka hua:** debug keystore ka SHA-1 Ultron Firebase app me add nahi hota,
-kyunki `com.assistant.app` + is SHA-1 ka Android OAuth client kisi doosre Google Cloud project me hai (nira-695fe aur
-voice-assistant-studio me nahi mila). Wo client hataye bina Google sign-in phone par fail hoga. Step 2
+local.properties aur CI secret me daal diya. Google sign-in ab phone par chal raha hai (purana Android OAuth client autourgos-491707 se hata kar Ultron project me banaya). Step 2
 (`KNOWLEDGE_API_KEY`) baaki, uske bina knowledge search band rahega.
 
 Seema: Gemini call Firebase AI Logic se seedha phone se jaati hai, to lock app ke andar hai, server par nahi. Patch kiya
 hua APK lock tod sakta hai. Pakka server-side lock chahiye to Gemini ko apne backend ke peeche le jaana hoga (alag kaam).
+
+---
+
+## 20. Security aur payment review (2026-11-02, checkout `2640d3c`)
+
+Is review me poora code padha gaya (Android app, `mcp/*` Lambdas, `infra/api.yaml`, workflows, scripts) aur GitHub repo
+settings check ki. AWS, Firebase aur Razorpay console maine nahi dekhe, jo cheez sirf console me dikhti hai wo
+"verify karna hai" likhi hai. Lambda tests (41) pass hain. Code me abhi koi change nahi kiya, sirf ye document.
+
+Severity pehle jaisi hai. **P0** matlab paise ya users ka seedha nuksan, abhi theek karo. **P1** launch se pehle.
+**P2** cleanup.
+
+### 20.1 Pehle review ke findings ka status
+
+| # | Ab | Note |
+|---|---|---|
+| S1 root account | Ho gaya | CLI `jitin-admin` IAM user se |
+| S2 App Check, Auth | Ho gaya | AI Logic par App Check enforced, Google sign-in chalu. Lekin App Check sirf device integrity par hai (T4) |
+| S3 secrets in APK | Aadha | API par shift ho gaya, lekin `UPDATE_URL`, `WEB_EXTRACT_URL` ab bhi APK me aur purani URLs live (T3). Upar se `KNOWLEDGE_API_KEY`/`GEMINI_API_KEY` naya risk (P2) |
+| S4 debug key | Khula | OTA ab bhi debug key (password `android`) se. Local `local.properties` me release key ka config hai, lekin `ota` build use nahi karta |
+| S5 Function URLs auth NONE | Aadha | Naya API JWT ke peeche, purani URLs live (T3) |
+| S6 API key restriction | Aapne kiya, maine verify nahi kiya | |
+| S7 Firestore | Ho gaya | Deny-all |
+| W3 tests before publish | Aadha | PR par `checks.yml` chalta hai, lekin `main` protected nahi, to bina PR ke push bhi publish ho jaata hai (T1) |
+| W6 IaC | Aadha | `infra/api.yaml` deployed, purane hand-made resources (`ultron.yaml`) nahi |
+
+### 20.2 Payment aur subscription findings
+
+| # | P | Kya mila | Kahan | Asar | Fix |
+|---|---|---|---|---|---|
+| P1 | P0 | Subscription lock sirf app me hai (`AccessGate.unlocked`, ek `@Volatile` boolean). Gemini call phone se seedha AI Logic jaati hai, server ko subscription ka pata hi nahi | `Subscription.kt:77`, `AssistantViewModel.kt:1247`, `:1866` | APK patch karke (ya repackage karke, agar App Check us signature ko accept kare) bina paise ke unlimited Gemini, bill aapka. Section 19 me bhi likha hai, lekin paid product ka ye sabse bada risk hai | Section 20.4, Gemini session server se milne wale short-lived token par jo sirf active subscriber ko mile. Tab tak AI Logic me per-user rate limit aur daily budget alert |
+| P2 | P0 | `GEMINI_API_KEY` aur `KNOWLEDGE_API_KEY` `buildConfigField` se APK me plain string jaate hain. Abhi local me set nahi hain, lekin section 19 ka step 2 yahi karne ko kehta hai, aur CI ka `LOCAL_PROPERTIES` secret maine nahi dekha | `build.gradle.kts`, `AssistantViewModel.kt:164`, `:423` | Koi bhi APK (releases route kisi bhi Firebase user ko milta hai) kholke key nikaal le aur aapke Google Cloud billing par kuch bhi chalaye | Step 2 **mat karo**. Embeddings ke liye `POST /v1/embed` proxy (section 5.3 wala plan, key SSM me, subscription check ke saath). CI secret me agar ye keys hain to hatao aur key rotate karo |
+| P3 | P0 | `status` route sirf DynamoDB padhta hai, Razorpay se kabhi dobara nahi. `_view` me status `active` ho to `currentEnd` dekha hi nahi jaata | `mcp/billing/lambda_function.py:121-136` | Renewal fail hua aur `halted`/`cancelled` webhook nahi pahuncha (API down, throttle, ya Razorpay ne baar-baar fail hone par webhook disable kar diya) to user hamesha active. Paisa nahi aaya, service chalti rahi | `currentEnd + grace < now` ho to `status` me Razorpay se subscription dobara padho aur record update karo. Daily EventBridge job jo saare active records reconcile kare. Webhook failure par CloudWatch alarm |
+| P4 | P1 | `subscribe` purane subscription ko cancel kiye bina naya bana deta hai jab stored status `created`, `pending` ya `halted` ho. Do baar jaldi tap karne par do subscriptions | `lambda_function.py:139-160` | Purana mandate Razorpay par zinda rehta hai. `pending` retry ya baad me payment hone par user se do baar paisa kat sakta hai | Naya banane se pehle purana non-finished subscription `POST /subscriptions/{id}/cancel`. `created` wala ho to wahi dobara do. DynamoDB conditional write se race roko |
+| P5 | P1 | Webhook ka "purana subscription naye ko overwrite na kare" rule stored `created` (abandoned checkout) ko bhi naya maanta hai, kyunki `created` `FINISHED_STATUSES` me nahi | `lambda_function.py:202` | User ne pehle wale subscription ka payment kiya (P4 jaisa case) to webhook ignore, paisa kata par app locked. Support ticket aur refund | Ignore sirf tab jab stored subscription khud paid (`active`/`authenticated`) ho. Ya P4 ke fix se ek user ka ek hi live subscription rakho |
+| P6 | P1 | Poore API ka ek hi throttle (20 rps, burst 40), webhook bhi usi me. Anonymous Firebase account koi bhi bana sakta hai | `infra/api.yaml:74-76` | Koi bhi web-extract par flood karke billing aur Razorpay webhook ko `429` dila sakta hai. Webhook retry ke baad bhi fail ho to P3 wala hal | Webhook route ka alag, zyada limit. Web-extract ka per-route kam limit. Lambda me App Check check (T4) |
+| P7 | P2 | SSM parameter missing ho to `_secret()` khali string deta hai aur HMAC khali key se banta hai | `lambda_function.py:54-63`, `:170`, `:182` | Webhook signature forge ho sakta hai. Asar kam hai kyunki status Razorpay se dobara padha jaata hai, lekin ye fail-open hai | Secret khali ho to `503` aur log, kabhi HMAC mat banao |
+| P8 | P2 | Offline cache phone ki ghadi par chalta hai aur plain SharedPreferences me hai. Server unreachable ho aur cache active ho to app chalti rehti hai | `Subscription.kt:47-71`, `AccessViewModel.kt:66-81` | `api.devxjitin.dev` block karke (firewall app) aur ghadi peeche karke cancel ke baad bhi use. P1 ke saath milke chhota risk | Last successful server check se max 72 ghante offline grace. Server ka time (`Date` header) store karo |
+| P9 | P2 | Refund ya chargeback ka koi handling nahi | `SUBSCRIPTION_EVENTS` | Refund ke baad bhi plan active | Refund par subscription turant cancel, ya `refund.processed` event par record update |
+| P10 | P2 | Abhi test mode. Live par plan ids, keys, webhook secret sab naye honge. App me price (`BillingPlan`) hardcoded hai | `Subscription.kt:7-10`, `infra/api.yaml` params | Live plan ka price app se alag hua to user ko galat price dikhega | Live switch checklist (20.5). Price server se bhejo, ya CI test jo plan amount match kare |
+| P11 | P2 | Razorpay timeout (`URLError`) ya missing field par unhandled exception, bina structured log ke `500`. Billing errors par alarm nahi | `lambda_function.py:216-227` | Payment ke waqt silent failures | `except Exception` par log aur `502`, CloudWatch metric filter aur alarm |
+
+**Code fix status (2026-11-02, abhi deploy nahi hua).** `mcp/billing` me P3 (purana active record 2 din ke grace ke baad
+Razorpay se dobara padha jaata hai, Razorpay down ho to user active hi rehta hai), P4 (same plan ka `created`
+subscription reuse hota hai, `pending`/`paused` leftover cancel hota hai, missed payment par 409), P5 (paid subscription
+kisi abandoned try ke upar bhi record hota hai), P7 (khali secret par `503`) aur P11 (network error par `502` aur log)
+code me hain, 8 naye tests ke saath (suite 49 pass). **Baaki:** P3 ka daily reconcile job aur alarms, P4 ki
+double-tap race ka DynamoDB conditional write (abhi sirf reuse se kam kiya hai), aur `ultron-api` stack redeploy.
+
+**Doosra code fix (branch `api-hardening`, deploy nahi hua).** P3 ka daily sweep ban gaya (EventBridge `rate(1 day)` se
+billing Lambda `reconcile_all()` chalata hai, test ke saath) aur P6 ke liye `infra/api.yaml` me route throttles hain
+(web-extract 3 rps burst 10, webhook alag 20/40). Do baatein. Template maine `cfn-lint` ya `validate-template` se check
+nahi kiya (AWS login nahi hai), deploy se pehle ye karna hai. Aur HTTP API ka default throttle shayad har route par alag
+lagta hai, stage par shared nahi, to P6 ka "webhook ko starve karna" wala asar mere likhne se kam ho sakta hai. Web-extract
+ka chhota limit phir bhi abuse ke liye sahi hai.
+
+**Teesra code fix (branch `app-check-verify`, T4, deploy nahi hua).** `web-extract` aur `releases` Lambda ab
+`X-Firebase-AppCheck` token verify karte hain (`mcp/*/appcheck.py`, sirf standard library, RS256 signature Google ki
+JWKS se, issuer/audience/expiry). App `ApiClient` se token bhejti hai. **Mode `log` par default hai**, yaani missing ya
+bad token sirf CloudWatch me likha jaata hai, request chalti hai, kyunki purane phones header bhejte hi nahi. Rollout:
+deploy, kuch din log dekho (`App Check missing token` kam hote jaana chahiye), sab phones update hone par stack parameter
+`AppCheckMode=enforce`. **Verify nahi hua:** verifier ko asli Google token se nahi chalaya (sirf apni test key ke saath
+12 tests), to enforce se pehle log me `bad signature` ya `wrong audience` na dikhe ye zaroor dekho. Anonymous users ko
+rokna aur billing route par check abhi nahi hai. Billing ko JWT hi kaafi hai kyunki Razorpay se khud verify hota hai.
+
+**Chautha code fix (branch `sms-call-confirm`, T5 ka hissa, phone par test nahi hua).** `ActionGuard`: jab pichle 5
+minute me koi untrusted text model tak pahuncha ho (SMS, notification, web page, YouTube, GitHub, jiska result "untrusted
+content" marker ke saath aata hai), tab `send_sms`, `send_sms_contact`, `call_contact` aur `dial_number` ek on-screen
+dialog (recipient aur poora message dikhta hai) par Allow ka wait karte hain. 45 second me tap na aaye, ya app screen par
+na ho, to refuse, aur model ko `status=denied` milta hai. Voice "haan" kaafi nahi maana, kyunki wahi text use bol sakta hai.
+**Abhi nahi hua:** accessibility write actions (click, type, tap) par confirmation, SMS counter (`SmsRules`) ka restart
+par reset hona, aur naye ya international number par hamesha confirm. Screen tools ko jaan-boojh kar guard nahi kiya, kyunki
+WhatsApp jaisi skills har click par tap maangti. 6 unit tests, `testDebugUnitTest` aur `compileOtaKotlin` pass.
+
+Jo sahi hai. Webhook HMAC + `compare_digest`, verify aur webhook dono Razorpay se dobara padhte hain, `notes.uid` se
+ownership check, Google account zaroori (anonymous nahi khareed sakta), secrets SSM SecureString me, DynamoDB PITR aur
+encryption on.
+
+### 20.3 Security findings
+
+| # | P | Kya mila | Kahan | Asar | Fix |
+|---|---|---|---|---|---|
+| T1 | P0 | `main` branch protected nahi (`gh api .../branches/main/protection` 404). `publish-ota.yml` har push par APK bana ke sab phones ko de deta hai, bina test aur bina approval | GitHub settings, `publish-ota.yml` | GitHub account ya token leak, ya galti se push, seedha sab phones par. App ke paas SMS, call, accessibility aur install permissions hain, to ye sabse bada supply-chain risk hai | Branch protection (PR required, `checks` required, force push band). Publish job GitHub Environment `production` me, jisme aapka manual approval ho. GitHub par 2FA/passkey confirm karo |
+| T2 | P0 | OTA debug keystore se sign (S4). Password public (`android`), key CI secret me | `build.gradle.kts` `ota`, `publish-ota.yml` | Key nikli to koi bhi aapke naam se valid update bana sakta hai | Release key par shift, section 7.4. Jitna jaldi, utne kam users ko reinstall |
+| T3 | P1 | Purani Function URLs (`ultron-updates`, `web-extract-mcp`) `AuthType NONE` ke saath live, aur unke path tokens har APK me | `build.gradle.kts` `UPDATE_URL`, `WEB_EXTRACT_URL`, `AppUpdater.kt:115`, `WebExtractClient.kt:15` | Token APK se nikal ke koi bhi web-extract ko free proxy ki tarah chala sakta hai, APK bhi download | Naye build me ye do fields khali karo, sab phones update hone ke baad dono Function URLs delete |
+| T4 | P1 | API routes kisi bhi Firebase user ko accept karte hain, anonymous bhi. Lambda me App Check check nahi. App Check sirf device integrity par, app identity nahi | `infra/api.yaml` authorizer, `ApiClient.kt:27` | Script se anonymous account banake web-extract open proxy, releases se APK. Re-signed APK ko App Check token milta hai ya nahi, ye test nahi hua | Lambda me `X-Firebase-AppCheck` token verify (JWKS). `web-extract` aur `releases` par `sign_in_provider == google.com` + active subscription. Anonymous auth ki zaroorat na ho to Firebase me band. Ek baar re-signed APK se AI Logic call test karo |
+| T5 | P1 | Prompt injection se device actions. SMS bina confirmation jaata hai (sirf 480 chars, 10/ghanta, 7+ digit), aur counter memory me hai, restart par reset. Untrusted content (notification, SMS, web, YouTube) sirf text marker se alag hai | `SmsRules.kt`, `DeviceToolRunner.kt:691`, `AssistantViewModel.kt:466` | Kisi SMS ya web page me likha "send this to X" model maan le to user ke naam se SMS, call ya accessibility tap | `send_sms`, call aur accessibility write actions par voice/screen confirmation jab us turn me untrusted content aaya ho. SMS counter DataStore me. Naye ya international number par hamesha confirm |
+| T6 | P2 | GitHub Actions tag (`@v4`) se pinned, SHA se nahi. Publish job ke paas keystore aur AWS role dono | `.github/workflows/*` | Kisi action ka tag hijack hua to keystore leak | Actions commit SHA par pin, Dependabot for actions |
+| T7 | P2 | Hata diye gaye web console ka Firebase web `apiKey` git history me (`871757f`). Ye public identifier hai aur repo private hai | git history | Kam | Firebase me "Ultron Control" web app aur uski key delete ya restrict |
+| T8 | P2 | `ultron-updates` docstring kehta hai APK me "connector secrets" hain, aur releases route kisi bhi user ko presigned link deta hai | `mcp/ultron-updates/lambda_function.py:4` | APK ko public maan ke chalo | APK se saare secrets hatao (P2, T3), phir ye non-issue |
+
+Jo sahi hai. Cleartext traffic band, backup aur device transfer band, receivers aur providers non-exported, system
+services apni permission ke saath, updater me SHA-256 + Android signature check, web-extract me SSRF checks (sirf global
+IP, IP pin, har redirect dobara check), Firestore deny-all, AWS root use nahi hota.
+
+### 20.4 Target: entitlement server par (P1 ka asli fix)
+
+Abhi "user paid hai ya nahi" phone tay karta hai. Paid product me ye server tay kare, aur Gemini ki chaabi sirf usi ko
+mile jo paid hai.
+
+```mermaid
+flowchart LR
+  APP["Ultron app"] -->|"ID token + App Check"| API["api.devxjitin.dev"]
+  API --> ENT["Lambda: session<br/>subscription check + quota"]
+  ENT --> DDB[("ultron-subscriptions<br/>+ usage per uid/day")]
+  ENT -->|"server key (SSM)"| GT["Gemini API<br/>ephemeral token, few min, 1 use"]
+  ENT -->|"token"| APP
+  APP -->|"Live websocket with ephemeral token"| GL["Gemini Live"]
+  APP -->|"text, embed"| PX["Lambda: ai proxy<br/>(same check)"] --> GEM["Gemini API"]
+  RZ["Razorpay webhook"] --> BILL["Lambda: billing"] --> DDB
+  CRON["EventBridge daily"] --> BILL
+```
+
+- `POST /v1/session/token` Firebase JWT aur App Check verify kare, DynamoDB se subscription active dekhe (P3 wale
+  reconcile ke saath), per-uid daily voice minutes check kare, phir Gemini Live ka ephemeral token (short-lived, single
+  use) server key se banake de. Gemini API ka ephemeral token support preview me hai, build se pehle current docs check karo.
+- Text, screen describe aur embeddings `/v1/ai/*` proxy se, wahi check. `KNOWLEDGE_API_KEY` aur `GEMINI_API_KEY` APK se
+  hamesha ke liye hat jaate hain.
+- AI Logic ka phone wala raasta band (ya sirf kam rate limit wala fallback), taaki patched APK ko kuch na mile.
+- Per-user usage server par dikhega, jo pricing aur abuse dono ke liye chahiye.
+- Latency par asar sirf session start par ek extra round trip. Gemini ka bill pehle jaisa.
+
+### 20.5 Fix ka order
+
+| Kab | Kaam | Kaun |
+|---|---|---|
+| Aaj | T1 branch protection aur publish par Environment approval. P2 wala step 2 mat karo, CI secret check karo | Aap (GitHub settings), workflow change main kar sakta hoon |
+| Is hafte | P3 reconcile + alarm, P4 purana subscription cancel, P5 webhook rule, P7 fail-closed, P11 logging. Har ek ka test `mcp/tests/test_billing.py` me | Main |
+| Is hafte | P6 alag throttle, T4 App Check verify in Lambda, T3 legacy URLs khali karke naya build | Main. Function URL delete aap ya main CLI se |
+| Live se pehle | P10 checklist: live plans, live keys SSM me, live webhook secret, Razorpay KYC, price match test, ek asli Rs 199 payment aur refund test | Aap + main |
+| Live se pehle | T2 release key, T5 SMS/call/accessibility confirmation | Main |
+| Baad me | 20.4 entitlement server, P8 offline grace, P9 refunds, T6 action pinning | Main |
+
+## 21. Decision: website store + activation key, app me Razorpay nahi (2026-11-03)
+
+Section 19 ka Razorpay subscription aur Google sign-in hata diya. Ab kharidari sirf website store par hoti hai, app sirf
+activation key maangti hai. Skills page, Developer page (prompt, greeting, API keys, model picker) phir se phone par editable
+hain, jaise `307fc6f` se pehle the. Firestore remote content, Remote Config aur force-update screen wapas nahi aaye.
+
+| Cheez | Ab kya hai |
+|---|---|
+| App lock | `AccessViewModel` + `ActivationScreen`. Key `ULTR-XXXX-XXXX-XXXX-XXXX` (Crockford base32, 80 bit). Ek key ek phone par ek waqt me |
+| Backend | `mcp/license` Lambda (`ultron-api-license`) + DynamoDB `ultron-licenses`, key ka sirf SHA-256 store hota hai |
+| Routes | `POST /v1/license/activate` aur `POST /v1/license/status`, dono Firebase JWT ke peeche. Activate ka throttle 1 rps, burst 5 |
+| Device badalna | Activate naye phone (naya Firebase uid) par key move kar deta hai, purana phone agle status check par lock. Din me ek hi move |
+| Expiry | `durationDays` pehli activation se ginte hain, `0` matlab kabhi expire nahi. Store chahe to `expiresAt` khud set kar sakta hai |
+| Offline | Aakhri server jawab 7 din tak chalta hai (`LICENSE_OFFLINE_GRACE_SECONDS`), expiry ke baad nahi |
+| Keys banana | Website store paid order par `ultron-licenses` me PutItem kare (fields Lambda ke docstring me). Test ke liye `python scripts/create-license-key.py` |
+| Store link | `STORE_URL` `local.properties` me, activation screen par "Buy one on the store" link. Khali ho to link nahi dikhta |
+
+Deploy notes. `ultron-subscriptions` table `DeletionPolicy: Retain` hai, stack update ke baad bhi AWS me rahegi, data chahiye na ho
+to haath se delete karna. SSM `/ultron/razorpay/*` parameters aur Razorpay webhook bhi ab kaam ke nahi, unhe aap band kar sakte ho.
+`GOOGLE_WEB_CLIENT_ID` ab app use nahi karti.

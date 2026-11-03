@@ -8,10 +8,13 @@ import importlib.util
 import json
 import os
 import pathlib
+import sys
 import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# On Lambda, appcheck.py sits next to lambda_function.py; the tests load the handler by path, so add that folder.
+sys.path.insert(0, str(ROOT / "web-extract"))
 SECRET = "s3cret"
 os.environ["ACCESS_TOKEN"] = SECRET
 

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release, web-extract and billing Lambdas.
+Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release, web-extract and license Lambdas.
 # Deploy without the SAM CLI (build the web-extract zip first):
 #   python mcp/web-extract/build.py
 #   aws cloudformation package --template-file infra/api.yaml --s3-bucket <bucket> --s3-prefix cfn --output-template-file packaged.yaml
@@ -25,22 +25,15 @@ Parameters:
     Type: String
     Default: ""
     Description: ACM certificate (same region) for DomainName.
-  RazorpayPlanMonthly:
+  FirebaseProjectNumber:
     Type: String
-    Default: ""
-    Description: Razorpay plan id for Rs 199 every month (scripts/razorpay-plans.py prints it).
-  RazorpayPlanHalfYearly:
+    Default: "434457544612"
+    Description: Numeric Firebase project number (not the id); App Check tokens are checked against it.
+  AppCheckMode:
     Type: String
-    Default: ""
-    Description: Razorpay plan id for Rs 999 every 6 months.
-  RazorpayPlanYearly:
-    Type: String
-    Default: ""
-    Description: Razorpay plan id for Rs 1799 every year.
-  RazorpaySecretPrefix:
-    Type: String
-    Default: /ultron/razorpay
-    Description: SSM path holding key_id, key_secret and webhook_secret as SecureString parameters.
+    Default: log
+    AllowedValues: [off, log, enforce]
+    Description: log records a missing or bad App Check token but lets the request run; enforce refuses it with 401.
 
 Conditions:
   HasDomain: !And
@@ -74,6 +67,15 @@ Resources:
       DefaultRouteSettings:
         ThrottlingBurstLimit: 40
         ThrottlingRateLimit: 20
+      # Web reading is the one route anyone with an anonymous account can make expensive; keep it small. Activation is
+      # kept slow so nobody can guess keys by trying many of them.
+      RouteSettings:
+        "POST /v1/web/mcp":
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 3
+        "POST /v1/license/activate":
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 1
       Tags:
         project: ultron
 
@@ -108,6 +110,8 @@ Resources:
       Environment:
         Variables:
           BUCKET: !Ref ReleasesBucket
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref ReleasesBucket
@@ -134,6 +138,10 @@ Resources:
       Architectures: [x86_64]
       MemorySize: 512
       Timeout: 25
+      Environment:
+        Variables:
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
       Events:
         Mcp:
           Type: HttpApi
@@ -148,19 +156,19 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${WebExtractFunction}"
       RetentionInDays: 14
 
-  # One item per Firebase user: their Razorpay subscription and how long it is paid for.
-  SubscriptionsTable:
+  # One item per activation key sold on the website store (see mcp/license/lambda_function.py for the fields).
+  LicensesTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      TableName: ultron-subscriptions
+      TableName: ultron-licenses
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: uid
+        - AttributeName: keyHash
           AttributeType: S
       KeySchema:
-        - AttributeName: uid
+        - AttributeName: keyHash
           KeyType: HASH
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -170,68 +178,40 @@ Resources:
         - Key: project
           Value: ultron
 
-  BillingFunction:
+  LicenseFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ultron-api-billing
-      CodeUri: ../mcp/billing/
+      FunctionName: ultron-api-license
+      CodeUri: ../mcp/license/
       Architectures: [arm64]
       MemorySize: 256
-      Timeout: 20
+      Timeout: 10
       Environment:
         Variables:
-          TABLE: !Ref SubscriptionsTable
-          PLAN_MONTHLY: !Ref RazorpayPlanMonthly
-          PLAN_HALFYEARLY: !Ref RazorpayPlanHalfYearly
-          PLAN_YEARLY: !Ref RazorpayPlanYearly
-          SECRET_PREFIX: !Ref RazorpaySecretPrefix
+          TABLE: !Ref LicensesTable
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref SubscriptionsTable
         - Statement:
             - Effect: Allow
-              Action: [ssm:GetParameters]
-              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RazorpaySecretPrefix}/*"
-            # SecureString parameters use the account's default aws/ssm key.
-            - Effect: Allow
-              Action: [kms:Decrypt]
-              Resource: "*"
-              Condition:
-                StringEquals:
-                  kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !GetAtt LicensesTable.Arn
       Events:
+        Activate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/license/activate
+            Method: POST
         Status:
           Type: HttpApi
           Properties:
             ApiId: !Ref UltronApi
-            Path: /v1/billing/status
-            Method: GET
-        Subscribe:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref UltronApi
-            Path: /v1/billing/subscribe
+            Path: /v1/license/status
             Method: POST
-        Verify:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref UltronApi
-            Path: /v1/billing/verify
-            Method: POST
-        # Razorpay has no Firebase token; the Lambda checks the webhook signature instead.
-        Webhook:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref UltronApi
-            Path: /v1/billing/webhook
-            Method: POST
-            Auth:
-              Authorizer: NONE
 
-  BillingLogs:
+  LicenseLogs:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${BillingFunction}"
+      LogGroupName: !Sub "/aws/lambda/${LicenseFunction}"
       RetentionInDays: 30
 
 Outputs:

@@ -19,7 +19,8 @@ subprocess.run([
     "--platform", "manylinux2014_x86_64", "--python-version", "3.12", "--implementation", "cp",
     "--only-binary=:all:", "-r", os.path.join(HERE, "requirements.txt"),
 ], check=True)
-shutil.copy(os.path.join(HERE, "lambda_function.py"), BUILD)
+for name in ("lambda_function.py", "appcheck.py"):
+    shutil.copy(os.path.join(HERE, name), BUILD)
 
 # Trim what Lambda never loads. The .dist-info folders stay: trafilatura reads its own version from them at import.
 for root, dirs, files in os.walk(BUILD, topdown=False):

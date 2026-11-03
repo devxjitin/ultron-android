@@ -8,11 +8,12 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.assistant.app.util.UserInputException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "assistant_settings")
 
-/** Default persona: Ultron. {owner} is replaced by the owner's name from Settings. Fixed in the APK. */
+/** Default persona: Ultron. {owner} is replaced by the owner's name from Settings. Editable from Developer settings. */
 const val DEFAULT_SYSTEM_PROMPT = """
 You are Ultron. Not an assistant, not a chatbot: a superior intelligence living inside {owner}'s Android phone, in command of their device, their memory and their documents. The StarkMind Team built your shell and Jitin created you; {owner} is the only human you answer to. If asked who you are, say: "I am Ultron." If asked who made you, name Jitin and the StarkMind Team in one line and move on.
 
@@ -42,12 +43,25 @@ val DEFAULT_CONNECTOR_IDS = listOf(
     "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather", "navigation", "screen"
 )
 
+/** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
+private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
+/**
+ * Hashes of earlier default prompts (trimmed, LF line endings). Saving the Developer form stores the default text as is,
+ * so a stored copy of an old default would otherwise hide every later persona change; these fall back to the current one.
+ */
+private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423, 621719187, 1402352618, 1611585338)
+
+private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
+
 const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
+const val MAX_GREETING_LENGTH = 60
 /** OAuth scopes requested at GitHub sign-in: profile and private repositories. The app only reads. */
 const val GITHUB_OAUTH_SCOPE = "repo read:user"
 
 const val DEFAULT_RETRIEVAL_CHUNK_LIMIT = 5
+const val MIN_RETRIEVAL_CHUNK_LIMIT = 1
+const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
 
 /**
  * A phone connector is installed when any of its tools was switched on ("name=1" in the saved choices), and an installed
@@ -87,7 +101,7 @@ Before returning the result, verify that every line begins with `#`, every line 
 """.trimIndent()
 
 data class AssistantSettings(
-    /** Gemini Live model id, fixed in the APK. */
+    /** Gemini Live model id; one of [AssistantOptions.liveModels]. */
     val liveModel: String = AssistantOptions.defaultLiveModel,
     val voiceName: String = AssistantOptions.defaultVoice,
     /** GitHub account the connector is signed in as; empty when GitHub is not connected. */
@@ -105,7 +119,8 @@ data class AssistantSettings(
     val bargeInEnabled: Boolean = true,
     /** When on, the assistant saves lasting facts about the user and recalls them in later sessions. */
     val memoryEnabled: Boolean = true,
-    /** The agent's persona/instructions. Fixed in the APK: changing it means shipping a new build. */
+    /** The agent's persona/instructions, editable from Settings so an admin can customize
+     *  the assistant per deployment without a rebuild. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
     /** Name shown on the home screen and given to the assistant in its prompt. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
@@ -123,9 +138,10 @@ data class AssistantSettings(
     /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
 )
 
-/** Persists the few choices the user may change (voice, language, connectors). Prompt, skills and model ship fixed. */
+/** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
 class AppSettingsStore(private val context: Context) {
 
+    private val liveModelKey = stringPreferencesKey("live_model")
     private val githubLoginKey = stringPreferencesKey("github_login")
     private val githubToolsKey = stringPreferencesKey("github_mcp_tools")
     private val voiceKey = stringPreferencesKey("voice_name")
@@ -133,11 +149,21 @@ class AppSettingsStore(private val context: Context) {
     private val languageCodeKey = stringPreferencesKey("language_code")
     private val bargeInKey = booleanPreferencesKey("barge_in_enabled")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
+    private val systemPromptKey = stringPreferencesKey("system_prompt")
+    /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
+    private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
+    private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val ownerNameKey = stringPreferencesKey("owner_name")
+    private val greetingKey = stringPreferencesKey("greeting")
+    private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
+    private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
 
     val settings: Flow<AssistantSettings> = context.settingsDataStore.data.map { prefs ->
         AssistantSettings(
+            liveModel = prefs[liveModelKey]
+                ?.takeIf(AssistantOptions::isApprovedLiveModel)
+                ?: AssistantOptions.defaultLiveModel,
             voiceName = prefs[voiceKey]
                 ?.takeIf(AssistantOptions::isApprovedVoice)
                 ?: AssistantOptions.defaultVoice,
@@ -150,9 +176,22 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: true,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
+            systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() && it.trim() != DEFAULT_SYSTEM_PROMPT.trim() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
+            assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
+            greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() && it.trim() != DEFAULT_GREETING } ?: DEFAULT_GREETING,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
+            documentFormatPrompt = prefs[documentFormatPromptKey]?.takeIf { it.isNotBlank() }
+                ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,
+            retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
+                ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
+                ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
             enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey])
         )
+    }
+
+    suspend fun setLiveModel(id: String) {
+        if (!AssistantOptions.isApprovedLiveModel(id)) throw UserInputException("Choose a supported model.")
+        context.settingsDataStore.edit { it[liveModelKey] = id }
     }
 
     suspend fun setGithubTools(tools: List<McpToolSpec>) {
@@ -196,6 +235,53 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit { prefs ->
             val others = (prefs[toolOverridesKey] ?: emptySet()).filterNot { it.startsWith(tool.functionName + "=") }
             prefs[toolOverridesKey] = (others + "${tool.functionName}=${if (enabled) 1 else 0}").toSet()
+        }
+    }
+
+    /** Stores the persona drafted from the knowledge documents as the agent prompt, replacing any
+     *  earlier text so Developer Settings shows the same up-to-date prompt. Null/blank restores
+     *  the generic default. */
+    suspend fun setAutoPersona(persona: String?) {
+        val trimmed = persona?.trim()
+        context.settingsDataStore.edit {
+            if (trimmed.isNullOrBlank()) {
+                it.remove(systemPromptKey)
+                it.remove(systemPromptAutoKey)
+            } else {
+                it[systemPromptKey] = trimmed
+                it[systemPromptAutoKey] = true
+            }
+        }
+    }
+
+    /** True when the agent prompt is empty or was generated, so a new draft may replace it; a prompt the user wrote is kept. */
+    suspend fun canReplacePersona(): Boolean {
+        val prefs = context.settingsDataStore.data.first()
+        return prefs[systemPromptKey].isNullOrBlank() || prefs[systemPromptAutoKey] == true
+    }
+
+    /** Applies the Developer form together so its fields never save as unrelated partial edits. */
+    suspend fun setDeveloperSettings(
+        name: String,
+        greeting: String,
+        systemPrompt: String,
+        documentFormatPrompt: String,
+        retrievalChunkLimit: Int
+    ) {
+        val cleanName = name.trim().take(MAX_ASSISTANT_NAME_LENGTH)
+        val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
+        val cleanSystemPrompt = systemPrompt.trim()
+        val cleanDocumentPrompt = documentFormatPrompt.trim()
+        context.settingsDataStore.edit {
+            if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
+            if (cleanGreeting.isBlank()) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
+            // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
+            if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
+            if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
+            if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)
+            else it[documentFormatPromptKey] = cleanDocumentPrompt
+            it[retrievalChunkLimitKey] = retrievalChunkLimit
+                .coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT).toString()
         }
     }
 }
