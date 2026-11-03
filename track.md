@@ -530,3 +530,4 @@
 [2026-11-03 21:03] [Claude] [Remove: web-extract-mcp aur ultron-updates Function URLs AWS se hataye, Lambdas 14 din rakhe]
 [2026-11-03 21:08] [Claude] [Update: App Check enforce on, infra se legacy URLs hataye, CI LOCAL_PROPERTIES secret chhota kiya]
 [2026-11-03 21:16] [Claude] [Update: screen/navigation default off, GitHub sign-in scope read:user only]
+[2026-11-03 21:30] [Claude] [Update: GitHub sign-in ab read-only GitHub App se, client id local aur CI secret me]
