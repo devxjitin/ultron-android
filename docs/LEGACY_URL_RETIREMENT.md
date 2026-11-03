@@ -57,3 +57,18 @@ Maine AWS pe sirf padha hai. Delete ya URL hatana tumhari "haan" ke baad hi karu
 
 - CI ka `LOCAL_PROPERTIES` secret check karo ki usme `WEB_EXTRACT_URL`, `UPDATE_URL` ya Gemini keys to nahi hain. Hain to hata do, aur path tokens rotate karo.
 - `docs/ARCHITECTURE.md` ke T3 aur S3 rows is plan ke baad update honge.
+
+## Step 0 ka nateeja (2026-11-03, read-only jaanch)
+
+Server side pura theek hai:
+
+- `POST /v1/web/mcp` route Firebase JWT authorizer ke peeche hai (issuer `securetoken.google.com/ultron-5350c`), integration `ultron-api-web-extract` pe jata hai, aur Lambda ki permission sirf is route ke liye hai.
+- Bina token ke API 401 deta hai (`/v1/web/mcp` aur `/v1/releases/latest` dono).
+- Lambda me `JWT_AUTH=1` hai, to wo path `/v1/web/mcp` maanta hai. Maine ek synthetic event se seedha invoke kiya (`https://example.com` padhne ko), aur 200 ke saath page ka text wapas aaya. Matlab code, dependencies aur network sab chal rahe hain.
+- "0 invocations" ka kaaran: naya API sach me nayi cheez hai. Uski pehli traffic 1 Nov ko aayi (`ultron-api-releases` 21 calls), 2 Nov ko license aur releases. Is dauran kisi ne web page reader use nahi kiya. Ye koi kharabi nahi hai.
+
+Abhi bhi baaki hai:
+
+- Phone se asli test (Firebase token ke saath). Ye main nahi kar sakta. Naya build install karke "is page ka summary do" bolo, phir CloudWatch me `ultron-api-web-extract` ki ek invocation dekho.
+- `APP_CHECK_MODE` abhi `log` hai, yaani bina App Check token ke bhi request chal jati hai. Jab saare phones naye build pe aa jayein, ise `enforce` karo.
+- Naya `ultron-api-web-extract` Function URL se bhi bina auth ke band hai (uska koi Function URL nahi hai), jo sahi hai.
