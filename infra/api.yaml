@@ -31,7 +31,7 @@ Parameters:
     Description: Numeric Firebase project number (not the id); App Check tokens are checked against it.
   AppCheckMode:
     Type: String
-    Default: log
+    Default: enforce
     AllowedValues: [off, log, enforce]
     Description: log records a missing or bad App Check token but lets the request run; enforce refuses it with 401.
   AdminEmails:

@@ -111,3 +111,11 @@ Baaki:
 - `infra/ultron.yaml` ab bhi in URLs ko declare karta hai. Use us stack pe deploy mat karo. Lambdas hatane ke baad template bhi hata do.
 - `ultron-api-web-extract` aur `mcp/web-extract/` rehne do, naya API inhi pe chalta hai.
 - `docs/ARCHITECTURE.md` ke T3 aur S3 rows update karne hain.
+
+## App Check enforce aur infra cleanup (2026-11-03)
+
+- `APP_CHECK_MODE=enforce` set kiya `ultron-api-releases` aur `ultron-api-web-extract` pe (baaki env vars waise hi rakhe). Pehle ke logs me 64 releases requests me sirf 5 pe token missing tha (purane test calls), to asli phone tokens valid the. Bina token ke synthetic request ab 401 `app check failed` deta hai. Phone pe About me "Check again" 2 baar chalaya (15:36 aur 15:37 UTC), update check enforce ke saath chala, aur logs me koi App Check problem nahi aaya.
+- Rollback: `aws lambda update-function-configuration` se `APP_CHECK_MODE` wapas `log` karo (baaki env vars bhi saath bhejna, warna wo hat jate hain).
+- `infra/api.yaml` ka `AppCheckMode` default ab `enforce` hai.
+- `infra/ultron.yaml` se dono Function URL, unki permissions aur outputs hata diye. Ab ye template deploy karne se URL wapas nahi banenge.
+- GitHub secret `LOCAL_PROPERTIES` me ab sirf `GITHUB_CLIENT_ID` hai (build me sirf wahi padha jata hai). `UPDATE_URL`, `WEB_EXTRACT_URL`, `GOOGLE_MCP_URL`, `AZURE_ENDPOINT` aur `GOOGLE_WEB_CLIENT_ID` hat gaye. Purani value padh nahi sakte the, isliye secret ko local.properties ki sahi line se naya bana diya.
