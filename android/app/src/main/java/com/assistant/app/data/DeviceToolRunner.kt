@@ -691,6 +691,14 @@ class DeviceToolRunner(
      * Sends an SMS with no confirmation screen, after the checks in [SmsRules], and reports what the phone's radio said:
      * sent, failed with a reason, or handed over but not confirmed in time. [recipient] is the contact name when known.
      */
+    private fun attachSmsHistory() {
+        val prefs = app.getSharedPreferences("sms_rules", android.content.Context.MODE_PRIVATE)
+        SmsRules.attach(
+            load = { prefs.getString("sent_at", "").orEmpty().split(',').mapNotNull { it.toLongOrNull() } },
+            store = { times -> prefs.edit().putString("sent_at", times.joinToString(",")).apply() }
+        )
+    }
+
     private suspend fun sendSms(number: String, message: String, recipient: String?): String {
         if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
         missingPermission(Manifest.permission.SEND_SMS)?.let { return it }
@@ -700,6 +708,7 @@ class DeviceToolRunner(
         if (text.length > SmsRules.MAX_CHARS) {
             return "status=invalid\nThe message is ${text.length} characters; the limit is ${SmsRules.MAX_CHARS}. Shorten it. No message was sent."
         }
+        attachSmsHistory()
         if (!SmsRules.allowSend()) {
             return "status=limit\nAlready sent ${SmsRules.MAX_PER_HOUR} messages in the last hour, so no more are sent for now."
         }

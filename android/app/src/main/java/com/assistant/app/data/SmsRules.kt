@@ -11,6 +11,22 @@ object SmsRules {
     private const val HOUR_MS = 3_600_000L
 
     private val sentAt = ArrayDeque<Long>()
+    private var save: ((List<Long>) -> Unit)? = null
+
+    /**
+     * Loads the send times kept from earlier runs and keeps saving new ones, so closing and reopening the app does not
+     * reset the hourly limit. Only the first call does anything.
+     */
+    @Synchronized
+    fun attach(load: () -> List<Long>, store: (List<Long>) -> Unit, nowMs: Long = System.currentTimeMillis()) {
+        if (save != null) return
+        save = store
+        load().filter { nowMs - it in 0 until HOUR_MS }.sorted().forEach { sentAt.addLast(it) }
+    }
+
+    private fun persist() {
+        save?.invoke(sentAt.toList())
+    }
 
     /**
      * The number reduced to digits (and a leading +), or null when it cannot be a normal phone number. Numbers shorter
@@ -29,6 +45,7 @@ object SmsRules {
         while (sentAt.isNotEmpty() && nowMs - sentAt.first() >= HOUR_MS) sentAt.removeFirst()
         if (sentAt.size >= MAX_PER_HOUR) return false
         sentAt.addLast(nowMs)
+        persist()
         return true
     }
 
@@ -36,8 +53,12 @@ object SmsRules {
     @Synchronized
     fun refund() {
         if (sentAt.isNotEmpty()) sentAt.removeLast()
+        persist()
     }
 
     @Synchronized
-    fun resetForTest() = sentAt.clear()
+    fun resetForTest() {
+        sentAt.clear()
+        save = null
+    }
 }

@@ -47,6 +47,23 @@ class McpClient(
 
     suspend fun listTools(): List<McpToolSpec> = lock.withLock {
         withContext(Dispatchers.IO) {
+            val watcher = cancelActiveCallOnCancellation()
+            try {
+                listToolsLocked()
+            } catch (e: McpException) {
+                throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                throw McpException("Could not reach the server.")
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable) { watcher.cancelAndJoin() }
+            }
+        }
+    }
+
+    private fun listToolsLocked(): List<McpToolSpec> {
+        run {
             ensureInitialized()
             val tools = mutableListOf<McpToolSpec>()
             var cursor: String? = null
@@ -64,9 +81,9 @@ class McpClient(
                     )
                 }
                 cursor = result.optString("nextCursor").takeIf { it.isNotEmpty() }
-                if (cursor == null) return@withContext tools
+                if (cursor == null) return tools
             }
-            tools
+            return tools
         }
     }
 

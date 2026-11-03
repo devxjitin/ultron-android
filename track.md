@@ -520,3 +520,4 @@
 [2026-11-03 14:10] [Claude] [Add: Ultronapp admin web app, license-admin Lambda, buyer details in app Settings]
 [2026-11-03 15:27] [Claude] [Update: Ultronapp live par (ultronapp-admin.web.app), ultron-api stack me admin Lambda deploy]
 [2026-11-03 20:41] [Claude] [Fix: untrusted-text window now set by tool name, outbound tools guarded]
+[2026-11-03 20:44] [Claude] [Fix: GitHub read-only filter, SMS limit persisted, listTools errors, tool cap test]

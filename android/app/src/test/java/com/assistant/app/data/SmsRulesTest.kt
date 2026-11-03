@@ -33,4 +33,20 @@ class SmsRulesTest {
         SmsRules.refund()
         assertTrue(SmsRules.allowSend(5_000L))
     }
+
+    @Test fun limitSurvivesARestart() {
+        var saved = emptyList<Long>()
+        SmsRules.attach({ emptyList() }, { saved = it }, nowMs = 1_000L)
+        repeat(SmsRules.MAX_PER_HOUR) { assertTrue(SmsRules.allowSend(1_000L + it)) }
+        assertEquals(SmsRules.MAX_PER_HOUR, saved.size)
+
+        SmsRules.resetForTest()
+        SmsRules.attach({ saved }, { saved = it }, nowMs = 2_000L)
+        assertFalse(SmsRules.allowSend(2_000L))
+    }
+
+    @Test fun oldSendsAreDroppedWhenLoaded() {
+        SmsRules.attach({ List(SmsRules.MAX_PER_HOUR) { 1_000L } }, { }, nowMs = 1_000L + 3_600_000L)
+        assertTrue(SmsRules.allowSend(1_000L + 3_600_000L))
+    }
 }
