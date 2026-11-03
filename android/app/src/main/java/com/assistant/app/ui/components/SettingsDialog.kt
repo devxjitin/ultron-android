@@ -1,7 +1,6 @@
 package com.assistant.app.ui.components
 
 import androidx.activity.compose.BackHandler
-import com.assistant.app.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -647,13 +646,7 @@ fun SettingsPage(
             tonalElevation = 6.dp,
             title = { Text("Remove API key?") },
             text = {
-                Text(
-                    if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
-                        "The assistant will fall back to its built-in key. The active conversation, if any, isn't affected either way."
-                    } else {
-                        "The assistant won't be able to connect until a new key is entered. The active conversation, if any, isn't affected."
-                    }
-                )
+                Text("The assistant goes back to its built-in access. The active conversation, if any, isn't affected.")
             },
             confirmButton = {
                 TextButton(onClick = {

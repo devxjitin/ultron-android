@@ -521,3 +521,4 @@
 [2026-11-03 15:27] [Claude] [Update: Ultronapp live par (ultronapp-admin.web.app), ultron-api stack me admin Lambda deploy]
 [2026-11-03 20:41] [Claude] [Fix: untrusted-text window now set by tool name, outbound tools guarded]
 [2026-11-03 20:44] [Claude] [Fix: GitHub read-only filter, SMS limit persisted, listTools errors, tool cap test]
+[2026-11-03 20:48] [Claude] [Remove: baked Gemini/knowledge keys and legacy WEB_EXTRACT_URL from APK build]

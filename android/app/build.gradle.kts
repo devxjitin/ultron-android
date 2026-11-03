@@ -15,21 +15,16 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.firebase.crashlytics")
 }
 
-// Optional compile-time default API key, read from local.properties (gitignored, never
-// committed). The app also lets the key be entered/changed at runtime from Settings, which
-// takes priority -- this is just a convenience fallback for development.
-// Add: GEMINI_API_KEY=your_key_here  to android/local.properties
+// Build-time values come from local.properties (gitignored, never committed). No Gemini or other API key is read
+// here on purpose: anything compiled into the APK can be pulled out of it. Gemini goes through Firebase AI Logic,
+// or the user's own key entered in Developer settings.
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) load(file.inputStream())
 }
-val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY", "")
 // Public client id of the GitHub OAuth App used for "Sign in with GitHub" (device flow, no secret).
 // Add: GITHUB_CLIENT_ID=Iv1.xxxx  to android/local.properties. Blank = the connector asks for a token instead.
 val githubClientId: String = localProperties.getProperty("GITHUB_CLIENT_ID", "")
-// Key for knowledge import and search, used until the user saves their own in Developer settings. Add KNOWLEDGE_API_KEY=...
-// to android/local.properties; without it the main GEMINI_API_KEY is used.
-val knowledgeApiKey: String = localProperties.getProperty("KNOWLEDGE_API_KEY", "").ifBlank { geminiApiKey }
 // URL of the update server on AWS (with its access token), used by the in-app "update from AWS" feature.
 // Add: UPDATE_URL=https://.../<token>/latest  to android/local.properties. scripts/publish-update.ps1 uploads new builds.
 val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
@@ -38,8 +33,6 @@ val updateUrl: String = localProperties.getProperty("UPDATE_URL", "")
 val apiBaseUrl: String = localProperties.getProperty("API_BASE_URL", "https://api.devxjitin.dev")
 // Website store where activation keys are sold; the activation screen links to it. Blank hides the link.
 val storeUrl: String = localProperties.getProperty("STORE_URL", "")
-// Add: WEB_EXTRACT_URL=https://.../<token>  to android/local.properties. Blank = the web page reader tool says it is not set up.
-val webExtractUrl: String = localProperties.getProperty("WEB_EXTRACT_URL", "")
 // Every build gets a higher version code than the one before (minutes since 1970), so the phone can always tell
 // which build is newer. scripts/publish-update.ps1 passes the same number with -PappVersionCode.
 val appVersionCode: Int = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: (System.currentTimeMillis() / 60000).toInt()
@@ -71,11 +64,8 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
-        buildConfigField("String", "KNOWLEDGE_API_KEY", "\"$knowledgeApiKey\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
         buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
-        buildConfigField("String", "WEB_EXTRACT_URL", "\"$webExtractUrl\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "STORE_URL", "\"$storeUrl\"")
     }
