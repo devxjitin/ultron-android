@@ -115,8 +115,6 @@ data class AssistantSettings(
     val githubLogin: String = "",
     /** Tools GitHub's MCP server offered at the last refresh, cached so a session can start offline. */
     val githubTools: List<McpToolSpec> = emptyList(),
-    /** Names of [githubTools] the user has switched on. */
-    val enabledGithubTools: Set<String> = emptySet(),
     val micSensitivity: MicSensitivity = MicSensitivity.MEDIUM,
     /** BCP-47 code for one of the kiosk's supported languages. */
     val languageCode: String = AssistantOptions.defaultLanguageCode,
@@ -143,7 +141,10 @@ data class AssistantSettings(
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
     /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
     /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
-)
+) {
+    /** Names of [githubTools] the app uses: only the ones the server marks read-only. */
+    val enabledGithubTools: Set<String> get() = effectiveMcpTools(githubTools)
+}
 
 /** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
 class AppSettingsStore(private val context: Context) {
@@ -176,7 +177,6 @@ class AppSettingsStore(private val context: Context) {
                 ?: AssistantOptions.defaultVoice,
             githubLogin = prefs[githubLoginKey].orEmpty(),
             githubTools = decodeMcpTools(prefs[githubToolsKey]),
-            enabledGithubTools = effectiveMcpTools(decodeMcpTools(prefs[githubToolsKey])),
             micSensitivity = MicSensitivity.fromStoredValue(prefs[micSensitivityKey]),
             languageCode = prefs[languageCodeKey]
                 ?.takeIf(AssistantOptions::isApprovedLanguage)
