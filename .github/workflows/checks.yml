@@ -1,51 +1,134 @@
-# Runs on every pull request. Nothing here publishes anything; publishing stays in publish-ota.yml (main only).
 name: Checks
 
 on:
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      publish:
+        description: Whether this change affects an APK input
+        value: ${{ jobs.changes.outputs.publish }}
 
 concurrency:
-  group: checks-${{ github.ref }}
+  group: checks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      android: ${{ steps.plan.outputs.android }}
+      backend: ${{ steps.plan.outputs.backend }}
+      web: ${{ steps.plan.outputs.web }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        run: python scripts/ci_changes.py
+
+  ci:
+    name: Workflow logic
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Change-selection regression tests
+        run: python -m unittest discover -s tests/ci -v
+      - name: Publish-script regression tests
+        shell: pwsh
+        run: ./tests/ci/test-publish.ps1
+
   android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - uses: android-actions/setup-android@v3
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
-
       - uses: gradle/actions/setup-gradle@v4
-
-      # google-services.json is a secret, so the build runs without it (the app falls back to the on-device key).
-      - name: Unit tests
+      - name: Unit tests and lint
         working-directory: android
-        run: ./gradlew testDebugUnitTest --console=plain
-
-      - name: Lint
-        working-directory: android
-        run: ./gradlew lintDebug --console=plain
+        run: ./gradlew testDebugUnitTest lintDebug -PappVersionCode=1 --build-cache --profile --console=plain
+      - name: Save Android timing profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-gradle-profile
+          path: android/build/reports/profile/
+          if-no-files-found: ignore
+          retention-days: 7
 
   lambdas:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: mcp/*/requirements.txt
       - name: Lambda tests
         run: python -m unittest discover -s mcp/tests -v
+      - name: Build Python 3.14 Lambda packages
+        run: |
+          python mcp/web-extract/build.py
+          python mcp/youtube-search/build.py
+      - name: Import packaged Linux dependencies
+        run: |
+          python -m zipfile -e mcp/web-extract/function.zip "$RUNNER_TEMP/web-extract-py314"
+          PYTHONPATH="$RUNNER_TEMP/web-extract-py314" python -c "import lambda_function, trafilatura, lxml.etree; assert lambda_function._metadata(b'<html><head><title>Python 3.14</title></head><body>Example</body></html>', 'https://example.com')['title'] == 'Python 3.14'"
+          python -m zipfile -e mcp/youtube-search/function.zip "$RUNNER_TEMP/youtube-py314"
+          PYTHONPATH="$RUNNER_TEMP/youtube-py314" python -c "import lambda_function, yt_dlp; assert len(lambda_function.TOOLS) == 4"
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check browser module syntax
+        run: |
+          for file in ultronapp/*.js; do
+            node --input-type=module --check < "$file"
+          done
+
+  required:
+    name: Required checks
+    needs: [changes, ci, android, lambdas, web]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful applicable jobs
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          jobs = json.loads(os.environ['RESULTS'])
+          bad = [name for name, job in jobs.items() if job['result'] not in ('success', 'skipped')]
+          bad += [name for name in ('changes', 'ci') if jobs[name]['result'] != 'success']
+          for job, flag in (('android', 'android'), ('lambdas', 'backend'), ('web', 'web')):
+              if jobs['changes'].get('outputs', {}).get(flag) == 'true' and jobs[job]['result'] != 'success':
+                  bad.append(job)
+          if bad:
+              sys.exit('Required jobs failed: ' + ', '.join(sorted(set(bad))))
+          print('All applicable checks passed.')
+          PY
