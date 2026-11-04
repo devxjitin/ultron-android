@@ -191,8 +191,10 @@ private val PhoneCatalog = listOf(
         Icons.Outlined.Description, Kind.Online, "Free, no sign-in"),
     phone("weather", "Weather", "Current weather and the forecast for where you are or any city.",
         Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
-    phone("youtube", "YouTube", "Search videos, get details and transcripts, list a channel's videos and download video or audio to Downloads/Ultron. Runs on the phone.",
-        Icons.Outlined.PlayCircle),
+    phone("youtube", "YouTube Search", "Search videos, read details and captions, and list channel or playlist videos using the AWS service.",
+        Icons.Outlined.PlayCircle, Kind.Online, "On AWS"),
+    phone("youtube_downloads", "YouTube Downloads", "Choose a format and quality, then save video or audio to Downloads/Ultron on this phone.",
+        Icons.Outlined.Download),
     phone("calls", "Calls", "Dial, answer and end calls, see who called, call a contact by name and save new contacts.",
         Icons.Outlined.Call, Kind.Local(listOf(
             Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_CALL_LOG))),
@@ -553,9 +555,15 @@ private val InfoById: Map<String, Info> = mapOf(
         "Your phone, which asks Open-Meteo directly"
     ),
     "youtube" to Info(
-        "Searches YouTube, shows video details, reads transcripts (captions), lists a channel's or playlist's videos, and downloads a video or only its audio to Downloads/Ultron. Before downloading it asks which format and quality you want, from what that video really offers (up to 4K or 8K). It all runs on your phone because YouTube blocks cloud servers.",
-        "No sign-in. Downloads need free storage (a 4K video can be several GB), and a notification shows the progress.",
-        "Requests go from your phone straight to YouTube. Saving videos may be against YouTube's terms of service, so download only what you are allowed to keep.",
+        "Searches videos, reads video details and available captions, and lists channel or playlist videos. YouTube can refuse requests from cloud servers; the assistant reports that when it happens.",
+        "Internet access. No separate YouTube sign-in.",
+        "Searches and YouTube links go to Ultron's AWS service, which asks YouTube. Results reach Gemini to answer your question. No video or audio files are downloaded by this connector.",
+        "Ultron's YouTube Search MCP on AWS"
+    ),
+    "youtube_downloads" to Info(
+        "Shows the formats and qualities a video offers, asks which you want, then downloads video or audio to Downloads/Ultron. Progress and completion appear in notifications. This connector is separate from YouTube Search.",
+        "Internet access and free storage. No separate YouTube sign-in.",
+        "Video links and media requests go directly from this phone to YouTube. Downloaded files stay on this phone. Download only what you are allowed to keep.",
         "Your phone, which asks YouTube directly"
     ),
     "github" to Info(

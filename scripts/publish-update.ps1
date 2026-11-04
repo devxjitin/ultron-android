@@ -1,88 +1,111 @@
 <#
-Builds the Ultron app and publishes it to the AWS update server, so the phone can update itself from anywhere.
-Run from the laptop:   .\scripts\publish-update.ps1 -Notes "What changed"
-The phone then shows "Update available" the next time Ultron is opened (or via About > Check for updates).
-Needs: Android SDK 35 + JDK (ANDROID_HOME / JAVA_HOME), and `aws login` done on this laptop.
-CI runs the same script with pwsh on Linux (.github/workflows/publish-ota.yml), so keep it cross-platform.
+Build and publish the OTA APK, or run the two stages separately in CI.
+Build produces ota-manifest.json next to app-ota.apk; Publish verifies its commit, hash, size and version.
+Requires SDK 36, JDK 17, AWS CLI authentication and the existing OTA signing key.
 #>
 param(
+    [ValidateSet("BuildAndPublish", "Build", "Publish")][string]$Mode = "BuildAndPublish",
     [string]$Notes = "",
     [string]$VersionName = "1.0.0",
-    # Raise the build number when a phone already runs a higher one (a side-loaded build); Android refuses downgrades.
     [int]$MinVersionCode = 0,
     [switch]$AllowStale,
     [string]$Bucket = "ultron-app-updates-143920986615",
-    # Android SDK (the one Android CLI manages) and the system JDK 17+; JAVA_HOME must be set.
     [string]$Sdk = $(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:USERPROFILE\Android\Sdk" }),
-    [string]$Jdk = $env:JAVA_HOME
+    [string]$Jdk = $env:JAVA_HOME,
+    [string]$OutputDirectory = ""
 )
 $ErrorActionPreference = "Stop"
-$android = Join-Path (Split-Path $PSScriptRoot -Parent) "android"
+$repo = Split-Path $PSScriptRoot -Parent
+$android = Join-Path $repo "android"
 $onWindows = $env:OS -eq "Windows_NT"
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $android "app/build/outputs/apk/ota" }
+$apk = Join-Path $OutputDirectory "app-ota.apk"
+$manifest = Join-Path $OutputDirectory "ota-manifest.json"
 
-# Same number goes into the app (as its version code) and into latest.json, so the phone can compare builds.
-$versionCode = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
-
-# Never publish from a checkout that is missing what is already on GitHub's main: that silently ships an older app
-# (an old theme, missing connectors). -AllowStale skips the check on purpose.
-if (-not $AllowStale) {
-    $repo = Split-Path $PSScriptRoot -Parent
-    git -C $repo fetch origin main --quiet
-    if ($LASTEXITCODE -ne 0) { throw "Could not fetch origin/main to check this checkout is up to date." }
-    git -C $repo merge-base --is-ancestor origin/main HEAD
-    if ($LASTEXITCODE -ne 0) { throw "This checkout does not contain the latest origin/main, so the build would be older than what is live. Rebase or merge origin/main first (or pass -AllowStale)." }
-    if (git -C $repo status --porcelain --untracked-files=no) { throw "There are uncommitted changes; commit them so the published build matches a commit." }
+function Assert-FreshCheckout {
+    if (-not $AllowStale) {
+        git -C $repo fetch origin main --quiet
+        if ($LASTEXITCODE -ne 0) { throw "Could not fetch origin/main." }
+        git -C $repo merge-base --is-ancestor origin/main HEAD
+        if ($LASTEXITCODE -ne 0) { throw "This checkout is behind origin/main; nothing will be published." }
+        if (git -C $repo status --porcelain --untracked-files=no) { throw "Commit tracked changes before publishing." }
+    }
 }
 
-# Fail before the slow build if publishing could not work anyway.
-if (-not (Get-Command aws -ErrorAction SilentlyContinue)) { throw "The AWS CLI ('aws') was not found; install it and run 'aws login' first." }
-# Two publishes in the same minute (or a clock that went backwards) must not reuse a number: always go above what is live.
-$liveCode = $null
-try { $liveCode = [int]((aws s3 cp "s3://$Bucket/latest.json" - --only-show-errors | ConvertFrom-Json).versionCode) } catch { }
-if ($liveCode -and $versionCode -le $liveCode) { $versionCode = $liveCode + 1 }
-if ($versionCode -lt $MinVersionCode) { $versionCode = $MinVersionCode }
-
-Write-Host "Building version $VersionName (code $versionCode)..."
-$java = Join-Path $Jdk $(if ($onWindows) { "bin/java.exe" } else { "bin/java" })
-if (-not ((Test-Path (Join-Path $Sdk "platforms")) -and (Test-Path $java))) {
-    throw "Android SDK not found at $Sdk or JDK not found at $Jdk. Set ANDROID_HOME / JAVA_HOME (SDK: android sdk install platforms/android-36 build-tools/36.0.0)."
-}
-$env:JAVA_HOME = $Jdk; $env:ANDROID_HOME = $Sdk; $env:ANDROID_SDK_ROOT = $Sdk
-# The phone's installed app is signed with the debug key from the earlier builds. A different key makes Android refuse
-# the update ("conflicts with an existing package"), so builds sign with a copy of that same key.
-$keyHome = Join-Path $HOME ".ultron-android"
-if (Test-Path (Join-Path $keyHome "debug.keystore")) { $env:ANDROID_USER_HOME = $keyHome }
-else { throw "Missing $keyHome/debug.keystore; a different key would break updates on phones that already have the app." }
-$gradlew = Join-Path $android $(if ($onWindows) { "gradlew.bat" } else { "gradlew" })
-Push-Location $android
-try { & $gradlew assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --console=plain -q; $built = $LASTEXITCODE } finally { Pop-Location }
-$apk = Join-Path $android "app/build/outputs/apk/ota/app-ota.apk"
-if ($built -ne 0) { throw "The build failed; nothing was published." }
-
-$key = "apk/ultron-$versionCode.apk"
-$info = [ordered]@{
-    versionCode = $versionCode
-    versionName = $VersionName
-    notes       = $Notes
-    sha256      = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLower()
-    sizeBytes   = (Get-Item $apk).Length
-    apkKey      = $key
-    publishedAt = (Get-Date).ToString("s")
+function Get-LiveVersion {
+    # Do not silently turn network/auth errors into permission to reuse a version number.
+    $liveText = aws s3 cp "s3://$Bucket/latest.json" - --only-show-errors
+    if ($LASTEXITCODE -ne 0) { throw "Could not read latest.json; refusing to guess the live version." }
+    $live = $liveText | ConvertFrom-Json
+    if (-not $live.versionCode -or [long]$live.versionCode -le 0) { throw "The live release manifest has an invalid versionCode." }
+    return [long]$live.versionCode
 }
 
-Write-Host "Uploading to s3://$Bucket/$key ..."
-aws s3 cp $apk "s3://$Bucket/$key" --only-show-errors
-if ($LASTEXITCODE -ne 0) { throw "Upload failed (is 'aws login' still valid?)." }
+Assert-FreshCheckout
+if (-not (Get-Command aws -ErrorAction SilentlyContinue)) { throw "AWS CLI is missing." }
+$sourceCommit = (git -C $repo rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '^[a-f0-9]{40}$') { throw "Could not determine the source commit." }
 
-# latest.json goes last: the phone only sees the new build once its file is fully uploaded.
-$tmp = New-TemporaryFile
-[IO.File]::WriteAllText($tmp, ($info | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
-aws s3 cp $tmp "s3://$Bucket/latest.json" --content-type application/json --only-show-errors
-Remove-Item $tmp
-if ($LASTEXITCODE -ne 0) { throw "Could not write latest.json." }
+if ($Mode -ne "Publish") {
+    $versionCode = [long][Math]::Floor([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
+    $versionCode = [Math]::Max([Math]::Max($versionCode, (Get-LiveVersion) + 1), $MinVersionCode)
+    if ($versionCode -gt [int]::MaxValue) { throw "Version code exceeds Android's limit." }
+    $java = if ($Jdk) { Join-Path $Jdk $(if ($onWindows) { "bin/java.exe" } else { "bin/java" }) } else { "" }
+    if (-not ((Test-Path (Join-Path $Sdk "platforms/android-36")) -and $java -and (Test-Path $java))) {
+        throw "SDK platform 36 or JDK not found. Set ANDROID_HOME and JAVA_HOME."
+    }
+    $env:JAVA_HOME = $Jdk
+    $env:ANDROID_HOME = $Sdk
+    $keyHome = Join-Path $HOME ".ultron-android"
+    if (-not (Test-Path (Join-Path $keyHome "debug.keystore"))) { throw "The existing OTA signing key is missing." }
+    $env:ANDROID_USER_HOME = $keyHome
+    $gradlew = Join-Path $android $(if ($onWindows) { "gradlew.bat" } else { "gradlew" })
+    Write-Host "Building version $VersionName ($versionCode), commit $sourceCommit..."
+    Push-Location $android
+    try {
+        & $gradlew assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --build-cache --profile --console=plain
+        $built = $LASTEXITCODE
+    } finally { Pop-Location }
+    if ($built -ne 0) { throw "Build failed; nothing was published." }
+    $builtApk = Join-Path $android "app/build/outputs/apk/ota/app-ota.apk"
+    New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+    if ([IO.Path]::GetFullPath($builtApk) -ne [IO.Path]::GetFullPath($apk)) { Copy-Item -LiteralPath $builtApk -Destination $apk }
+    $info = [ordered]@{
+        versionCode = [long]$versionCode
+        versionName = $VersionName
+        notes = $Notes
+        sha256 = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        sizeBytes = (Get-Item -LiteralPath $apk).Length
+        apkKey = "apk/ultron-$versionCode.apk"
+        sourceCommit = $sourceCommit
+        publishedAt = [DateTimeOffset]::UtcNow.ToString("o")
+    }
+    [IO.File]::WriteAllText($manifest, ($info | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+    if ($Mode -eq "Build") { Write-Host "Built and recorded $manifest; no upload performed."; return }
+}
 
-# Keep only the three newest builds.
-$old = aws s3api list-objects-v2 --bucket $Bucket --prefix apk/ --query "sort_by(Contents,&LastModified)[:-3].Key" --output json | ConvertFrom-Json
-foreach ($k in $old) { aws s3 rm "s3://$Bucket/$k" --only-show-errors }
+if (-not ((Test-Path -LiteralPath $manifest) -and (Test-Path -LiteralPath $apk))) { throw "Built APK or ota-manifest.json is missing." }
+$info = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+if ($info.sourceCommit -ne $sourceCommit) { throw "The APK was built from a different commit." }
+if ($info.sha256 -cne (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant() -or
+    [long]$info.sizeBytes -ne (Get-Item -LiteralPath $apk).Length) { throw "APK checksum or size does not match its build manifest." }
+if ([long]$info.versionCode -le 0 -or [long]$info.versionCode -gt [int]::MaxValue -or
+    $info.apkKey -cne "apk/ultron-$($info.versionCode).apk") { throw "Invalid release version or APK key." }
+if ([long]$info.versionCode -le (Get-LiveVersion)) { throw "A release with this version or a newer one is already live." }
+# Recheck after the long build and immediately before changing the live release pointer.
+Assert-FreshCheckout
+Write-Host "Uploading verified APK $($info.apkKey)..."
+aws s3 cp $apk "s3://$Bucket/$($info.apkKey)" --only-show-errors
+if ($LASTEXITCODE -ne 0) { throw "APK upload failed; latest.json was not changed." }
+aws s3 cp $manifest "s3://$Bucket/latest.json" --content-type application/json --only-show-errors
+if ($LASTEXITCODE -ne 0) { throw "Could not publish latest.json." }
 
-Write-Host "Published version $VersionName (code $versionCode). Open Ultron on the phone to update."
+# Preserve the established retention policy; a cleanup failure must not disguise a successful publication.
+$oldText = aws s3api list-objects-v2 --bucket $Bucket --prefix apk/ --query "sort_by(Contents,&LastModified)[:-3].Key" --output json
+if ($LASTEXITCODE -eq 0) {
+    foreach ($key in ($oldText | ConvertFrom-Json)) {
+        aws s3 rm "s3://$Bucket/$key" --only-show-errors
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Could not remove an old APK." }
+    }
+} else { Write-Warning "Could not list old APKs; release is published, cleanup skipped." }
+Write-Host "Published version $($info.versionName) ($($info.versionCode)), commit $sourceCommit."

@@ -1,4 +1,4 @@
-"""Builds function.zip for the web-extract Lambda (Python 3.12, x86_64).
+"""Builds function.zip for the web-extract Lambda (Python 3.14, x86_64).
 
 Run from anywhere:  python mcp/web-extract/build.py
 The dependencies are downloaded as Linux wheels, so the zip works on Lambda even when built on Windows or macOS.
@@ -16,7 +16,7 @@ ZIP = os.path.join(HERE, "function.zip")
 shutil.rmtree(BUILD, ignore_errors=True)
 subprocess.run([
     sys.executable, "-m", "pip", "install", "--quiet", "--target", BUILD,
-    "--platform", "manylinux2014_x86_64", "--python-version", "3.12", "--implementation", "cp",
+    "--platform", "manylinux2014_x86_64", "--python-version", "3.14", "--implementation", "cp",
     "--only-binary=:all:", "-r", os.path.join(HERE, "requirements.txt"),
 ], check=True)
 for name in ("lambda_function.py", "appcheck.py"):

@@ -29,7 +29,9 @@ object PhoneConnectors {
         PhoneConnector("web_reader", listOf(DeviceTool.FETCH_WEBPAGE)),
         PhoneConnector("weather", listOf(DeviceTool.GET_WEATHER)),
         PhoneConnector("youtube", listOf(
-            DeviceTool.YOUTUBE_SEARCH, DeviceTool.YOUTUBE_INFO, DeviceTool.YOUTUBE_TRANSCRIPT, DeviceTool.YOUTUBE_CHANNEL,
+            DeviceTool.YOUTUBE_SEARCH, DeviceTool.YOUTUBE_INFO, DeviceTool.YOUTUBE_TRANSCRIPT, DeviceTool.YOUTUBE_CHANNEL
+        )),
+        PhoneConnector("youtube_downloads", listOf(
             DeviceTool.YOUTUBE_DOWNLOAD_OPTIONS, DeviceTool.DOWNLOAD_YOUTUBE
         )),
         PhoneConnector("calls", listOf(

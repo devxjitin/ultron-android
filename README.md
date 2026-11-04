@@ -116,7 +116,8 @@ Every connector is defined in code with its fixed set of tools and a **surface**
 | Notifications | read current notifications | Voice |
 | App usage | most-used apps, app usage time | Voice |
 | DuckDuckGo | web search with sources | Voice |
-| YouTube | search videos, video details, transcripts, channel or playlist videos, and download audio only or video in any quality the video offers (144p up to 4K and 8K), after asking you which one, to Downloads/Ultron. Runs on the phone with NewPipe Extractor, no sign-in | Voice |
+| YouTube Search | search videos, video details, available transcripts, and channel or playlist videos through the read-only AWS MCP service using yt-dlp; no API key. YouTube may block cloud lookups | Voice |
+| YouTube Downloads | a separate private MCP on the phone: list formats/qualities and save video or audio to Downloads/Ultron using NewPipe Extractor. Media never passes through AWS | Voice |
 | GitHub | repositories, issues, pull requests (sign in with GitHub, OAuth device flow) | Voice |
 | Calls | dial, call a contact, create a contact | Voice only |
 | Apps and settings | open an app, the camera and settings, clipboard, show a notification | Voice only |
@@ -159,7 +160,10 @@ flowchart LR
     end
 
     Voice -- "WebSocket, audio" --> GL["Gemini Live API"]
-    Tools -- "HTTPS, on the phone" --> YT["YouTube<br/>NewPipe Extractor"]
+    Tools -- "Private phone MCP" --> YTD["YouTube Downloads<br/>NewPipe Extractor"]
+    YTD -- "Media directly to phone" --> YT["YouTube"]
+    Tools -- "Authenticated MCP over HTTPS" --> YTS["AWS YouTube Search<br/>yt-dlp, metadata only"]
+    YTS --> YT
     Tools -- "MCP over HTTPS" --> GH["GitHub MCP"]
     VM -- "update check" --> UP["Update Lambda"]
     UP --> S3[("Private S3 bucket<br/>Transfer Acceleration")]
@@ -182,7 +186,7 @@ memory, knowledge search and connectors.
 | Networking | OkHttp 4, Kotlin coroutines and Flow |
 | Auth | GitHub OAuth device flow |
 | Connectors | Model Context Protocol over HTTPS (streamable HTTP, JSON responses) |
-| Backend | AWS Lambda (Python 3.12, arm64, Function URLs), S3 with Transfer Acceleration |
+| Backend | AWS Lambda (Python 3.14), API Gateway, S3 with Transfer Acceleration |
 | Build | Gradle (AGP 8.5.2), Android CLI for SDK, install and run, R8 shrinking for release and OTA builds |
 
 Minimum Android version is 8.0 (API 26); the app targets API 35 and compiles against API 36.
@@ -223,6 +227,7 @@ Minimum Android version is 8.0 (API 26); the app targets API 35 and compiles aga
 
 ### Prerequisites
 
+- **Python 3.14** for backend tests and Lambda packaging. On this PC the project environment is `X:\tmp\kira-py314`.
 - A Google AI Studio **Gemini API key** (voice and knowledge base both use it).
 - **JDK 17 or newer** and the **Android SDK** (platform 36, build-tools 36.0.0), set up with the Android CLI (`android`). Set `ANDROID_HOME` to the SDK folder.
 - An Android phone with USB or wireless debugging, or an emulator, for installing the debug build.
@@ -293,6 +298,8 @@ Values that contain a secret token end up inside the APK, so do not share builds
 
 ## Cloud backend (AWS)
 
+The project targets **Python 3.14** locally, in CI, in Lambda templates and in Linux dependency packages. `.python-version` records the version. Rebuild the web-extract and YouTube ZIPs before deploying a runtime change; changing the PC interpreter or repository templates alone does not change deployed Lambda runtimes. AWS supports the managed `python3.14` runtime ([runtime documentation](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)).
+
 The connector servers are intentionally small: no database, no third-party dependency, and nothing is stored.
 Each one runs as a Lambda function behind a **Function URL**, with a secret first path segment (`ACCESS_TOKEN`) that rejects
 every other request.
@@ -301,7 +308,7 @@ every other request.
 |---|---|---|---|
 | **Updates** | [`mcp/ultron-updates`](mcp/ultron-updates) | `GET /<token>/latest` | Returns the newest build's metadata and a short-lived download link. |
 
-Suggested runtime settings: Python 3.12, **arm64**, 128 to 512 MB depending on the server. Deploy by zipping the folder's
+Runtime target: Python 3.14, 128 to 512 MB depending on the server. The web-extract and YouTube packages target **x86_64**; use each infrastructure template's architecture. Deploy by zipping the folder's
 `lambda_function.py`, creating a Function URL with auth type `NONE`, and setting the
 `ACCESS_TOKEN` environment variable. The update server also needs a `BUCKET` variable.
 
