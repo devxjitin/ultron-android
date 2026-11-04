@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release, web-extract and license Lambdas.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    why: Keep the backend runtime aligned with Python 3.14 CI and packaged Linux dependencies.
+    must: [Rebuild native dependency packages before migrating a live runtime, Preserve existing authentication and data]
 # Deploy without the SAM CLI (build the web-extract zip first):
 #   python mcp/web-extract/build.py
 #   aws cloudformation package --template-file infra/api.yaml --s3-bucket <bucket> --s3-prefix cfn --output-template-file packaged.yaml
@@ -50,7 +56,7 @@ Conditions:
 
 Globals:
   Function:
-    Runtime: python3.12
+    Runtime: python3.14
     Handler: lambda_function.lambda_handler
     Environment:
       Variables:

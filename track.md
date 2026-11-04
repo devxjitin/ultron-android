@@ -532,3 +532,6 @@
 [2026-11-03 21:16] [Claude] [Update: screen/navigation default off, GitHub sign-in scope read:user only]
 [2026-11-03 21:30] [Claude] [Update: GitHub sign-in ab read-only GitHub App se, client id local aur CI secret me]
 [2026-11-03 21:42] [Claude] [Remove: ToolGroup enum, stored enabledGithubTools field (now derived)]
+[2026-11-04] [Codex] [Split: YouTube Search on AWS with yt-dlp (search/details/transcript/channel); separate private phone MCP for download options/video/audio via NewPipe; independent connectors, existing tool preferences preserved]
+[2026-11-04] [Codex] [Deploy: ultron-youtube stack and /v1/youtube/mcp live with Firebase JWT + enforced App Check; all four lookup tools passed AWS smoke tests; 76 backend and 236 Android tests passed, lint zero errors, debug APK built; phone not connected]
+[2026-11-04] [Codex] [Update: project Python target 3.14 across CI, Lambda templates and Linux package builders; .python-version added; 76 backend tests pass; live runtimes not redeployed]

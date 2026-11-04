@@ -448,7 +448,7 @@ enum class DeviceTool(
     ),
     YOUTUBE_SEARCH(
         "youtube_search", "Search YouTube", "Search YouTube videos.",
-        "Searches YouTube and returns the top videos with title, channel, duration, views and address.",
+        "Searches YouTube through the AWS search service and returns videos with title, channel, duration, views and address. Does not download media.",
         listOf(
             ToolParam("query", ToolParamType.STRING, "What to search for."),
             ToolParam("limit", ToolParamType.INTEGER, "How many videos, 1-25. Default 10.", required = false)
@@ -478,7 +478,7 @@ enum class DeviceTool(
     ),
     YOUTUBE_DOWNLOAD_OPTIONS(
         "youtube_download_options", "Download options", "List the formats and qualities a video can be downloaded in.",
-        "Lists what a YouTube video can be downloaded as: audio only, or video in each picture height it offers " +
+        "Runs on this phone. Lists what a YouTube video can be downloaded as: audio only, or video in each picture height it offers " +
             "(for example 360p, 720p, 1080p, 4K, 8K) with size. Always call it before a download and ask the user which " +
             "one they want, unless they already named the format and quality.",
         listOf(ToolParam("video", ToolParamType.STRING, "YouTube link or 11-character video id."))

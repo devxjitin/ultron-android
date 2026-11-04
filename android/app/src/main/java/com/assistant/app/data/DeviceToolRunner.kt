@@ -101,6 +101,10 @@ class DeviceToolRunner(
     /** Describes a screenshot (JPEG bytes) following the prompt; used by look_at_screen. */
     private val describeScreen: suspend (ByteArray, String) -> String = { _, _ -> "" }
 ) {
+    private val youtubeDownloads by lazy {
+        val downloader = YouTubeDownloader(app)
+        YouTubeDownloadsMcp(downloader::options, downloader::start)
+    }
     private val http by lazy {
         HttpClients.shared.newBuilder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -260,19 +264,9 @@ class DeviceToolRunner(
                 "status=ok\nNavigation opened for $destination."
             }
             DeviceTool.WEB_SEARCH -> webSearch(text("query") ?: return MISSING, text("time"))
-            DeviceTool.YOUTUBE_SEARCH -> YouTubeLookup.search(text("query") ?: return MISSING, number("limit") ?: 10)
-            DeviceTool.YOUTUBE_INFO -> YouTubeLookup.videoInfo(text("video") ?: return MISSING)
-            DeviceTool.YOUTUBE_TRANSCRIPT -> YouTubeLookup.transcript(text("video") ?: return MISSING, text("language") ?: "en", 20_000)
-            DeviceTool.YOUTUBE_CHANNEL -> YouTubeLookup.listVideos(text("source") ?: return MISSING, number("limit") ?: 20)
-            DeviceTool.YOUTUBE_DOWNLOAD_OPTIONS -> YouTubeDownloader(app).options(text("video") ?: return MISSING)
-            DeviceTool.DOWNLOAD_YOUTUBE -> {
-                val video = text("video") ?: return MISSING
-                val kind = text("kind")
-                val height = number("height")
-                // Nothing chosen yet: hand back the options so the user decides, instead of guessing a quality.
-                if (kind == null || (kind == "video" && height == null)) YouTubeDownloader(app).options(video)
-                else YouTubeDownloader(app).start(video, kind == "audio", (height ?: 0).coerceIn(0, 4320))
-            }
+            DeviceTool.YOUTUBE_SEARCH, DeviceTool.YOUTUBE_INFO, DeviceTool.YOUTUBE_TRANSCRIPT, DeviceTool.YOUTUBE_CHANNEL ->
+                com.assistant.app.network.YouTubeSearchClient.callTool(tool.functionName, args)
+            DeviceTool.YOUTUBE_DOWNLOAD_OPTIONS, DeviceTool.DOWNLOAD_YOUTUBE -> youtubeDownloads.callTool(tool.functionName, args)
             DeviceTool.SET_DND -> doNotDisturb(text("state"))
             DeviceTool.BLUETOOTH -> bluetooth()
             DeviceTool.OPEN_CAMERA -> {

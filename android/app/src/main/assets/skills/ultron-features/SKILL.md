@@ -41,6 +41,7 @@ read_screen, look_at_screen, get_current_app, click_on_text, click_screen_item, 
 
 ## Internet
 web_search, fetch_webpage, youtube_search, youtube_video_info, youtube_transcript, youtube_list_videos, youtube_download_options, download_youtube_video.
+YouTube Search is a read-only AWS connector (search, details, captions, channel/playlist lists). YouTube Downloads is a separate connector on this phone (formats and download). Enable each separately. If cloud lookup is blocked, report the failure; do not claim a search succeeded or switch to an undeclared tool. Download files stay in Downloads/Ultron on the phone.
 
 ## Memory, documents, skills, GitHub
 save_memory and forget_memory for lasting facts about him. search_knowledge_base for documents he saved. use_skill for the skills listed in your prompt; for a skill with tasks, call it again with the one task you need. GitHub tools appear only when he is signed in to GitHub.
