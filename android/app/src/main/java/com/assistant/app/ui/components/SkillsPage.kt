@@ -1,6 +1,15 @@
 package com.assistant.app.ui.components
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.unit.Dp
+import com.assistant.app.data.OWN_SKILLS_CATEGORY
+import com.assistant.app.ui.theme.AssistantSelectedBg
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,7 +54,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.MAX_SKILL_BODY_CHARS
-import com.assistant.app.data.Skill
 import com.assistant.app.data.SkillEntry
 import com.assistant.app.data.SkillParser
 import com.assistant.app.data.draftFromMarkdown
@@ -61,9 +70,9 @@ import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
 /**
- * The assistant's skills: instruction sets it loads only when a request needs one.
- * Built-in skills ship with the app: they can be switched off and read, but not edited or deleted, and the tasks inside a
- * built-in skill have no switches of their own. Your own skills can be added, switched off, edited and deleted.
+ * The assistant's skills: instruction sets it loads only when a request needs one. Each skill has its own details page,
+ * which never shows the instructions themselves. Every skill can be switched off except the one the assistant needs to
+ * describe itself; your own skills can also be added, edited and deleted. Skills are filed under category buttons.
  * [onSave] returns an error to show, or null when saved.
  */
 @Composable
@@ -74,90 +83,59 @@ fun SkillsPage(
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var openName by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailName by rememberSaveable { mutableStateOf<String?>(null) }
+    var categoryFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<SkillEntry?>(null) }
     var adding by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SkillEntry?>(null) }
-    var viewing by remember { mutableStateOf<Skill?>(null) }
 
-    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
-        Text(
-            "A skill is a set of instructions for one kind of task. The assistant only sees a skill's name and description, and opens the full instructions only when your request needs it. " +
-                "Built-in skills can be switched off but not edited or deleted; add your own skills below.",
-            color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 4.dp)
+    val detail = detailName?.let { name -> skills.firstOrNull { it.group.name == name } }
+    BackHandler(enabled = detail != null) { detailName = null }
+
+    if (detail != null) {
+        SkillDetail(
+            entry = detail,
+            onToggle = { onToggle(detail.group.name, it) },
+            onEdit = { editing = detail },
+            onBack = { detailName = null },
+            modifier = modifier
         )
-        Spacer(Modifier.height(14.dp))
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentAlt)))
-                .clickable { adding = true }.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.size(8.dp))
-            Text("Add a skill", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        }
-        PageLabel("Skills (${skills.size})")
-        if (skills.isEmpty()) {
-            Text("No skills yet.", color = AssistantTextMuted, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-        }
-        skills.forEach { entry ->
-            val group = entry.group
-            val shape = RoundedCornerShape(16.dp)
-            Column(
-                Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(shape).background(AssistantSurface)
-                    .border(BorderStroke(1.dp, AssistantOutline), shape)
+    } else {
+        val categories = skills.map { it.category }.distinct().sortedWith(compareBy({ it == OWN_SKILLS_CATEGORY }, { it }))
+        Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
+            Text(
+                "A skill is a set of instructions for one kind of task. The assistant opens a skill only when your request needs it.",
+                color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                    .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentAlt)))
+                    .clickable { adding = true }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
             ) {
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clickable {
-                            when {
-                                group.tasks.isNotEmpty() -> openName = if (openName == group.name) null else group.name
-                                entry.builtIn -> viewing = Skill(group.name, group.description, group.body)
-                                else -> editing = entry
-                            }
-                        }
-                        .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            group.name + if (entry.locked) "  ·  locked" else if (entry.builtIn) "  ·  built-in" else "",
-                            color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold
-                        )
-                        Text(group.description, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
-                        if (group.tasks.isNotEmpty()) {
-                            Text("${group.tasks.size} task" + if (group.tasks.size == 1) "" else "s", color = AssistantTextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-                        }
-                    }
-                    if (!entry.locked) {
-                        Spacer(Modifier.size(10.dp))
-                        Switch(
-                            checked = entry.enabled,
-                            onCheckedChange = { onToggle(group.name, it) },
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
-                                uncheckedTrackColor = AssistantFieldBackground, uncheckedBorderColor = AssistantOutline,
-                                uncheckedThumbColor = AssistantTextMuted
-                            )
-                        )
-                    }
-                }
-                if (openName == group.name) {
-                    // Tasks are part of their built-in skill: tap one to read it, there is nothing to switch.
-                    group.tasks.forEach { task ->
-                        Column(
-                            Modifier.fillMaxWidth().background(AssistantFieldBackground).clickable { viewing = task }
-                                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 12.dp)
-                        ) {
-                            Text(task.name, color = AssistantTextPrimary, fontSize = 14.sp)
-                            Text(task.description, color = AssistantTextSecondary, fontSize = 12.sp, lineHeight = 16.sp)
-                        }
-                    }
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Add a skill", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(14.dp))
+            CategoryChips(categories, categoryFilter, { categoryFilter = it })
+            if (skills.isEmpty()) {
+                Text("No skills yet.", color = AssistantTextMuted, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+            }
+            categories.filter { categoryFilter == null || it == categoryFilter }.forEach { category ->
+                PageLabel(category)
+                skills.filter { it.category == category }.sortedBy { it.group.name }.forEach { entry ->
+                    SkillCard(
+                        entry = entry,
+                        onToggle = { onToggle(entry.group.name, it) },
+                        onEdit = { editing = entry },
+                        onOpen = { detailName = entry.group.name }
+                    )
                 }
             }
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(24.dp))
     }
 
     if (adding) {
@@ -166,28 +144,118 @@ fun SkillsPage(
     editing?.let { entry ->
         SkillEditor(entry, onSave, onDismiss = { editing = null }, onDelete = { deleting = entry; editing = null })
     }
-    viewing?.let { skill ->
-        AlertDialog(
-            onDismissRequest = { viewing = null },
-            title = { Text(skill.name) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text(skill.description, color = AssistantTextSecondary, fontSize = 13.sp)
-                    Spacer(Modifier.height(10.dp))
-                    Text(skill.body, color = AssistantTextPrimary, fontSize = 13.sp, lineHeight = 19.sp)
-                }
-            },
-            confirmButton = { TextButton(onClick = { viewing = null }) { Text("Close") } }
-        )
-    }
     deleting?.let { entry ->
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("Delete this skill?") },
             text = { Text("\"${entry.group.name}\" will be removed for good.") },
-            confirmButton = { TextButton(onClick = { onDelete(entry.group.name); deleting = null }) { Text("Delete", color = AssistantError) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(entry.group.name); deleting = null
+                    if (detailName == entry.group.name) detailName = null
+                }) { Text("Delete", color = AssistantError) }
+            },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun SkillSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onChange,
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
+            uncheckedTrackColor = AssistantFieldBackground, uncheckedBorderColor = AssistantOutline,
+            uncheckedThumbColor = AssistantTextMuted
+        )
+    )
+}
+
+/** One skill in the list: name, description, a switch (not for the one that always stays on) and Edit for your own. */
+@Composable
+private fun SkillCard(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: () -> Unit, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape).clickable(onClick = onOpen)
+            .background(AssistantSurface).border(BorderStroke(1.dp, AssistantOutline), shape).padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SkillIcon(44.dp, 24.dp)
+            Spacer(Modifier.size(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(entry.group.name, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 21.sp)
+                Text(entry.category, color = AssistantTextMuted, fontSize = 13.sp)
+            }
+            if (!entry.locked) {
+                Spacer(Modifier.size(8.dp))
+                SkillSwitch(entry.enabled, onToggle)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(entry.group.description, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp)
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!entry.builtIn) {
+                TextButton(onClick = onEdit) { Text("Edit", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
+            }
+            Spacer(Modifier.weight(1f))
+            Text("View details", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun SkillIcon(box: Dp, icon: Dp) {
+    Box(Modifier.size(box).clip(RoundedCornerShape(if (box > 50.dp) 16.dp else 12.dp)).background(AssistantSelectedBg), contentAlignment = Alignment.Center) {
+        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(icon))
+    }
+}
+
+/** A skill's own page: what it is for and what it can do. The instructions themselves are never shown. */
+@Composable
+private fun SkillDetail(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val group = entry.group
+    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AssistantTextPrimary)
+            }
+            Text("Skill details", color = AssistantTextSecondary, fontSize = 14.sp)
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SkillIcon(56.dp, 30.dp)
+                Spacer(Modifier.size(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(group.name, color = AssistantTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp)
+                    Text(entry.category, color = AssistantTextMuted, fontSize = 13.sp)
+                }
+                if (!entry.locked) SkillSwitch(entry.enabled, onToggle)
+            }
+            if (!entry.builtIn) {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onEdit) { Text("Edit", color = AssistantAccent, fontWeight = FontWeight.Medium) }
+                }
+            }
+            PageLabel("About")
+            Text(group.description, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+            if (group.tasks.isNotEmpty()) {
+                PageLabel("What it can do (${group.tasks.size})")
+                group.tasks.forEach { task ->
+                    val shape = RoundedCornerShape(14.dp)
+                    Column(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(shape).background(AssistantSurface)
+                            .border(BorderStroke(1.dp, AssistantOutline), shape).padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Text(task.name.replace('_', ' ').replaceFirstChar { it.uppercase() }, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(task.description, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
     }
 }
 

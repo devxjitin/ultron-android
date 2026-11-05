@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -415,14 +416,33 @@ fun AssistantScreen(
                 onDismissRequest = { if (progress == null) onDismissUpdate() },
                 title = { Text("Update available") },
                 text = {
-                    Text(
-                        buildString {
-                            append("Version ${update.versionName}")
-                            if (update.sizeBytes > 0) append(" (${update.sizeBytes / (1024 * 1024)} MB)")
-                            if (update.notes.isNotBlank()) append("\n\n").append(update.notes)
-                            if (progress != null) append("\n\nDownloading ${(progress * 100).toInt()}%")
+                    // The version and the progress bar always stay on screen; the release notes open only on request.
+                    var showNotes by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+                    Column {
+                        Text(
+                            buildString {
+                                append("Version ${update.versionName}")
+                                if (update.sizeBytes > 0) append(" (${update.sizeBytes / (1024 * 1024)} MB)")
+                            }
+                        )
+                        if (progress != null) {
+                            Spacer(Modifier.height(16.dp))
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { progress.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text("Downloading ${(progress * 100).toInt()}%")
                         }
-                    )
+                        if (update.notes.isNotBlank()) {
+                            TextButton(onClick = { showNotes = !showNotes }) { Text(if (showNotes) "Hide info" else "More info") }
+                            if (showNotes) {
+                                Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                                    Text(update.notes)
+                                }
+                            }
+                        }
+                    }
                 },
                 confirmButton = { TextButton(onClick = onInstallUpdate, enabled = progress == null) { Text("Update") } },
                 dismissButton = { TextButton(onClick = onDismissUpdate, enabled = progress == null) { Text("Later") } }

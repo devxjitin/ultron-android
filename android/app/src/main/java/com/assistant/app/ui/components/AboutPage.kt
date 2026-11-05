@@ -172,9 +172,9 @@ private fun WhatsNew() {
     entries.forEach { entry ->
         PageCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Version ${entry.version}", color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Version ${entry.version}", color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (entry.date.isNotBlank()) {
-                    Text("  ·  ${entry.date}", color = AssistantTextMuted, fontSize = 13.sp)
+                    Text(entry.date, color = AssistantTextMuted, fontSize = 13.sp)
                 }
             }
             entry.sections.forEach { section ->
@@ -184,7 +184,7 @@ private fun WhatsNew() {
                 )
                 section.items.forEach { item ->
                     Text(
-                        "•  $item", color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp,
+                        item, color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
