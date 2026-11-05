@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit
  * the app can recover the key. Acceptable for an internal kiosk prototype; if this
  * ever ships beyond that, move this connection behind a small server-side proxy instead.
  */
-/** What the view model needs from a Live voice connection; [GeminiLiveClient] talks to Gemini with a key, [FirebaseLiveClient] through Firebase AI Logic. */
+/** What the view model needs from a Live voice connection; [GeminiLiveClient] talks to Gemini with the user's key. */
 interface LiveClient {
     val latency: com.assistant.app.util.LatencySession
     /** [resumeHandle] continues an earlier connection's conversation server-side, so [history] is not re-sent. */

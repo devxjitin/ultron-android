@@ -208,7 +208,6 @@ Minimum Android version is 8.0 (API 26); the app targets API 35 and compiles aga
 │   ├── app/src/test/                Unit tests (19 test files)
 │   └── local.properties.example     Template for local configuration
 ├── mcp/                             AWS Lambda servers
-│   ├── google-workspace/            Google Workspace MCP server (REST APIs)
 │   ├── ultron-updates/              Update check and download-link service
 │   └── web-extract/                 Web page content and metadata extraction server (deployed on AWS Lambda; not used by the app yet)
 ├── infra/ultron.yaml                CloudFormation template for the AWS backend

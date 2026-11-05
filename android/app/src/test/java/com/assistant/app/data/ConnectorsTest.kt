@@ -30,6 +30,39 @@ class ConnectorsTest {
         assertTrue("$count tools declared", count <= TOOL_CAP)
     }
 
+    @Test fun connectorIdsAreUniqueAndEveryOneHasAPageText() {
+        val ids = ConnectorRegistry.all.map { it.id }
+        assertEquals(ids.size, ids.toSet().size)
+        ids.forEach { assertTrue("$it has no info text", ConnectorRegistry.info(it) != null) }
+    }
+
+    @Test fun aFreshInstallStartsWithTheSameSafeConnectorsAsBefore() {
+        assertEquals(
+            setOf("device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather"),
+            ConnectorRegistry.defaultIds.toSet()
+        )
+    }
+
+    @Test fun onlyEssentialsAndSearchAreOnByDefault() {
+        ConnectorRegistry.all.filter { it.defaultOn }.forEach {
+            assertTrue("${it.id} is on by default", it.category in setOf(ConnectorCategory.ESSENTIALS, ConnectorCategory.SEARCH_MEDIA))
+        }
+    }
+
+    @Test fun riskyConnectorsLiveInTheirOwnCategories() {
+        fun category(id: String) = ConnectorRegistry.get(id).category
+        assertEquals(ConnectorCategory.COMMUNICATION, category("calls"))
+        assertEquals(ConnectorCategory.COMMUNICATION, category("messages"))
+        assertEquals(ConnectorCategory.PHONE_CONTROL, category("screen"))
+        assertEquals(ConnectorCategory.PHONE_CONTROL, category("navigation"))
+        assertTrue(ConnectorCategory.PHONE_CONTROL.advanced)
+        assertEquals(ConnectorCategory.ACCOUNTS, category("github"))
+    }
+
+    @Test fun everyCategoryHasConnectors() {
+        ConnectorCategory.entries.forEach { assertTrue("$it is empty", ConnectorRegistry.inCategory(it).isNotEmpty()) }
+    }
+
     private companion object {
         const val TOOL_CAP = 110
     }

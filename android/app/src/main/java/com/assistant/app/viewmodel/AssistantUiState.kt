@@ -1,7 +1,6 @@
 package com.assistant.app.viewmodel
 
 import com.assistant.app.network.GithubDeviceCode
-import com.assistant.app.data.ActionConfirmation
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
@@ -86,16 +85,6 @@ data class AssistantUiState(
     val totalChunks: Int = 0,
     /** Required key for document formatting, embedding, and knowledge-base search. */
     val currentEmbeddingApiKey: String = "",
-    /** True while the AI is drafting a persona from the current knowledge documents. */
-    val isGeneratingPrompt: Boolean = false,
-    val promptGenerationError: String? = null,
-    /** True while the agent prompt is being redrafted after a knowledge change; the UI blocks
-     *  interaction until it finishes. */
-    val isUpdatingAgentPrompt: Boolean = false,
-    /** The AI-drafted persona text, shown in the prompt field for review -- not applied to
-     *  [AssistantSettings.systemPrompt] until the admin explicitly hits Save. Cleared once
-     *  consumed (Save pressed, or a fresh generation/dialog reopen). */
-    val generatedPromptDraft: String? = null,
     /** A short-lived, typed notification shown at the top of the app. */
     val toastMessage: String? = null,
     val toastType: AppNotificationType = AppNotificationType.SUCCESS,
@@ -110,5 +99,4 @@ data class AssistantUiState(
     val permissionRequestId: Int = 0,
     val requestedPermissions: List<String> = emptyList(),
     /** A call or text message waiting for the user's tap, shown as a dialog; null when nothing is waiting. */
-    val pendingConfirmation: ActionConfirmation? = null
 )

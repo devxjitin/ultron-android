@@ -340,7 +340,6 @@ class MainActivity : ComponentActivity() {
                         onConnectorsTapped = { viewModel.onConnectorsTapped() },
                         onInstallUpdate = { viewModel.onInstallUpdate() },
                         onDismissUpdate = { viewModel.onDismissUpdate() },
-                        onConfirmAction = { viewModel.onConfirmationAnswer(it) },
                         onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
                         onUpdateNow = { viewModel.onUpdateNow() },
                         onUsageTapped = { viewModel.onUsageTapped() },
@@ -353,7 +352,6 @@ class MainActivity : ComponentActivity() {
                         onResetUsage = { viewModel.onResetUsage() },
                         onMemoryTapped = { viewModel.onMemoryTapped() },
                         onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
-                        onDismissAgentPromptUpdate = { viewModel.onDismissAgentPromptUpdate() },
                         onAddMemory = { viewModel.onAddMemory(it) },
                         onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
@@ -384,20 +382,17 @@ class MainActivity : ComponentActivity() {
                         onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
+                        onAnnounceNotificationsToggled = { enabled -> viewModel.onAnnounceNotificationsToggled(enabled) },
                         onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
-                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, systemPrompt, documentPrompt, retrievalLimit ->
+                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, retrievalLimit ->
                             viewModel.onSaveDeveloperChanges(
                                 name,
                                 greeting,
                                 apiKey,
                                 embeddingApiKey,
-                                systemPrompt,
-                                documentPrompt,
                                 retrievalLimit
                             )
                         },
-                        onGeneratePromptFromKnowledgeBase = { viewModel.onGeneratePromptFromKnowledgeBase() },
-                        onDismissPromptGenerationError = { viewModel.onDismissPromptGenerationError() },
                         onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
                         onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
                         onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },

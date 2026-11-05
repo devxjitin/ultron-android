@@ -1,17 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Ultron backend - two MCP Lambdas (Function URLs) and the private OTA update bucket.
+Description: Ultron backend - the private OTA update bucket. Lambdas and the API live in api.yaml and youtube.yaml.
 Metadata:
   AWSToolsMetrics:
     AWSAgentToolkit: aws-cloudformation@3
 # Rebuild from scratch in a new account/region. Existing resources were created by hand with the same
 # settings; do not deploy this over them (names would clash). Deploy with:
-#   aws cloudformation deploy --template-file infra/ultron.yaml --stack-name ultron --capabilities CAPABILITY_NAMED_IAM \
-#     --parameter-overrides CodeBucket=<bucket holding the zips> GoogleToken=... UpdatesToken=...
-
-Parameters:
-  CodeBucket: { Type: String, Description: "S3 bucket that holds the two Lambda zips (google-workspace-mcp.zip, ultron-updates.zip)" }
-  GoogleToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for google-workspace-mcp" }
-  UpdatesToken: { Type: String, NoEcho: true, MinLength: 24, Description: "Secret path segment for ultron-updates" }
+#   aws cloudformation deploy --template-file infra/ultron.yaml --stack-name ultron
 
 Resources:
   UpdatesBucket:
@@ -27,71 +21,6 @@ Resources:
         Rules:
           - { Id: expire-old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 }, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 } }
       Tags: [{ Key: project, Value: ultron }]
-
-  GoogleRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: google-workspace-mcp-role
-      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
-      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
-      Tags: [{ Key: project, Value: ultron }]
-
-  UpdatesRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: ultron-updates-role
-      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }] }
-      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
-      Policies:
-        - PolicyName: read-releases
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement: [{ Effect: Allow, Action: "s3:GetObject", Resource: !Sub "${UpdatesBucket.Arn}/*" }]
-      Tags: [{ Key: project, Value: ultron }]
-
-  GoogleFunction:
-    Type: AWS::Lambda::Function
-    Metadata:
-      com.aws.cloudformation.Context:
-        why: Retained legacy definition follows the project's Python runtime target.
-        must: [Do not recreate the retired public Function URL]
-    Properties:
-      FunctionName: google-workspace-mcp
-      Handler: lambda_function.lambda_handler
-      Runtime: python3.14
-      Architectures: [arm64]
-      MemorySize: 256
-      Timeout: 30
-      Role: !GetAtt GoogleRole.Arn
-      Code: { S3Bucket: !Ref CodeBucket, S3Key: google-workspace-mcp.zip }
-      Environment: { Variables: { ACCESS_TOKEN: !Ref GoogleToken } }
-      Tags: [{ Key: project, Value: ultron }]
-  GoogleLogs:
-    Type: AWS::Logs::LogGroup
-    Properties: { LogGroupName: /aws/lambda/google-workspace-mcp, RetentionInDays: 30 }
-  # The public Function URL (AuthType NONE) was removed on 2026-11-03 and must not come back. See docs/LEGACY_URL_RETIREMENT.md.
-
-  UpdatesFunction:
-    Type: AWS::Lambda::Function
-    Metadata:
-      com.aws.cloudformation.Context:
-        why: Retained legacy definition follows the project's Python runtime target.
-        must: [Do not recreate the retired public Function URL, Preserve the releases bucket]
-    Properties:
-      FunctionName: ultron-updates
-      Handler: lambda_function.lambda_handler
-      Runtime: python3.14
-      Architectures: [arm64]
-      MemorySize: 256
-      Timeout: 15
-      Role: !GetAtt UpdatesRole.Arn
-      Code: { S3Bucket: !Ref CodeBucket, S3Key: ultron-updates.zip }
-      Environment: { Variables: { ACCESS_TOKEN: !Ref UpdatesToken, BUCKET: !Ref UpdatesBucket } }
-      Tags: [{ Key: project, Value: ultron }]
-  UpdatesLogs:
-    Type: AWS::Logs::LogGroup
-    Properties: { LogGroupName: /aws/lambda/ultron-updates, RetentionInDays: 30 }
-  # Same for the updates Function URL: removed on 2026-11-03. Releases are served by ultron-api-releases behind the API.
 
 Outputs:
   Bucket: { Value: !Ref UpdatesBucket }

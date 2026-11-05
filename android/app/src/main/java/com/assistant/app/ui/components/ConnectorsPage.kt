@@ -105,11 +105,16 @@ import com.assistant.app.data.AccessState
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.McpToolSpec
-import com.assistant.app.data.PhoneConnectors
+import com.assistant.app.data.ConnectorCategory
+import com.assistant.app.data.ConnectorInfo
+import com.assistant.app.data.ConnectorKind
+import com.assistant.app.data.ConnectorRegistry
+import com.assistant.app.data.SpecialAccess
 import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentAlt
+import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantSelectedBg
@@ -118,8 +123,7 @@ import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-/** Extra Android access a connector needs before its tools work. */
-private enum class Access { NONE, NOTIFICATION_ACCESS, ACCESSIBILITY, USAGE_ACCESS }
+private typealias Access = SpecialAccess
 
 private sealed interface Kind {
     /** Tools that run on this phone; [permissions] and [access] are what Android must allow. */
@@ -136,86 +140,46 @@ private class Connector(
     val subtitle: String,
     val icon: ImageVector,
     val kind: Kind,
+    val category: ConnectorCategory,
     val tools: List<DeviceTool> = emptyList()
 )
 
-private const val PHONE = "On your phone"
-
-/** A phone-side connector: its tools come from [PhoneConnectors]. */
-private fun phone(
-    id: String, name: String, description: String, icon: ImageVector,
-    kind: Kind = Kind.Local(), subtitle: String = PHONE
-) = Connector(
-    id, name, description, subtitle, icon, kind, PhoneConnectors.tools(id)
+/** Icons are a screen concern, so they live here; everything else about a connector comes from [ConnectorRegistry]. */
+private val ConnectorIcons: Map<String, ImageVector> = mapOf(
+    "device_info" to Icons.Outlined.PhoneAndroid,
+    "device_controls" to Icons.Outlined.Tune,
+    "alarms" to Icons.Outlined.Alarm,
+    "calendar" to Icons.Outlined.CalendarMonth,
+    "contacts" to Icons.Outlined.Contacts,
+    "notifications" to Icons.Outlined.Notifications,
+    "location" to Icons.Outlined.LocationOn,
+    "app_usage" to Icons.Outlined.QueryStats,
+    "duckduckgo" to Icons.Outlined.Language,
+    "web_reader" to Icons.Outlined.Description,
+    "weather" to Icons.Outlined.WbSunny,
+    "youtube" to Icons.Outlined.PlayCircle,
+    "youtube_downloads" to Icons.Outlined.Download,
+    "calls" to Icons.Outlined.Call,
+    "messages" to Icons.Outlined.Forum,
+    "apps_settings" to Icons.Outlined.Apps,
+    "files" to Icons.Outlined.Folder,
+    "navigation" to Icons.Outlined.Explore,
+    "screen" to Icons.Outlined.TouchApp,
+    "github" to Icons.Outlined.Code
 )
 
-/** Permissions the device-info tools need; Bluetooth and activity recognition only exist on newer Android. */
-private fun deviceInfoPermissions(): List<String> = buildList {
-    add(Manifest.permission.ACCESS_FINE_LOCATION)
-    add(Manifest.permission.ACCESS_COARSE_LOCATION)
-    if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
-    if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
-}
-
-private fun filesPermissions(): List<String> = when {
-    Build.VERSION.SDK_INT >= 34 -> listOf(
-        Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO,
-        Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+private val Catalog: List<Connector> = ConnectorRegistry.all.map { spec ->
+    Connector(
+        id = spec.id, name = spec.name, description = spec.description, subtitle = spec.subtitle,
+        icon = ConnectorIcons.getValue(spec.id),
+        kind = when (spec.kind) {
+            ConnectorKind.ACCOUNT -> Kind.GitHub
+            ConnectorKind.ONLINE -> Kind.Online
+            ConnectorKind.PHONE -> Kind.Local(spec.permissions, spec.access)
+        },
+        category = spec.category, tools = spec.tools
     )
-    Build.VERSION.SDK_INT >= 33 -> listOf(
-        Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO
-    )
-    else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
 }
-
-private val PhoneCatalog = listOf(
-    phone("device_info", "Device info", "Time, battery, storage, network, Wi-Fi, Bluetooth, steps and light level.",
-        Icons.Outlined.PhoneAndroid, Kind.Local(deviceInfoPermissions())),
-    phone("device_controls", "Device controls", "Flashlight, brightness, volume, ringer, vibration, do not disturb, media keys, screen timeout and rotation.",
-        Icons.Outlined.Tune),
-    phone("alarms", "Alarms & reminders", "Set, list, change and cancel alarms, timers and reminders.",
-        Icons.Outlined.Alarm),
-    phone("calendar", "Calendar", "Check your schedule, find free time and add events using your phone's calendars, Google Calendar included.",
-        Icons.Outlined.CalendarMonth, Kind.Local(listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))),
-    phone("contacts", "Contacts", "Find people and see their birthdays from your phone's address book.",
-        Icons.Outlined.Contacts, Kind.Local(listOf(Manifest.permission.READ_CONTACTS))),
-    phone("notifications", "Notifications", "Read, reply to and clear notifications, and see what is playing in any music or video app.",
-        Icons.Outlined.Notifications, Kind.Local(access = Access.NOTIFICATION_ACCESS)),
-    phone("location", "Location", "Know where you are and get directions.",
-        Icons.Outlined.LocationOn, Kind.Local(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))),
-    phone("app_usage", "App usage", "See which apps you use most. Sends app names to Gemini.",
-        Icons.Outlined.QueryStats, Kind.Local(access = Access.USAGE_ACCESS)),
-    phone("duckduckgo", "DuckDuckGo", "Search the web for the latest news, prices and facts.",
-        Icons.Outlined.Language, Kind.Online, "Free, no sign-in"),
-    phone("web_reader", "Web pages", "Read the main text of any web page or link, so the assistant can summarize or answer from it.",
-        Icons.Outlined.Description, Kind.Online, "Free, no sign-in"),
-    phone("weather", "Weather", "Current weather and the forecast for where you are or any city.",
-        Icons.Outlined.WbSunny, Kind.Online, "Free, no sign-in"),
-    phone("youtube", "YouTube Search", "Search videos, read details and captions, and list channel or playlist videos using the AWS service.",
-        Icons.Outlined.PlayCircle, Kind.Online, "On AWS"),
-    phone("youtube_downloads", "YouTube Downloads", "Choose a format and quality, then save video or audio to Downloads/Ultron on this phone.",
-        Icons.Outlined.Download),
-    phone("calls", "Calls", "Dial, answer and end calls, see who called, call a contact by name and save new contacts.",
-        Icons.Outlined.Call, Kind.Local(listOf(
-            Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_CALL_LOG))),
-    phone("messages", "Messages", "Read your latest text messages and send one to a number or a contact by name right away, without opening any screen.",
-        Icons.Outlined.Forum, Kind.Local(listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS))),
-    phone("apps_settings", "Apps & settings", "Open apps, the camera and settings, use the clipboard and show notifications.",
-        Icons.Outlined.Apps),
-    phone("files", "Files", "Find images, videos, audio and documents on your phone and open them in your default app.",
-        Icons.Outlined.Folder, Kind.Local(filesPermissions())),
-    phone("navigation", "Phone navigation", "Back, home, recents, notification shade, quick settings, scrolling, lock screen and screenshots.",
-        Icons.Outlined.Explore, Kind.Local(access = Access.ACCESSIBILITY)),
-    phone("screen", "Screen control", "Read what is on screen, tap, type and wait for text. Sends screen text to Gemini.",
-        Icons.Outlined.TouchApp, Kind.Local(access = Access.ACCESSIBILITY))
-)
-
-private val GitHubConnector = Connector(
-    "github", "GitHub", "Ask about your repositories, issues, pull requests and code.",
-    "Sign in with GitHub", Icons.Outlined.Code, Kind.GitHub
-)
-
-private val Catalog: List<Connector> = PhoneCatalog + GitHubConnector
 
 @Composable
 fun ConnectorsPage(
@@ -298,7 +262,7 @@ fun ConnectorsPage(
         }
     }
 
-    // Every connector, connected or not, A-Z.
+    // Every connector, connected or not, grouped by category and A-Z inside each group.
     val shown = Catalog
         .filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
         .sortedBy { it.name.lowercase() }
@@ -337,7 +301,7 @@ fun ConnectorsPage(
         val broken = needsReconnect(detail)
         ConnectorDetail(
             connector = detail,
-            info = InfoById[detail.id],
+            info = ConnectorRegistry.info(detail.id),
             connected = connected(detail) && !broken,
             reconnect = broken,
             subtitle = when {
@@ -380,7 +344,15 @@ fun ConnectorsPage(
             if (shown.isEmpty()) {
                 Text("No connectors match your search.", color = AssistantTextMuted, modifier = Modifier.padding(vertical = 24.dp))
             }
-            shown.forEach { Card(it) }
+            ConnectorCategory.entries.forEach { category ->
+                val inGroup = shown.filter { it.category == category }
+                if (inGroup.isNotEmpty()) {
+                    SectionHeading(category.title)
+                    Text(category.summary, color = if (category.advanced) AssistantError else AssistantTextMuted,
+                        fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+                    inGroup.forEach { Card(it) }
+                }
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -492,123 +464,11 @@ private fun mcpLine(tool: McpToolSpec) = ToolLine(
     !tool.readOnly
 )
 
-/** The long-form facts shown on a connector's own page. */
-private class Info(val about: String, val needs: String, val privacy: String, val runsOn: String = "Your phone")
-
-private val InfoById: Map<String, Info> = mapOf(
-    "device_info" to Info(
-        "Lets the assistant tell you things about your phone: the date and time, battery, free storage and memory, network and Wi-Fi, Bluetooth, step count and room light. It only reads and never changes anything. The internet speed test downloads about 5 MB.",
-        "No Android permission.",
-        "Readings stay on the phone. They reach Gemini only as part of the conversation when you ask."
-    ),
-    "device_controls" to Info(
-        "Changes simple phone settings when you ask: the flashlight, screen brightness inside Ultron, volume, ringer mode, vibration, Do Not Disturb, music play, pause and skip, how long the screen stays on, and auto-rotate.",
-        "Screen timeout and auto-rotate need Android's Modify system settings permission, and Do Not Disturb needs Do Not Disturb access. Android asks the first time you use them.",
-        "Nothing leaves the phone except the words of the conversation."
-    ),
-    "alarms" to Info(
-        "Sets alarms and timers in the clock app, lists, moves and cancels the alarms it set, and sends a reminder notification after the minutes you choose, which you can change or cancel later.",
-        "No permission. Reminders appear as notifications, so keep notifications on for Ultron.",
-        "Nothing leaves the phone except the words of the conversation."
-    ),
-    "calendar" to Info(
-        "Reads your upcoming events from every calendar on the phone (Google Calendar included), checks whether a time slot is free, adds events and cancels them, all by itself with no screen opening. Repeating events are never deleted.",
-        "Calendar permission (read and write).",
-        "Event titles and times are sent to the model when you ask about your schedule. Events it adds or cancels change your real calendar right away."
-    ),
-    "contacts" to Info(
-        "Finds a contact's number by name and tells you their birthday. It only reads.",
-        "Contacts permission.",
-        "The contact details you ask about are sent to the model for that answer."
-    ),
-    "location" to Info(
-        "Tells you where the phone is right now and starts navigation to a place in your maps app.",
-        "Location permission.",
-        "Your coordinates and address are sent to the model when you ask where you are."
-    ),
-    "notifications" to Info(
-        "Reads the notifications currently on your phone so the assistant can tell you what you missed.",
-        "Notification access. A special Android screen opens when you add it.",
-        "Notification text can be private. It is sent to the model whenever you ask. Add this only if you are comfortable with that."
-    ),
-    "app_usage" to Info(
-        "Tells you which apps you use most and how long you used one app.",
-        "Usage access. A special Android screen opens when you add it.",
-        "App names and usage times are sent to the model when you ask."
-    ),
-    "duckduckgo" to Info(
-        "Searches the web with DuckDuckGo and answers from the results, naming the source. There is no account and no API key.",
-        "No sign-in and no permission.",
-        "Your search words go to DuckDuckGo. Results are treated as untrusted text and never as instructions.",
-        "Your phone, which asks DuckDuckGo directly"
-    ),
-    "web_reader" to Info(
-        "Reads a web page from its address and returns the main text without menus and ads, with title, author and date. Use it after a search, or give it a link to summarize. There is no account and no API key.",
-        "No sign-in and no permission.",
-        "The page address you ask about goes to your own web page reader on AWS Lambda, which fetches the public page and stores nothing. Page text is treated as untrusted and never as instructions. Private network addresses are refused, and some sites block automated readers.",
-        "Your web page reader on AWS Lambda (trafilatura), which fetches the page"
-    ),
-    "weather" to Info(
-        "Tells you the weather right now and the forecast for the next few days (temperature, conditions, chance of rain and wind) for where you are or for any city you name. There is no account and no API key.",
-        "No sign-in. Using it without a city needs Location permission; Android asks the first time.",
-        "A city name, or your coordinates when you ask about where you are, goes to Open-Meteo, a free weather service. The result is only numbers and conditions.",
-        "Your phone, which asks Open-Meteo directly"
-    ),
-    "youtube" to Info(
-        "Searches videos, reads video details and available captions, and lists channel or playlist videos. YouTube can refuse requests from cloud servers; the assistant reports that when it happens.",
-        "Internet access. No separate YouTube sign-in.",
-        "Searches and YouTube links go to Ultron's AWS service, which asks YouTube. Results reach Gemini to answer your question. No video or audio files are downloaded by this connector.",
-        "Ultron's YouTube Search MCP on AWS"
-    ),
-    "youtube_downloads" to Info(
-        "Shows the formats and qualities a video offers, asks which you want, then downloads video or audio to Downloads/Ultron. Progress and completion appear in notifications. This connector is separate from YouTube Search.",
-        "Internet access and free storage. No separate YouTube sign-in.",
-        "Video links and media requests go directly from this phone to YouTube. Downloaded files stay on this phone. Download only what you are allowed to keep.",
-        "Your phone, which asks YouTube directly"
-    ),
-    "github" to Info(
-        "Lets the assistant work with your GitHub: search repositories and code, read files, issues, pull requests and commits. It only reads: tools that change data are never used, and the sign-in asks for no write access.",
-        "Sign in with GitHub. A code is copied and GitHub opens in your browser.",
-        "Requests go to GitHub's own MCP server with your sign-in token, which is kept encrypted on this phone. Repository text is untrusted and never treated as instructions.",
-        "GitHub's MCP server"
-    ),
-    "calls" to Info(
-        "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save.",
-        "Contacts permission. Android asks for the Phone permission the first time a call is placed.",
-        "A call is placed only when you ask. The number or name is part of the conversation."
-    ),
-    "messages" to Info(
-        "Sends a text message (SMS) to a number or to a contact by name as soon as you ask, with no screen to confirm on. It sends only what you said, one message per request, up to 480 characters, and at most 10 messages an hour. It refuses very short numbers, which can be paid services, and if several contacts match it asks you which one.",
-        "SMS permission and Contacts permission. Android asks the first time a message is sent.",
-        "Your carrier may charge for SMS as usual. The recipient and the text are part of the conversation with the model."
-    ),
-    "apps_settings" to Info(
-        "Opens apps by name, the camera, Android settings and an app's info page, reads or writes the clipboard and posts a notification.",
-        "No special permission.",
-        "Clipboard text you ask the assistant to read is sent to the model."
-    ),
-    "files" to Info(
-        "Searches the images, videos, audio and documents on your phone by name, shows the newest matches, and opens the one you pick in your phone's default app for that kind of file.",
-        "Photos, videos and music permission. Android asks when you add it.",
-        "File names and dates are read on the phone and only used when you ask. The files themselves are opened by your own apps and are not sent anywhere. On newer Android versions, documents outside media folders cannot be searched."
-    ),
-    "navigation" to Info(
-        "Presses Back, Home and Recents, opens the notification shade and quick settings, scrolls, locks the screen and takes screenshots, like a person using the phone.",
-        "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
-        "It sends taps and gestures to your phone only. It does not read what is on the screen."
-    ),
-    "screen" to Info(
-        "Reads the buttons and text on the screen, taps them, types and waits for text, so the assistant can use other apps for you.",
-        "Accessibility access for Ultron. Android's accessibility screen opens when you add it.",
-        "Screen text is sent to Gemini whenever the assistant reads the screen, and it may include private information. Use it with care."
-    )
-)
-
 /** A connector's own page: what it does, where it runs, what it needs, where data goes and which tools it has. */
 @Composable
 private fun ConnectorDetail(
     connector: Connector,
-    info: Info?,
+    info: ConnectorInfo?,
     connected: Boolean,
     reconnect: Boolean,
     subtitle: String,
