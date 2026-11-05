@@ -297,10 +297,7 @@ fun ConnectorsPage(
             modifier = modifier
         )
     } else Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Connectors", color = AssistantTextPrimary, fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        }
+        Spacer(Modifier.height(4.dp))
         TextField(
             value = query,
             onValueChange = { query = it },
