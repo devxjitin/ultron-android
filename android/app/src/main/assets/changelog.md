@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.6.0 - 2026-11-05
+
+### Changed
+- Reminders now pop up with a sound and vibration, and stay until you dismiss them.
+- Reminders can be set for a clock time or a date, up to a year ahead, and can repeat daily or weekly.
+- Reminders go off on the exact minute, with nothing to switch on.
+
 ## 1.5.0 - 2026-11-05
 
 ### Changed

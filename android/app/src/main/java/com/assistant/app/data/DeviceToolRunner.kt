@@ -177,7 +177,7 @@ class DeviceToolRunner(
                     .setPrimaryClip(ClipData.newPlainText("assistant", value))
                 "status=ok\nCopied to the clipboard."
             }
-            DeviceTool.SHOW_NOTIFICATION -> showNotification(text("title") ?: return MISSING, text("message") ?: return MISSING)
+            DeviceTool.SHOW_NOTIFICATION -> showNotification(text("title") ?: return MISSING, text("message") ?: return MISSING, args.optBoolean("urgent"))
             DeviceTool.FLASHLIGHT -> flashlight(text("state"))
             DeviceTool.MEDIA_CONTROL -> mediaControl(text("command"))
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
@@ -240,23 +240,26 @@ class DeviceToolRunner(
                 "status=ok\nCamera opened."
             }
             DeviceTool.SCHEDULE_REMINDER -> {
-                val minutes = number("minutes")?.takeIf { it in 1..1440 } ?: return "status=invalid\nMinutes must be 1-1440."
                 val message = text("message") ?: return MISSING
+                val due = runCatching { AutomationEngine.reminderTime(number("minutes"), text("at_time"), text("date")) }
+                    .getOrElse { return "status=invalid\n${it.message}" }
+                val repeat = AutomationEngine.repeatMinutes(text("repeat"))
                 if (!NotificationManagerCompat.from(app).areNotificationsEnabled()) {
                     return "status=unavailable\nNotifications are turned off for this app, so a reminder could not be shown."
                 }
                 // Saved like any scheduled action, so the reminder survives a restart of the phone.
-                val scheduled = AutomationEngine.schedule(
-                    app, DeviceTool.SHOW_NOTIFICATION.functionName,
-                    JSONObject().put("title", "Reminder").put("message", message).toString(),
-                    minutes, null, null
+                val scheduled = AutomationEngine.scheduleAt(
+                    app, DeviceTool.SHOW_NOTIFICATION,
+                    JSONObject().put("title", "Reminder").put("message", message).put("urgent", true).toString(),
+                    due, repeat
                 )
-                if (scheduled.startsWith("status=ok")) "status=ok\nReminder set for $minutes minutes from now. The time can be off by a few minutes."
+                val every = when (repeat) { 1_440 -> ", and again every day"; 10_080 -> ", and again every week"; else -> "" }
+                if (scheduled.startsWith("status=ok")) "status=ok\nReminder set for ${AutomationEngine.format(due)}$every."
                 else scheduled
             }
             DeviceTool.LIST_REMINDERS -> AutomationEngine.listScheduled(app)
             DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelScheduled(app, number("id"))
-            DeviceTool.MODIFY_REMINDER -> AutomationEngine.modifyReminder(app, number("id"), number("minutes"), text("message"))
+            DeviceTool.MODIFY_REMINDER -> AutomationEngine.modifyReminder(app, number("id"), number("minutes"), text("message"), text("at_time"), text("date"))
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
             DeviceTool.READ_NOTIFICATIONS -> readNotifications(number("limit") ?: 10)
@@ -1188,8 +1191,8 @@ class DeviceToolRunner(
         }
     }
 
-    private fun showNotification(title: String, message: String): String =
-        if (AlertNotifications.show(app, title, message)) "status=ok\nNotification shown."
+    private fun showNotification(title: String, message: String, urgent: Boolean): String =
+        if (AlertNotifications.show(app, title, message, urgent)) "status=ok\nNotification shown."
         else "status=unavailable\nNotifications are turned off for this app."
 
     private fun flashlight(state: String?): String {

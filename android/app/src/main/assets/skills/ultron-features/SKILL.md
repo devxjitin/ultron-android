@@ -15,7 +15,7 @@ get_current_time, get_battery_status, get_device_info, get_storage_and_memory, g
 set_flashlight, set_brightness, get_brightness, set_volume, get_volume, get_ringer_mode, set_ringer_mode (silent needs Do Not Disturb access), vibrate_device, set_do_not_disturb (DND access), media_control (play, pause, next, previous), set_screen_timeout and set_auto_rotate (Modify system settings), open_connectivity_panel (Wi-Fi, mobile data, NFC, volume panels; then flip the switch with the screen tools).
 
 ## Alarms and reminders
-set_alarm, list_alarms, cancel_alarm, modify_alarm, set_timer, schedule_reminder, list_reminders, cancel_reminder, modify_reminder. list_alarms only knows alarms you set yourself, not ones made by hand in the clock app.
+set_alarm, list_alarms, cancel_alarm, modify_alarm, set_timer, schedule_reminder, list_reminders, cancel_reminder, modify_reminder. list_alarms only knows alarms you set yourself, not ones made by hand in the clock app. schedule_reminder takes minutes (up to a year), or at_time (HH:MM, 24-hour) with an optional date; add repeat daily or weekly. It rings with sound, so it suits "remind me at 5" without the user touching the phone.
 
 ## Calls and texts
 There are no call or text tools. To call or text someone, open the phone or messages app and use the screen tools (they need the Screen control connector). For WhatsApp, use the whatsapp skill.
