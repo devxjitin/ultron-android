@@ -70,13 +70,6 @@ class McpSchemaTest {
         assertTrue(analysis.issues.any { it.contains("free-form") })
     }
 
-    @Test fun `a declaration says when argument types were simplified`() {
-        val spec = com.assistant.app.data.McpToolSpec(
-            "t", "Does things", """{"type":"object","properties":{"v":{"anyOf":[{"type":"integer"},{"type":"string"}]}}}""", false
-        )
-        assertTrue(ToolDeclarations.mcp(spec).getString("description").contains("simplified"))
-    }
-
     @Test fun `required fields and arrays survive`() {
         val result = convert(
             """{"type":"object","properties":{"tags":{"type":"array","items":{"type":"string"}},"id":{"type":"integer"}},"required":["id"]}"""

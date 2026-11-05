@@ -5,7 +5,6 @@ class PhoneConnector(val id: String, val tools: List<DeviceTool>)
 
 object PhoneConnectors {
     val all: List<PhoneConnector> = ConnectorRegistry.all
-        .filter { it.kind != ConnectorKind.ACCOUNT }
         .map { PhoneConnector(it.id, it.tools) }
 
     private val byId = all.associateBy { it.id }

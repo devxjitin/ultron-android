@@ -53,13 +53,6 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
 
     override fun clearEmbeddingApiKey(): Boolean = write { it.remove(KEY_EMBEDDING_API_KEY) }
 
-    /** Fine-grained, read-only token for the GitHub connector. */
-    fun getGithubToken(): String? = read(KEY_GITHUB_TOKEN)
-
-    fun setGithubToken(token: String): Boolean = write { it.putString(KEY_GITHUB_TOKEN, token.trim()) }
-
-    fun clearGithubToken(): Boolean = write { it.remove(KEY_GITHUB_TOKEN) }
-
     private fun read(name: String): String? = try {
         prefs?.getString(name, null)?.takeIf { it.isNotBlank() }
     } catch (e: Exception) {
@@ -80,6 +73,5 @@ class ApiKeyStore internal constructor(prefsProvider: () -> SharedPreferences) :
     private companion object {
         const val KEY_API_KEY = "gemini_api_key"
         const val KEY_EMBEDDING_API_KEY = "gemini_embedding_api_key"
-        const val KEY_GITHUB_TOKEN = "github_token"
     }
 }

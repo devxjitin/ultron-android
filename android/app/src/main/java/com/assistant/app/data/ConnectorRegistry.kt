@@ -13,7 +13,6 @@ enum class ConnectorCategory(val title: String, val summary: String, val advance
     PERSONAL("Personal data", "Reads private data from your phone, such as contacts, calendar, location, files and notifications. What you ask about is sent to Gemini."),
     COMMUNICATION("Communication", "Places calls and sends text messages. Each one can cost money or reach other people."),
     PHONE_CONTROL("Phone control", "Lets the assistant operate other apps through Android accessibility. It can tap, type and read the screen, so turn it on only if you understand that.", advanced = true),
-    ACCOUNTS("Accounts", "Services you sign in to."),
 }
 
 /** Extra Android access (a special settings screen, not a normal permission) a connector needs before its tools work. */
@@ -23,9 +22,7 @@ enum class ConnectorKind {
     /** Tools that run on this phone. */
     PHONE,
     /** An online service that needs no sign-in: connecting just switches its tools on. */
-    ONLINE,
-    /** An account the user signs in to; its tools come from the service. */
-    ACCOUNT
+    ONLINE
 }
 
 /** The long-form facts shown on a connector's own page. */
@@ -185,11 +182,6 @@ object ConnectorRegistry {
             subtitle = "On your phone", category = ConnectorCategory.PHONE_CONTROL, kind = ConnectorKind.PHONE,
             permissions = emptyList(), access = SpecialAccess.ACCESSIBILITY, defaultOn = false,
             tools = listOf(DeviceTool.READ_SCREEN, DeviceTool.LOOK_AT_SCREEN, DeviceTool.CURRENT_APP, DeviceTool.CLICK_TEXT, DeviceTool.CLICK_ITEM, DeviceTool.TAP_POSITION, DeviceTool.TYPE_TEXT, DeviceTool.PRESS_ENTER, DeviceTool.WAIT_FOR_TEXT, DeviceTool.SWIPE, DeviceTool.LONG_PRESS)
-        ),
-        ConnectorSpec(
-            id = "github", name = "GitHub", description = "Ask about your repositories, issues, pull requests and code.",
-            subtitle = "Sign in with GitHub", category = ConnectorCategory.ACCOUNTS, kind = ConnectorKind.ACCOUNT,
-            permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = false, tools = emptyList()
         )
     )
 
@@ -276,12 +268,6 @@ object ConnectorRegistry {
             "Internet access and free storage. No separate YouTube sign-in.",
             "Video links and media requests go directly from this phone to YouTube. Downloaded files stay on this phone. Download only what you are allowed to keep.",
             "Your phone, which asks YouTube directly"
-        ),
-        "github" to ConnectorInfo(
-            "Lets the assistant work with your GitHub: search repositories and code, read files, issues, pull requests and commits. It only reads: tools that change data are never used, and the sign-in asks for no write access.",
-            "Sign in with GitHub. A code is copied and GitHub opens in your browser.",
-            "Requests go to GitHub's own MCP server with your sign-in token, which is kept encrypted on this phone. Repository text is untrusted and never treated as instructions.",
-            "GitHub's MCP server"
         ),
         "calls" to ConnectorInfo(
             "Places a phone call to a number or to a contact by name right away, and opens a new-contact form for you to save.",

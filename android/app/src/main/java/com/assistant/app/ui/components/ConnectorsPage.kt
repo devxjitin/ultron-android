@@ -104,13 +104,11 @@ import com.assistant.app.data.AccessChecks
 import com.assistant.app.data.AccessState
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.McpToolSpec
 import com.assistant.app.data.ConnectorCategory
 import com.assistant.app.data.ConnectorInfo
 import com.assistant.app.data.ConnectorKind
 import com.assistant.app.data.ConnectorRegistry
 import com.assistant.app.data.SpecialAccess
-import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentAlt
@@ -128,7 +126,6 @@ private typealias Access = SpecialAccess
 private sealed interface Kind {
     /** Tools that run on this phone; [permissions] and [access] are what Android must allow. */
     data class Local(val permissions: List<String> = emptyList(), val access: Access = Access.NONE) : Kind
-    data object GitHub : Kind
     /** An online service that needs no sign-in: connecting just switches its tools on. */
     data object Online : Kind
 }
@@ -164,8 +161,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "apps_settings" to Icons.Outlined.Apps,
     "files" to Icons.Outlined.Folder,
     "navigation" to Icons.Outlined.Explore,
-    "screen" to Icons.Outlined.TouchApp,
-    "github" to Icons.Outlined.Code
+    "screen" to Icons.Outlined.TouchApp
 )
 
 private val Catalog: List<Connector> = ConnectorRegistry.all.map { spec ->
@@ -173,7 +169,6 @@ private val Catalog: List<Connector> = ConnectorRegistry.all.map { spec ->
         id = spec.id, name = spec.name, description = spec.description, subtitle = spec.subtitle,
         icon = ConnectorIcons.getValue(spec.id),
         kind = when (spec.kind) {
-            ConnectorKind.ACCOUNT -> Kind.GitHub
             ConnectorKind.ONLINE -> Kind.Online
             ConnectorKind.PHONE -> Kind.Local(spec.permissions, spec.access)
         },
@@ -185,13 +180,7 @@ private val Catalog: List<Connector> = ConnectorRegistry.all.map { spec ->
 fun ConnectorsPage(
     /** Ids of added connectors whose sign-in stopped working. */
     issues: Set<String>,
-    githubLogin: String,
-    deviceCode: GithubDeviceCode?,
     enabledTools: Set<DeviceTool>,
-    onStartGithubSignIn: () -> Unit,
-    onCancelGithubSignIn: () -> Unit,
-    onDisconnectGithub: () -> Unit,
-    githubTools: List<McpToolSpec>,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
     modifier: Modifier = Modifier
@@ -207,21 +196,19 @@ fun ConnectorsPage(
     }
 
     var query by remember { mutableStateOf("") }
-    var setupNeeded by remember { mutableStateOf(false) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun accessGranted(kind: Kind.Local): Boolean = localAccessGranted(context, kind, resumeTick)
 
     fun isConnected(c: Connector): Boolean = when (val kind = c.kind) {
-        is Kind.GitHub -> githubLogin.isNotEmpty()
         // Added means its tools are on; a revoked permission leaves it listed so it can be repaired.
         is Kind.Local -> c.tools.any { it in enabledTools }
         is Kind.Online -> c.tools.any { it in enabledTools }
     }
 
     // Evaluated once per change of its inputs: accessGranted() queries the system, and the page lists the whole catalog.
-    val connectedIds = remember(resumeTick, enabledTools, githubLogin) {
+    val connectedIds = remember(resumeTick, enabledTools) {
         Catalog.filter { isConnected(it) }.map { it.id }.toSet()
     }
     fun connected(c: Connector): Boolean = c.id in connectedIds
@@ -240,7 +227,6 @@ fun ConnectorsPage(
 
     fun connect(c: Connector) {
         when (val kind = c.kind) {
-            is Kind.GitHub -> if (BuildConfig.GITHUB_CLIENT_ID.isNotBlank()) onStartGithubSignIn() else setupNeeded = true
             is Kind.Online -> onToolsEnabled(c.tools, true, c.name)
             is Kind.Local -> {
                 onToolsEnabled(c.tools, true, c.name)
@@ -270,10 +256,7 @@ fun ConnectorsPage(
     val detail = detailId?.let { id -> Catalog.firstOrNull { it.id == id } }
     BackHandler(enabled = detail != null) { detailId = null }
 
-    fun toolLines(c: Connector): List<ToolLine> = when (val kind = c.kind) {
-        is Kind.GitHub -> githubTools.map { mcpLine(it) }
-        else -> c.tools.map { ToolLine(it.label, it.hint, false) }
-    }
+    fun toolLines(c: Connector): List<ToolLine> = c.tools.map { ToolLine(it.label, it.hint, false) }
 
     @Composable
     fun Card(c: Connector) {
@@ -285,7 +268,6 @@ fun ConnectorsPage(
             subtitle = when {
                 broken && c.kind is Kind.Local -> "Permission needed"
                 broken -> "Sign-in stopped working"
-                c.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
                 else -> c.subtitle
             },
             connectLabel = "Connect",
@@ -306,7 +288,6 @@ fun ConnectorsPage(
             reconnect = broken,
             subtitle = when {
                 broken && detail.kind is Kind.Local -> "Permission needed"
-                detail.kind is Kind.GitHub && githubLogin.isNotEmpty() -> "Signed in as $githubLogin"
                 else -> detail.subtitle
             },
             tools = toolLines(detail),
@@ -357,8 +338,6 @@ fun ConnectorsPage(
         }
     }
 
-    if (deviceCode != null) GithubSignInDialog(deviceCode, onCancelGithubSignIn)
-    if (setupNeeded) GithubSetupDialog { setupNeeded = false }
     disconnecting?.let { c ->
         AlertDialog(
             onDismissRequest = { disconnecting = null },
@@ -366,7 +345,6 @@ fun ConnectorsPage(
             text = {
                 Text(
                     when (c.kind) {
-                        is Kind.GitHub -> "The saved sign-in is removed from this device. You can connect again any time."
                         is Kind.Online -> "The assistant stops using this service."
                         is Kind.Local -> "The assistant stops using these tools. Android's own permission or access stays until you remove it in the phone's settings."
                     }
@@ -375,7 +353,6 @@ fun ConnectorsPage(
             confirmButton = {
                 TextButton(onClick = {
                     when (c.kind) {
-                        is Kind.GitHub -> onDisconnectGithub()
                         is Kind.Local, is Kind.Online -> onToolsEnabled(c.tools, false, c.name)
                                 }
                     disconnecting = null
@@ -457,12 +434,6 @@ private fun ConnectorCard(
 
 /** One tool line on a connector's detail page. */
 private class ToolLine(val title: String, val text: String, val changesData: Boolean)
-
-private fun mcpLine(tool: McpToolSpec) = ToolLine(
-    tool.name.replace('_', ' ').replaceFirstChar { it.uppercase() },
-    tool.description.lineSequence().firstOrNull().orEmpty().take(140),
-    !tool.readOnly
-)
 
 /** A connector's own page: what it does, where it runs, what it needs, where data goes and which tools it has. */
 @Composable
@@ -578,64 +549,4 @@ private fun Pill(text: String, filled: Boolean, enabled: Boolean = true, check: 
             fontWeight = FontWeight.Medium
         )
     }
-}
-
-/** Shown while the user approves the sign-in on github.com in the phone's browser. */
-@Composable
-private fun GithubSignInDialog(code: GithubDeviceCode, onCancel: () -> Unit) {
-    val context = LocalContext.current
-    // Copy the code and open GitHub's approval page once, so the user only has to paste and confirm.
-    LaunchedEffect(code.userCode) {
-        context.getSystemService(ClipboardManager::class.java)
-            ?.setPrimaryClip(ClipData.newPlainText("GitHub code", code.userCode))
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(code.verificationUri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Sign in with GitHub") },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "GitHub opened in your browser. Paste or type this code there and approve.",
-                    color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 19.sp
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(code.userCode, color = AssistantTextPrimary, fontSize = 30.sp, fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = AssistantAccent)
-                    Spacer(Modifier.size(10.dp))
-                    Text("Waiting for approval...", color = AssistantTextMuted, fontSize = 13.sp)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                runCatching {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(code.verificationUri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
-            }) { Text("Open GitHub again") }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } }
-    )
-}
-
-/** Shown when this build has no GitHub client id, so browser sign-in cannot start yet. */
-@Composable
-private fun GithubSetupDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("GitHub sign-in is not set up") },
-        text = {
-            Text(
-                "Browser sign-in needs a GitHub OAuth App client id, which this build does not have yet. " +
-                    "Add GITHUB_CLIENT_ID to the app's local.properties and rebuild.",
-                color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 19.sp
-            )
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
-    )
 }
