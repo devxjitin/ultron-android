@@ -171,7 +171,6 @@ dependencies {
 
     // Gemini through Firebase AI Logic: the API key stays on Google's side instead of inside the APK.
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
-    implementation("com.google.firebase:firebase-ai")
     // Identity (anonymous at first), proof that requests come from the genuine app, and crash and usage reporting.
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")

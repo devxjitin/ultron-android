@@ -262,7 +262,8 @@ fun SettingsPage(
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
                 Spacer(Modifier.height(16.dp))
-                    SectionLabel("Knowledge API key (required)")
+                    SectionLabel("Knowledge API key (optional)")
+                    Text("Leave empty to use the Gemini key above for documents and search.", color = AssistantTextMuted)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = embeddingKeyInput,

@@ -13,6 +13,8 @@ import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
 import com.assistant.app.audio.MicStreamer
+import com.assistant.app.data.NO_GEMINI_KEY_MESSAGE
+import com.assistant.app.data.knowledgeKeyFor
 import com.assistant.app.data.AccessGate
 import com.assistant.app.data.ActionConfirmation
 import com.assistant.app.data.ActionGuard
@@ -59,8 +61,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import com.assistant.app.network.GeminiEmbeddingClient
 import com.assistant.app.network.GeminiLiveClient
-import com.assistant.app.network.FirebaseGemini
-import com.assistant.app.network.FirebaseLiveClient
 import com.assistant.app.network.LiveClient
 import com.assistant.app.network.GeminiTextClient
 import com.assistant.app.util.UserFacingError
@@ -170,13 +170,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** True while a session keeps running after the app left the screen. */
     private var backgroundSessionAllowed = false
 
-    /** Knowledge import and search have their own mandatory API key and never borrow the Live key. */
-    private fun resolveEmbeddingApiKey(): String = apiKeyStore.getEmbeddingApiKey().orEmpty()
+    /** Knowledge import and search use the optional Knowledge key when one is saved, otherwise the main Gemini key. */
+    private fun resolveEmbeddingApiKey(): String =
+        knowledgeKeyFor(apiKeyStore.getEmbeddingApiKey(), apiKeyStore.getApiKey())
 
     private var cachedEmbeddingClient: Pair<String, GeminiEmbeddingClient>? = null
     private fun embeddingClient(): GeminiEmbeddingClient {
         val key = resolveEmbeddingApiKey()
-        if (key.isBlank()) throw UserMessageException("Knowledge setup is incomplete. Add the Knowledge API key in Developer settings.")
+        if (key.isBlank()) throw UserMessageException(NO_GEMINI_KEY_MESSAGE)
         return cachedEmbeddingClient?.takeIf { it.first == key }?.second
             ?: GeminiEmbeddingClient(key).also { cachedEmbeddingClient = key to it }
     }
@@ -439,14 +440,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** The key the user typed in Developer settings; blank when they use the built-in Firebase access. */
+    /** The Gemini key the user typed in Settings; blank until they add one. There is no built-in access. */
     private fun resolveApiKey(): String = apiKeyStore.getApiKey().orEmpty()
 
-    /** Gemini goes through Firebase AI Logic unless the user typed their own key in Developer settings. */
-    private fun usesFirebase(): Boolean =
-        apiKeyStore.getApiKey() == null && FirebaseGemini.isAvailable(getApplication())
-
-    private fun hasGeminiAccess(): Boolean = usesFirebase() || resolveApiKey().isNotBlank()
+    private fun hasGeminiAccess(): Boolean = resolveApiKey().isNotBlank()
 
     fun onMicTapped() {
         when (_uiState.value.voiceState) {
@@ -513,7 +510,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
     /** Text generation for titles, personas and formatting; the tokens it uses count in Usage, under [purpose]. */
     private fun auxTextClient(apiKey: String, purpose: String) =
-        GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose), useFirebase = usesFirebase())
+        GeminiTextClient(apiKey, onUsage = auxiliaryUsage(purpose))
 
     fun onSettingsTapped() = openPage(AppPage.SETTINGS)
 
@@ -1319,7 +1316,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 try {
                     val embeddingKey = resolveEmbeddingApiKey()
-                    if (embeddingKey.isBlank()) throw UserMessageException("Knowledge setup is incomplete. Add the Knowledge API key in Developer settings.")
+                    if (embeddingKey.isBlank()) throw UserMessageException(NO_GEMINI_KEY_MESSAGE)
                     val formattedText = GeminiTextClient(
                         apiKey = embeddingKey,
                         onUsage = auxiliaryUsage(UsageStore.PURPOSE_PDF),
@@ -1580,8 +1577,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isWarm: Boolean = false,
         resumeHandle: String? = null
     ) {
-        val client: LiveClient =
-            if (usesFirebase()) FirebaseLiveClient(settings.liveModel) else GeminiLiveClient(apiKey, settings.liveModel)
+        val client: LiveClient = GeminiLiveClient(apiKey, settings.liveModel)
         client.latency.event("session_origin", mapOf("mode" to when {
             isWarm -> "prewarm"
             _uiState.value.voiceState == VoiceState.RESETTING -> "reconnect"

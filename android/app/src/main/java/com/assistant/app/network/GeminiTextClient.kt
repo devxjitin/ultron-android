@@ -15,13 +15,6 @@ import org.json.JSONObject
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import com.assistant.app.data.DEFAULT_DOCUMENT_FORMAT_PROMPT
-import com.google.firebase.ai.type.Content
-import com.google.firebase.ai.type.FinishReason
-import com.google.firebase.ai.type.FirebaseAIException
-import com.google.firebase.ai.type.GenerationConfig
-import com.google.firebase.ai.type.InlineDataPart
-import com.google.firebase.ai.type.ResponseStoppedException
-import com.google.firebase.ai.type.TextPart
 
 /**
  * Plain (non-streaming) Gemini text generation, used to have the model draft an agent
@@ -34,9 +27,7 @@ class GeminiTextClient(
     private val documentFormatPrompt: String = DEFAULT_DOCUMENT_FORMAT_PROMPT,
     private val documentFormatModel: String = DOCUMENT_FORMAT_MODEL,
     /** Called with the input and output tokens Gemini reports for each successful request. */
-    private val onUsage: ((inputTokens: Int, outputTokens: Int) -> Unit)? = null,
-    /** True sends requests through the Firebase AI Logic SDK and ignores [apiKey]. */
-    private val useFirebase: Boolean = false
+    private val onUsage: ((inputTokens: Int, outputTokens: Int) -> Unit)? = null
 ) {
 
     companion object {
@@ -154,50 +145,12 @@ class GeminiTextClient(
         rejectTruncatedOutput = rejectTruncatedOutput
     )
 
-    /** The same request through the Firebase AI Logic SDK; [contents] holds only text and inline_data parts. */
-    private suspend fun generateViaFirebase(
-        contents: JSONArray,
-        model: String,
-        maxOutputTokens: Int?,
-        rejectTruncatedOutput: Boolean
-    ): String {
-        val sdkContents = (0 until contents.length()).map { index ->
-            val parts = contents.getJSONObject(index).getJSONArray("parts")
-            Content(
-                parts = (0 until parts.length()).map { p ->
-                    val part = parts.getJSONObject(p)
-                    val inline = part.optJSONObject("inline_data")
-                    if (inline != null) InlineDataPart(Base64.getDecoder().decode(inline.getString("data")), inline.getString("mime_type"))
-                    else TextPart(part.getString("text"))
-                }
-            )
-        }
-        val config = GenerationConfig.Builder().apply { this.maxOutputTokens = maxOutputTokens }.build()
-        val generative = FirebaseGemini.ai().generativeModel(modelName = model, generationConfig = config)
-        val response = try {
-            generative.generateContent(sdkContents)
-        } catch (e: ResponseStoppedException) {
-            if (e.response.candidates.firstOrNull()?.finishReason == FinishReason.MAX_TOKENS && rejectTruncatedOutput) {
-                throw java.io.IOException("Document formatting exceeded the 65,536-output-token limit.")
-            }
-            throw FirebaseGemini.asAppFailure(e)
-        } catch (e: FirebaseAIException) {
-            throw FirebaseGemini.asAppFailure(e)
-        }
-        response.usageMetadata?.let { onUsage?.invoke(it.promptTokenCount, (it.candidatesTokenCount ?: 0) + it.thoughtsTokenCount) }
-        if (rejectTruncatedOutput && response.candidates.firstOrNull()?.finishReason == FinishReason.MAX_TOKENS) {
-            throw java.io.IOException("Document formatting exceeded the 65,536-output-token limit.")
-        }
-        return response.text ?: throw java.io.IOException("The model returned no text.")
-    }
-
     private suspend fun generateWithContents(
         contents: JSONArray,
         model: String,
         maxOutputTokens: Int? = null,
         rejectTruncatedOutput: Boolean = false
     ): String = withContext(Dispatchers.IO) {
-        if (useFirebase) return@withContext generateViaFirebase(contents, model, maxOutputTokens, rejectTruncatedOutput)
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
 
         val body = JSONObject()
