@@ -128,7 +128,6 @@ fun AssistantScreen(
     onResetUsage: () -> Unit = {},
     onMemoryTapped: () -> Unit = {},
     onMemoryEnabledToggled: (Boolean) -> Unit = {},
-    onDismissAgentPromptUpdate: () -> Unit = {},
     onAddMemory: (String) -> Unit = {},
     onUpdateMemory: (String, String) -> Unit = { _, _ -> },
     onDeleteMemory: (String) -> Unit = {},
@@ -147,10 +146,9 @@ fun AssistantScreen(
     onLanguageSelected: (String) -> Unit,
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
+    onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
-    onSaveDeveloperChanges: (String, String, String, String, String, String, Int) -> Unit,
-    onGeneratePromptFromKnowledgeBase: () -> Unit,
-    onDismissPromptGenerationError: () -> Unit,
+    onSaveDeveloperChanges: (String, String, String, String, Int) -> Unit,
     onAddKnowledgeDocument: (String, String) -> Unit,
     onUpdateKnowledgeDocument: (String, String, String) -> Unit,
     onDeleteKnowledgeDocument: (String) -> Unit,
@@ -357,16 +355,12 @@ fun AssistantScreen(
                     onLanguageSelected = onLanguageSelected,
                     onMicSensitivitySelected = onMicSensitivitySelected,
                     onBargeInToggled = onBargeInToggled,
+                    onAnnounceNotificationsToggled = onAnnounceNotificationsToggled,
                     onOwnerNameChanged = onOwnerNameChanged,
                     onClearApiKey = onClearApiKey,
                     onClearEmbeddingApiKey = onClearEmbeddingApiKey,
                     onSaveDeveloperChanges = onSaveDeveloperChanges,
                     isSavingDeveloper = uiState.isSavingDeveloperSettings,
-                    isGeneratingPrompt = uiState.isGeneratingPrompt,
-                    generatedPromptDraft = uiState.generatedPromptDraft,
-                    promptGenerationError = uiState.promptGenerationError,
-                    onGeneratePromptFromKnowledgeBase = onGeneratePromptFromKnowledgeBase,
-                    onDismissPromptGenerationError = onDismissPromptGenerationError,
                     knowledgeDocuments = uiState.knowledgeDocuments,
                     isSavingKnowledgeDocument = uiState.isSavingKnowledgeDocument,
                     knowledgePreparationStage = uiState.knowledgePreparationStage,
@@ -475,29 +469,6 @@ fun AssistantScreen(
             )
         }
 
-        if (uiState.isUpdatingAgentPrompt) {
-            AlertDialog(
-                onDismissRequest = onDismissAgentPromptUpdate,
-                title = { Text("Updating") },
-                text = {
-                    androidx.compose.foundation.layout.Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = AssistantAccent
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text("Updating your assistant with the new information. This can take a moment.")
-                    }
-                },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = onDismissAgentPromptUpdate) { Text("Continue in background") }
-                },
-                dismissButton = {}
-            )
-        }
 
         }
         }

@@ -7,12 +7,14 @@ notes and the About page all read it from here. A date after the version is opti
 
 ### Added
 - About now lists what changed in every version.
+- Settings has a new "Read out notifications" switch. When it is on, the assistant tells you about new phone notifications during a voice session. It is off by default.
 
 ### Changed
 - Ultron always uses your own Gemini API key for voice, documents and search. Add it in Developer settings.
 - The Knowledge API key is optional. Leave it empty and documents and search use your Gemini key.
 
 ### Removed
+- The agent prompt and dataset preparation prompt are no longer shown or editable in Developer settings. The assistant uses its built-in prompts.
 - Built-in Gemini access through Firebase. Without your own key the assistant now asks you to add one.
 
 ## 1.0.0

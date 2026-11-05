@@ -164,7 +164,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Latest server handle for the active conversation, used only to resume it after an
      *  automatic reconnect; cleared whenever the user starts or stops a session. */
     private var sessionResumptionHandle: String? = null
-    private var personaRefreshJob: Job? = null
     private var prewarmJob: Job? = null
     private var isForeground = false
     /** True while a session keeps running after the app left the screen. */
@@ -429,7 +428,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 knowledgeDocMutex.withLock { ragDocumentStore.resetKnowledge() }
                 collectKnowledgeDocuments()
-                refreshAutoPersona()
                 showToast("Knowledge reset")
             } catch (e: CancellationException) {
                 throw e
@@ -465,10 +463,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * While a voice session runs, tells the model about a new phone notification so it can mention it.
-     * Only when the user has the Read notifications tool on (same consent: the text goes to Gemini).
+     * Only when the user switched on "Read out notifications" in Settings: the text goes to Gemini, so it is their choice.
      */
     private fun announceNotification(app: String, title: String, text: String) {
-        if (DeviceTool.READ_NOTIFICATIONS !in _uiState.value.settings.enabledDeviceTools) return
+        if (!_uiState.value.settings.announceNotificationsEnabled) return
         if (!isSessionActive(_uiState.value.voiceState) || _uiState.value.isMicMuted || pausedByCall) return
         val line = "$app: ${title.take(80)}" + if (text.isNotBlank()) " - ${text.take(160)}" else ""
         if (pendingAnnouncements.size >= MAX_PENDING_ANNOUNCEMENTS) pendingAnnouncements.removeFirst()
@@ -498,8 +496,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun clearAdminDrafts() {
-        _uiState.update { it.copy(generatedPromptDraft = null,
-            knowledgeDocumentError = null, promptGenerationError = null) }
+        _uiState.update { it.copy(knowledgeDocumentError = null) }
     }
 
     private fun auxiliaryUsage(purpose: String): (Int, Int) -> Unit = { inputTokens, outputTokens ->
@@ -1068,6 +1065,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether a notification that arrives during a voice session is read out. Local only; nothing to rebuild. */
+    fun onAnnounceNotificationsToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Notifications will be read out" else "Notifications won't be read out") {
+            settingsStore.setAnnounceNotificationsEnabled(enabled)
+        }
+    }
+
     private val deviceToolRunner = DeviceToolRunner(
         application, audioManager,
         getBrightnessOverride = { _uiState.value.appBrightnessPercent },
@@ -1119,8 +1123,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         greeting: String,
         apiKey: String,
         embeddingApiKey: String,
-        systemPrompt: String,
-        documentFormatPrompt: String,
         retrievalChunkLimit: Int
     ) {
         if (_uiState.value.isSavingDeveloperSettings) return
@@ -1139,8 +1141,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         settingsStore.setDeveloperSettings(
                             name = name,
                             greeting = greeting,
-                            systemPrompt = systemPrompt,
-                            documentFormatPrompt = documentFormatPrompt,
                             retrievalChunkLimit = retrievalChunkLimit
                         )
                     }
@@ -1156,7 +1156,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         hasApiKey = cleanApiKey.isNotBlank() || it.hasApiKey,
                         currentApiKey = cleanApiKey.ifBlank { it.currentApiKey },
                         currentEmbeddingApiKey = cleanEmbeddingApiKey.ifBlank { it.currentEmbeddingApiKey },
-                        generatedPromptDraft = null,
                         errorMessage = null,
                         voiceState = if (it.voiceState == VoiceState.ERROR) VoiceState.IDLE else it.voiceState,
                         restartRequestId = it.restartRequestId + 1
@@ -1179,76 +1178,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
         }
-    }
-
-    /** Drafts editable identity/tone from the admin's knowledge documents.
-     * The result is shown for review; Developer Save commits it. Fixed grounding policy is
-     * composed separately when a session opens, regardless of generated draft content. */
-    fun onGeneratePromptFromKnowledgeBase() {
-        val docs = _uiState.value.knowledgeDocuments
-        if (docs.isEmpty()) {
-            _uiState.update { it.copy(promptGenerationError = "Add at least one knowledge document first.") }
-            return
-        }
-        val apiKey = resolveApiKey()
-        if (!hasGeminiAccess()) {
-            _uiState.update { it.copy(promptGenerationError = "No Gemini API key set yet.") }
-            return
-        }
-        _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
-        viewModelScope.launch {
-            try {
-                val instruction = KnowledgeBaseProvider.buildPersonaGenerationInstruction(docs)
-                val draft = KnowledgeBaseProvider.validatePersonaDraft(
-                    auxTextClient(apiKey, UsageStore.PURPOSE_PERSONA).generateText(instruction)
-                )
-                _uiState.update { it.copy(isGeneratingPrompt = false, generatedPromptDraft = draft) }
-                showToast("Agent prompt drafted. Review and save.")
-            } catch (e: CancellationException) {
-                _uiState.update { it.copy(isGeneratingPrompt = false) }
-                throw e
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isGeneratingPrompt = false,
-                        promptGenerationError = UserFacingError.forThrowable("Prompt generation failed", e)
-                    )
-                }
-            }
-        }
-    }
-
-    /** Clears a generated persona once no knowledge documents remain. The persona is never redrafted
-     *  automatically; the admin does that from Developer. Failures are only logged. */
-    private fun refreshAutoPersona() {
-        personaRefreshJob?.cancel()
-        _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
-        personaRefreshJob = viewModelScope.launch {
-            try {
-                // A prompt the user wrote is theirs; only a generated (or empty) one is redrafted.
-                if (!settingsStore.canReplacePersona()) return@launch
-                val docs = ragDocumentStore.documents.first()
-                if (docs.isEmpty()) {
-                    settingsStore.setAutoPersona(null)
-                    invalidateWarmSessionAndReprewarm()
-                }
-            } catch (e: CancellationException) {
-                // A newer refresh owns the flag now.
-                throw e
-            } catch (e: Exception) {
-                Log.e("AssistantError", "Auto persona refresh failed", e)
-            }
-            _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
-        }
-    }
-
-    /** Hides the "Updating" notice; the redraft keeps running in the background. */
-    fun onDismissAgentPromptUpdate() {
-        _uiState.update { it.copy(isUpdatingAgentPrompt = false) }
-    }
-
-    fun onDismissPromptGenerationError() {
-        _uiState.update { it.copy(promptGenerationError = null) }
     }
 
     fun onAddKnowledgeDocument(title: String, text: String) {
@@ -1278,7 +1207,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             totalChunks = 0
                         )
                     }
-                    refreshAutoPersona()
                     showToast("Document added")
                 } catch (e: CancellationException) {
                     throw e
@@ -1338,7 +1266,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             totalChunks = 0
                         )
                     }
-                    refreshAutoPersona()
                     showToast("Document imported")
                 } catch (e: CancellationException) {
                     throw e
@@ -1387,7 +1314,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                     }
                     if (result != null) {
-                        refreshAutoPersona()
                         showToast("Document updated")
                     } else {
                         showToast("Document was deleted before the update finished")
@@ -1415,7 +1341,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 knowledgeDocMutex.withLock { ragDocumentStore.deleteDocument(id) }
-                refreshAutoPersona()
                 showToast("Document deleted")
             } catch (e: CancellationException) {
                 throw e

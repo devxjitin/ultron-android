@@ -48,14 +48,6 @@ val DEFAULT_CONNECTOR_IDS = listOf(
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
 private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
-/**
- * Hashes of earlier default prompts (trimmed, LF line endings). Saving the Developer form stores the default text as is,
- * so a stored copy of an old default would otherwise hide every later persona change; these fall back to the current one.
- */
-private val LEGACY_DEFAULT_PROMPT_HASHES = setOf(-1706180817, 1739864855, 139728475, 478833423, 621719187, 1402352618, 1611585338)
-
-private fun String.isLegacyDefaultPrompt() = replace("\r\n", "\n").trim().hashCode() in LEGACY_DEFAULT_PROMPT_HASHES
-
 const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
 const val MAX_GREETING_LENGTH = 60
@@ -122,6 +114,8 @@ data class AssistantSettings(
      *  VOICE_COMMUNICATION's echo cancellation) so the user can interrupt it mid-reply; when
      *  off, the mic mutes during playback as before. */
     val bargeInEnabled: Boolean = true,
+    /** Off by default. When on, a phone notification that arrives during a voice session is read out by the assistant. */
+    val announceNotificationsEnabled: Boolean = false,
     /** When on, the assistant saves lasting facts about the user and recalls them in later sessions. */
     val memoryEnabled: Boolean = true,
     /** The agent's persona/instructions, editable from Settings so an admin can customize
@@ -156,6 +150,7 @@ class AppSettingsStore(private val context: Context) {
     private val micSensitivityKey = stringPreferencesKey("mic_sensitivity")
     private val languageCodeKey = stringPreferencesKey("language_code")
     private val bargeInKey = booleanPreferencesKey("barge_in_enabled")
+    private val announceNotificationsKey = booleanPreferencesKey("announce_notifications")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
@@ -182,13 +177,13 @@ class AppSettingsStore(private val context: Context) {
                 ?.takeIf(AssistantOptions::isApprovedLanguage)
                 ?: AssistantOptions.defaultLanguageCode,
             bargeInEnabled = prefs[bargeInKey] ?: true,
+            announceNotificationsEnabled = prefs[announceNotificationsKey] ?: false,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            systemPrompt = prefs[systemPromptKey]?.takeIf { it.isNotBlank() && !it.isLegacyDefaultPrompt() && it.trim() != DEFAULT_SYSTEM_PROMPT.trim() } ?: DEFAULT_SYSTEM_PROMPT.trim(),
+            systemPrompt = DEFAULT_SYSTEM_PROMPT.trim(),
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
             greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() && it.trim() != DEFAULT_GREETING } ?: DEFAULT_GREETING,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
-            documentFormatPrompt = prefs[documentFormatPromptKey]?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_DOCUMENT_FORMAT_PROMPT,
+            documentFormatPrompt = DEFAULT_DOCUMENT_FORMAT_PROMPT,
             retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
                 ?.coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT)
                 ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
@@ -234,6 +229,10 @@ class AppSettingsStore(private val context: Context) {
         context.settingsDataStore.edit { if (clean.isBlank()) it.remove(ownerNameKey) else it[ownerNameKey] = clean }
     }
 
+    suspend fun setAnnounceNotificationsEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[announceNotificationsKey] = enabled }
+    }
+
     suspend fun setBargeInEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[bargeInKey] = enabled }
     }
@@ -245,48 +244,21 @@ class AppSettingsStore(private val context: Context) {
         }
     }
 
-    /** Stores the persona drafted from the knowledge documents as the agent prompt, replacing any
-     *  earlier text so Developer Settings shows the same up-to-date prompt. Null/blank restores
-     *  the generic default. */
-    suspend fun setAutoPersona(persona: String?) {
-        val trimmed = persona?.trim()
-        context.settingsDataStore.edit {
-            if (trimmed.isNullOrBlank()) {
-                it.remove(systemPromptKey)
-                it.remove(systemPromptAutoKey)
-            } else {
-                it[systemPromptKey] = trimmed
-                it[systemPromptAutoKey] = true
-            }
-        }
-    }
-
-    /** True when the agent prompt is empty or was generated, so a new draft may replace it; a prompt the user wrote is kept. */
-    suspend fun canReplacePersona(): Boolean {
-        val prefs = context.settingsDataStore.data.first()
-        return prefs[systemPromptKey].isNullOrBlank() || prefs[systemPromptAutoKey] == true
-    }
-
     /** Applies the Developer form together so its fields never save as unrelated partial edits. */
     suspend fun setDeveloperSettings(
         name: String,
         greeting: String,
-        systemPrompt: String,
-        documentFormatPrompt: String,
         retrievalChunkLimit: Int
     ) {
         val cleanName = name.trim().take(MAX_ASSISTANT_NAME_LENGTH)
         val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
-        val cleanSystemPrompt = systemPrompt.trim()
-        val cleanDocumentPrompt = documentFormatPrompt.trim()
         context.settingsDataStore.edit {
             if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
             if (cleanGreeting.isBlank()) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
-            // Text that differs from what was stored is now the user's own, and later drafts must not overwrite it.
-            if (cleanSystemPrompt != it[systemPromptKey]?.trim().orEmpty()) it.remove(systemPromptAutoKey)
-            if (cleanSystemPrompt.isBlank()) it.remove(systemPromptKey) else it[systemPromptKey] = cleanSystemPrompt
-            if (cleanDocumentPrompt.isBlank()) it.remove(documentFormatPromptKey)
-            else it[documentFormatPromptKey] = cleanDocumentPrompt
+            // The prompts are built in and no longer editable; drop any text an earlier version saved.
+            it.remove(systemPromptKey)
+            it.remove(systemPromptAutoKey)
+            it.remove(documentFormatPromptKey)
             it[retrievalChunkLimitKey] = retrievalChunkLimit
                 .coerceIn(MIN_RETRIEVAL_CHUNK_LIMIT, MAX_RETRIEVAL_CHUNK_LIMIT).toString()
         }
