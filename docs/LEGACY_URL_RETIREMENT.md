@@ -119,3 +119,7 @@ Baaki:
 - `infra/api.yaml` ka `AppCheckMode` default ab `enforce` hai.
 - `infra/ultron.yaml` se dono Function URL, unki permissions aur outputs hata diye. Ab ye template deploy karne se URL wapas nahi banenge.
 - GitHub secret `LOCAL_PROPERTIES` me ab sirf `GITHUB_CLIENT_ID` hai (build me sirf wahi padha jata hai). `UPDATE_URL`, `WEB_EXTRACT_URL`, `GOOGLE_MCP_URL`, `AZURE_ENDPOINT` aur `GOOGLE_WEB_CLIENT_ID` hat gaye. Purani value padh nahi sakte the, isliye secret ko local.properties ki sahi line se naya bana diya.
+
+## Legacy resources deleted (2026-11-05)
+
+At the owner's request the three legacy Lambdas (`google-workspace-mcp`, `ultron-updates`, `web-extract-mcp`), their roles and log groups, the `ultron-subscriptions` table and the `/ultron/razorpay/*` SSM parameters were deleted from us-east-1. This was done before the 17 November observation date. The `ultron-api` and `ultron-youtube` stacks and the `ultron-licenses` table remain, and `POST /v1/license/status` still answers 401 without a token.
