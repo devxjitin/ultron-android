@@ -23,7 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import com.assistant.app.data.Changelog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -138,6 +141,8 @@ fun AboutPage(
             PageRow("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         }
 
+        WhatsNew()
+
         PageLabel("Developer")
         PageCard {
             Text("Jitin Kumar Sengar", color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -150,6 +155,40 @@ fun AboutPage(
                 "Your memories and settings are stored only on this phone. What you say is sent to the AI services you set up, to write the replies, and to the connectors you turn on.",
                 color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 21.sp
             )
+        }
+    }
+}
+
+/** Every version and what changed in it, newest first, read from the changelog shipped inside the app. */
+@Composable
+private fun WhatsNew() {
+    val context = LocalContext.current
+    val entries = remember {
+        runCatching { Changelog.parse(context.assets.open("changelog.md").bufferedReader().use { it.readText() }) }
+            .getOrDefault(emptyList())
+    }
+    if (entries.isEmpty()) return
+    PageLabel("What's new")
+    entries.forEach { entry ->
+        PageCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Version ${entry.version}", color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                if (entry.date.isNotBlank()) {
+                    Text("  ·  ${entry.date}", color = AssistantTextMuted, fontSize = 13.sp)
+                }
+            }
+            entry.sections.forEach { section ->
+                Text(
+                    section.title, color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+                section.items.forEach { item ->
+                    Text(
+                        "•  $item", color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
         }
     }
 }

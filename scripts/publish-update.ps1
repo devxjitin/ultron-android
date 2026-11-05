@@ -6,7 +6,7 @@ Requires SDK 36, JDK 17, AWS CLI authentication and the existing OTA signing key
 param(
     [ValidateSet("BuildAndPublish", "Build", "Publish")][string]$Mode = "BuildAndPublish",
     [string]$Notes = "",
-    [string]$VersionName = "1.0.0",
+    [string]$VersionName = "",
     [int]$MinVersionCode = 0,
     [switch]$AllowStale,
     [string]$Bucket = "ultron-app-updates-143920986615",
@@ -39,6 +39,29 @@ function Get-LiveVersion {
     $live = $liveText | ConvertFrom-Json
     if (-not $live.versionCode -or [long]$live.versionCode -le 0) { throw "The live release manifest has an invalid versionCode." }
     return [long]$live.versionCode
+}
+
+# The version and its notes come from the changelog shipped in the app, so what the phone shows always matches.
+$changelog = Join-Path $android "app/src/main/assets/changelog.md"
+function Get-ChangelogEntry {
+    $lines = Get-Content -LiteralPath $changelog -Encoding UTF8
+    $version = $null; $section = ""; $points = @()
+    foreach ($line in $lines) {
+        if ($line -match '^##\s+v?(\d+\.\d+\.\d+)') {
+            if ($version) { break }
+            $version = $Matches[1]; continue
+        }
+        if (-not $version) { continue }
+        if ($line -match '^###\s+(.+)$') { $section = $Matches[1].Trim() }
+        elseif ($line -match '^-\s+(.+)$' -and $section) { $points += "${section}: $($Matches[1].Trim())" }
+    }
+    if (-not $version) { throw "changelog.md has no '## x.y.z' version heading." }
+    return [pscustomobject]@{ Version = $version; Notes = ($points -join "`n") }
+}
+if ($Mode -ne "Publish") {
+    $entry = Get-ChangelogEntry
+    if (-not $VersionName) { $VersionName = $entry.Version }
+    if (-not $Notes) { $Notes = $entry.Notes }
 }
 
 Assert-FreshCheckout

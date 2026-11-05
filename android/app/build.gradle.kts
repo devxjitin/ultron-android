@@ -8,16 +8,16 @@ plugins {
     id("io.objectbox")
 }
 
-// Firebase AI Logic needs android/app/google-services.json (gitignored). Without it the app still builds and
-// falls back to the on-device Gemini key.
+// Firebase Auth, App Check and Crashlytics need android/app/google-services.json (gitignored). Without it the app
+// still builds, but it cannot sign in to the Ultron API.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
     apply(plugin = "com.google.firebase.crashlytics")
 }
 
 // Build-time values come from local.properties (gitignored, never committed). No Gemini or other API key is read
-// here on purpose: anything compiled into the APK can be pulled out of it. Gemini goes through Firebase AI Logic,
-// or the user's own key entered in Developer settings.
+// here on purpose: anything compiled into the APK can be pulled out of it. Gemini always uses the user's own key
+// entered in Developer settings.
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) load(file.inputStream())
@@ -33,7 +33,13 @@ val storeUrl: String = localProperties.getProperty("STORE_URL", "")
 // Every build gets a higher version code than the one before (minutes since 1970), so the phone can always tell
 // which build is newer. scripts/publish-update.ps1 passes the same number with -PappVersionCode.
 val appVersionCode: Int = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: (System.currentTimeMillis() / 60000).toInt()
-val appVersionName: String = (project.findProperty("appVersionName") as String?) ?: "1.0.0"
+// The version name is the newest "## x.y.z" heading in src/main/assets/changelog.md, so the app, the About page and the
+// update notes can never disagree. -PappVersionName still overrides it for one-off builds.
+val appVersionName: String = (project.findProperty("appVersionName") as String?)
+    ?: file("src/main/assets/changelog.md").takeIf { it.exists() }?.useLines { lines ->
+        lines.firstNotNullOfOrNull { Regex("""^##\s+v?(\d+\.\d+\.\d+)""").find(it)?.groupValues?.get(1) }
+    }
+    ?: "1.0.0"
 
 // Release signing config, also read from local.properties (gitignored) so the keystore
 // path and passwords never end up in source control. Add these to android/local.properties:
