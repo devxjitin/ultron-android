@@ -340,7 +340,6 @@ class MainActivity : ComponentActivity() {
                         onConnectorsTapped = { viewModel.onConnectorsTapped() },
                         onInstallUpdate = { viewModel.onInstallUpdate() },
                         onDismissUpdate = { viewModel.onDismissUpdate() },
-                        onConfirmAction = { viewModel.onConfirmationAnswer(it) },
                         onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
                         onUpdateNow = { viewModel.onUpdateNow() },
                         onUsageTapped = { viewModel.onUsageTapped() },

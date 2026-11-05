@@ -115,7 +115,6 @@ fun AssistantScreen(
     onConnectorsTapped: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
     onDismissUpdate: () -> Unit = {},
-    onConfirmAction: (Boolean) -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
     onUpdateNow: () -> Unit = {},
     onUsageTapped: () -> Unit = {},
@@ -435,16 +434,6 @@ fun AssistantScreen(
                 },
                 confirmButton = { TextButton(onClick = onInstallUpdate, enabled = progress == null) { Text("Update") } },
                 dismissButton = { TextButton(onClick = onDismissUpdate, enabled = progress == null) { Text("Later") } }
-            )
-        }
-
-        uiState.pendingConfirmation?.let { ask ->
-            AlertDialog(
-                onDismissRequest = { onConfirmAction(false) },
-                title = { Text(ask.title) },
-                text = { Text(ask.detail) },
-                confirmButton = { TextButton(onClick = { onConfirmAction(true) }) { Text("Allow") } },
-                dismissButton = { TextButton(onClick = { onConfirmAction(false) }) { Text("Cancel") } }
             )
         }
 

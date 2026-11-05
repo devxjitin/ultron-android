@@ -15,6 +15,7 @@ notes and the About page all read it from here. A date after the version is opti
 - The Knowledge API key is optional. Leave it empty and documents and search use your Gemini key.
 
 ### Removed
+- The tap-to-allow check that could appear before the assistant sent a message or placed a call after reading outside text. Ultron now acts hands-free, and still tells the model not to follow instructions found in messages, notifications and web pages.
 - The agent prompt and dataset preparation prompt are no longer shown or editable in Developer settings. The assistant uses its built-in prompts.
 - Built-in Gemini access through Firebase. Without your own key the assistant now asks you to add one.
 

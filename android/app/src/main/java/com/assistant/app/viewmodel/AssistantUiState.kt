@@ -1,7 +1,6 @@
 package com.assistant.app.viewmodel
 
 import com.assistant.app.network.GithubDeviceCode
-import com.assistant.app.data.ActionConfirmation
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
@@ -100,5 +99,4 @@ data class AssistantUiState(
     val permissionRequestId: Int = 0,
     val requestedPermissions: List<String> = emptyList(),
     /** A call or text message waiting for the user's tap, shown as a dialog; null when nothing is waiting. */
-    val pendingConfirmation: ActionConfirmation? = null
 )
