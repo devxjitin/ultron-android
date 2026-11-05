@@ -47,7 +47,4 @@ object AccessChecks {
         return mode == AppOpsManager.MODE_DEFAULT &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED
     }
-
-    fun hasTelephony(context: Context): Boolean =
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
 }

@@ -10,6 +10,21 @@ notes and the About page all read it from here. A date after the version is opti
 - Usage shows what the assistant was used for. Prices and token counts are gone.
 - The Connectors page no longer repeats its title.
 
+## 1.4.0 - 2026-11-05
+
+### Changed
+- Web search now runs through Ultron's server using DDGS, with more search engines behind it. If the server cannot answer, your phone searches DuckDuckGo itself.
+- The DuckDuckGo connector is now called Web search.
+
+## 1.3.0 - 2026-11-05
+
+### Changed
+- Saving a new contact now lives under Contacts.
+- To call or text someone, the assistant uses your phone's own apps with Screen control.
+
+### Removed
+- The Calls and Messages connectors.
+
 ## 1.2.0 - 2026-11-05
 
 ### Added

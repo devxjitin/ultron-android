@@ -11,7 +11,6 @@ enum class ConnectorCategory(val title: String, val summary: String, val advance
     ESSENTIALS("Essentials", "Everyday phone info and controls. Nothing here reads your personal data."),
     SEARCH_MEDIA("Search & media", "Web search, web pages and YouTube."),
     PERSONAL("Personal data", "Reads private data from your phone, such as contacts, calendar, location, files and notifications. What you ask about is sent to Gemini."),
-    COMMUNICATION("Communication", "Places calls and sends text messages. Each one can cost money or reach other people."),
     PHONE_CONTROL("Phone control", "Lets the assistant operate other apps through Android accessibility. It can tap, type and read the screen, so turn it on only if you understand that.", advanced = true),
 }
 
@@ -100,8 +99,8 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.GET_WEATHER)
         ),
         ConnectorSpec(
-            id = "duckduckgo", name = "DuckDuckGo", description = "Search the web.",
-            subtitle = "Free, no sign-in", category = ConnectorCategory.SEARCH_MEDIA, kind = ConnectorKind.ONLINE,
+            id = "duckduckgo", name = "Web search", description = "Search the web.",
+            subtitle = "No sign-in", category = ConnectorCategory.SEARCH_MEDIA, kind = ConnectorKind.ONLINE,
             permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
             tools = listOf(DeviceTool.WEB_SEARCH)
         ),
@@ -130,10 +129,10 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.UPCOMING_EVENTS, DeviceTool.CALENDAR_CONFLICTS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT)
         ),
         ConnectorSpec(
-            id = "contacts", name = "Contacts", description = "Find contacts and birthdays.",
+            id = "contacts", name = "Contacts", description = "Find contacts, birthdays and save new contacts.",
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = listOf(Manifest.permission.READ_CONTACTS), access = SpecialAccess.NONE, defaultOn = false,
-            tools = listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY)
+            tools = listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.CREATE_CONTACT)
         ),
         ConnectorSpec(
             id = "location", name = "Location", description = "Know where you are and get directions.",
@@ -158,18 +157,6 @@ object ConnectorRegistry {
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = emptyList(), access = SpecialAccess.NOTIFICATION_ACCESS, defaultOn = false,
             tools = listOf(DeviceTool.READ_NOTIFICATIONS, DeviceTool.REPLY_NOTIFICATION, DeviceTool.DISMISS_NOTIFICATION, DeviceTool.NOW_PLAYING)
-        ),
-        ConnectorSpec(
-            id = "calls", name = "Calls", description = "Make and manage calls.",
-            subtitle = "On your phone", category = ConnectorCategory.COMMUNICATION, kind = ConnectorKind.PHONE,
-            permissions = listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_CALL_LOG), access = SpecialAccess.NONE, defaultOn = false,
-            tools = listOf(DeviceTool.DIAL, DeviceTool.CALL_CONTACT, DeviceTool.CREATE_CONTACT, DeviceTool.END_CALL, DeviceTool.ANSWER_CALL, DeviceTool.READ_CALL_LOG)
-        ),
-        ConnectorSpec(
-            id = "messages", name = "Messages", description = "Read and send text messages.",
-            subtitle = "On your phone", category = ConnectorCategory.COMMUNICATION, kind = ConnectorKind.PHONE,
-            permissions = listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS), access = SpecialAccess.NONE, defaultOn = false,
-            tools = listOf(DeviceTool.SEND_SMS, DeviceTool.SEND_SMS_CONTACT, DeviceTool.READ_SMS)
         ),
         ConnectorSpec(
             id = "navigation", name = "Phone navigation", description = "Go back, go home, scroll and take screenshots.",
@@ -220,7 +207,7 @@ object ConnectorRegistry {
             "Event names and times are shared when you ask. Changes happen in your real calendar."
         ),
         "contacts" to ConnectorInfo(
-            "Finds a contact's number and birthday. It only reads.",
+            "Finds a contact's number and birthday, and opens a form to save a new contact.",
             "Contacts access.",
             "Shared only when you ask."
         ),
@@ -242,8 +229,8 @@ object ConnectorRegistry {
         "duckduckgo" to ConnectorInfo(
             "Searches the web and answers from the results.",
             "Nothing to allow.",
-            "Your search words go to DuckDuckGo.",
-            "Your phone"
+            "Your search words go to Ultron's server, which asks search engines. If it is down, your phone asks DuckDuckGo itself.",
+            "Ultron's server"
         ),
         "web_reader" to ConnectorInfo(
             "Reads a web page and gives you the main text.",
@@ -268,16 +255,6 @@ object ConnectorRegistry {
             "Internet and free space.",
             "Files stay on your phone. Download only what you may keep.",
             "Your phone"
-        ),
-        "calls" to ConnectorInfo(
-            "Calls a number or a contact right away, and saves new contacts.",
-            "Contacts access. Android asks for Phone access on the first call.",
-            "Calls happen only when you ask."
-        ),
-        "messages" to ConnectorInfo(
-            "Reads your texts and sends one right away when you ask. Up to 10 an hour.",
-            "Messages and Contacts access.",
-            "Your carrier may charge for texts."
         ),
         "apps_settings" to ConnectorInfo(
             "Opens apps, the camera and settings, uses the clipboard and shows notifications.",
