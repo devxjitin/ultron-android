@@ -3,6 +3,22 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.2.0 - 2026-11-05
+
+### Added
+- A new menu with a cleaner look, a close button and Settings at the bottom.
+- Each skill has its own page, and skills are grouped by category.
+- Connectors can be filtered by category.
+- Your own skills have an Edit button.
+
+### Changed
+- Short, simple wording across the app.
+- The update window now keeps the download progress in view. Release notes are behind More info.
+- WhatsApp messages are sent more reliably.
+
+### Removed
+- The GitHub connector.
+
 ## 1.1.0 - 2026-11-05
 
 ### Added
