@@ -156,8 +156,6 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "weather" to Icons.Outlined.WbSunny,
     "youtube" to Icons.Outlined.PlayCircle,
     "youtube_downloads" to Icons.Outlined.Download,
-    "calls" to Icons.Outlined.Call,
-    "messages" to Icons.Outlined.Forum,
     "apps_settings" to Icons.Outlined.Apps,
     "files" to Icons.Outlined.Folder,
     "navigation" to Icons.Outlined.Explore,

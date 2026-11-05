@@ -3,6 +3,15 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.3.0 - 2026-11-05
+
+### Changed
+- Saving a new contact now lives under Contacts.
+- To call or text someone, the assistant uses your phone's own apps with Screen control.
+
+### Removed
+- The Calls and Messages connectors.
+
 ## 1.2.0 - 2026-11-05
 
 ### Added

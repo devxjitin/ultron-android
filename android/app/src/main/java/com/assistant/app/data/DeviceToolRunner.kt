@@ -43,8 +43,6 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.telecom.TelecomManager
-import android.telephony.SmsManager
 import android.os.Environment
 import android.os.PowerManager
 import android.os.StatFs
@@ -191,39 +189,6 @@ class DeviceToolRunner(
                 if (found.isEmpty()) "status=not_found\nNo contact matches \"$name\"."
                 else "status=ok\n" + found.joinToString("\n") { "${it.first}: ${it.second}" }
             }
-            DeviceTool.CALL_CONTACT -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)?.let { return it }
-                val name = text("name") ?: return MISSING
-                val found = findContacts(name, 5)
-                val matches = ContactMatch.numbers(name, found)
-                if (matches.isEmpty()) return "status=not_found\nNo contact matches \"$name\"."
-                // Only call when exactly one number matches; otherwise the user must pick one.
-                if (matches.size > 1) {
-                    return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to call, " +
-                        "then use dial_number with that number. No call was placed.\n" +
-                        matches.joinToString("\n") { "${it.first}: ${it.second}" }
-                }
-                val match = matches.first()
-                placeCall(match.second)
-                "status=ok\nCalling ${match.first} now."
-            }
-            DeviceTool.SEND_SMS -> sendSms(text("number") ?: return MISSING, text("message") ?: return MISSING, null)
-            DeviceTool.SEND_SMS_CONTACT -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS)?.let { return it }
-                val name = text("name") ?: return MISSING
-                val message = text("message") ?: return MISSING
-                val matches = ContactMatch.numbers(name, findContacts(name, 5))
-                if (matches.isEmpty()) return "status=not_found\nNo contact matches \"$name\". No message was sent."
-                // Only send when exactly one number matches; otherwise the user must pick one.
-                if (matches.size > 1) {
-                    return "status=ambiguous\nSeveral numbers match \"$name\". Ask the user which one to text, " +
-                        "then use send_sms with that number. No message was sent.\n" +
-                        matches.joinToString("\n") { "${it.first}: ${it.second}" }
-                }
-                sendSms(matches.first().second, message, matches.first().first)
-            }
             DeviceTool.FETCH_WEBPAGE ->
                 WebExtractClient.read(text("url") ?: return MISSING, (number("max_chars") ?: 12_000).coerceIn(1_000, 50_000))
             DeviceTool.GET_WEATHER -> weather(text("place"), (number("days") ?: 3).coerceIn(1, 7))
@@ -327,26 +292,6 @@ class DeviceToolRunner(
             DeviceTool.CLICK_ITEM -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 service.clickItem(number("number") ?: return MISSING)
-            }
-            DeviceTool.END_CALL -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.ANSWER_PHONE_CALLS)?.let { return it }
-                extras.endCall()
-            }
-            DeviceTool.ANSWER_CALL -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.ANSWER_PHONE_CALLS)?.let { return it }
-                extras.answerCall()
-            }
-            DeviceTool.READ_CALL_LOG -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.READ_CALL_LOG)?.let { return it }
-                extras.callLog(number("limit") ?: 5, text("kind"))
-            }
-            DeviceTool.READ_SMS -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.READ_SMS)?.let { return it }
-                extras.readSms(number("limit") ?: 5)
             }
             DeviceTool.REPLY_NOTIFICATION -> {
                 val listener = AssistantNotificationListener.instance ?: return listenerDenied()
@@ -518,13 +463,6 @@ class DeviceToolRunner(
                     .putExtra(AlarmClock.EXTRA_SKIP_UI, true))
                 "status=ok\nTimer started for $seconds seconds."
             }
-            DeviceTool.DIAL -> {
-                if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-                missingPermission(Manifest.permission.CALL_PHONE)?.let { return it }
-                val phone = text("number")?.filter { it.isDigit() || it == '+' }?.takeIf { it.isNotEmpty() } ?: return MISSING
-                placeCall(phone)
-                "status=ok\nCalling $phone now."
-            }
             DeviceTool.OPEN_SETTINGS -> {
                 val action = when (text("screen")) {
                     "wifi" -> Settings.ACTION_WIFI_SETTINGS
@@ -679,69 +617,6 @@ class DeviceToolRunner(
                 .getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()
                 ?.let { it.locality ?: it.subAdminArea ?: it.adminArea }
         }.getOrNull()
-    }
-
-    /**
-     * Sends an SMS with no confirmation screen, after the checks in [SmsRules], and reports what the phone's radio said:
-     * sent, failed with a reason, or handed over but not confirmed in time. [recipient] is the contact name when known.
-     */
-    private fun attachSmsHistory() {
-        val prefs = app.getSharedPreferences("sms_rules", android.content.Context.MODE_PRIVATE)
-        SmsRules.attach(
-            load = { prefs.getString("sent_at", "").orEmpty().split(',').mapNotNull { it.toLongOrNull() } },
-            store = { times -> prefs.edit().putString("sent_at", times.joinToString(",")).apply() }
-        )
-    }
-
-    private suspend fun sendSms(number: String, message: String, recipient: String?): String {
-        if (!AccessChecks.hasTelephony(app)) return NO_TELEPHONY
-        missingPermission(Manifest.permission.SEND_SMS)?.let { return it }
-        val clean = SmsRules.cleanNumber(number)
-            ?: return "status=invalid\nThat is not a normal phone number (7 to 15 digits). No message was sent."
-        val text = message.trim()
-        if (text.length > SmsRules.MAX_CHARS) {
-            return "status=invalid\nThe message is ${text.length} characters; the limit is ${SmsRules.MAX_CHARS}. Shorten it. No message was sent."
-        }
-        attachSmsHistory()
-        if (!SmsRules.allowSend()) {
-            return "status=limit\nAlready sent ${SmsRules.MAX_PER_HOUR} messages in the last hour, so no more are sent for now."
-        }
-        val label = recipient?.let { "$it ($clean)" } ?: clean
-        val manager = if (Build.VERSION.SDK_INT >= 31) app.getSystemService(SmsManager::class.java)
-        else @Suppress("DEPRECATION") SmsManager.getDefault()
-        val parts = manager.divideMessage(text)
-        val action = "${app.packageName}.SMS_SENT.${System.nanoTime()}"
-        val outcome = CompletableDeferred<Int>()
-        var remaining = parts.size
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (resultCode != Activity.RESULT_OK) outcome.complete(resultCode)
-                else if (--remaining == 0) outcome.complete(Activity.RESULT_OK)
-            }
-        }
-        ContextCompat.registerReceiver(app, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
-        try {
-            val sent = ArrayList(parts.map {
-                PendingIntent.getBroadcast(app, 0, Intent(action).setPackage(app.packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            })
-            try {
-                manager.sendMultipartTextMessage(clean, null, parts, sent, null)
-            } catch (e: RuntimeException) {
-                SmsRules.refund()
-                return "status=failed\nAndroid refused to send the message. No message was sent."
-            }
-            val code = withTimeoutOrNull(SMS_CONFIRM_WAIT_MS) { outcome.await() }
-            return when (code) {
-                Activity.RESULT_OK -> "status=ok\nMessage sent to $label."
-                null -> "status=submitted\nThe message was passed to the phone's messaging service for $label; its confirmation has not arrived. " +
-                    "Say it was sent, but do not say it was delivered."
-                SmsManager.RESULT_ERROR_NO_SERVICE -> "status=failed\nThere is no mobile network, so the message was not sent."
-                SmsManager.RESULT_ERROR_RADIO_OFF -> "status=failed\nAirplane mode or the radio is off, so the message was not sent."
-                else -> "status=failed\nThe message could not be sent (error $code)."
-            }
-        } finally {
-            app.unregisterReceiver(receiver)
-        }
     }
 
     /** Returns a tool result asking for the Modify system settings permission, or null when granted. */
@@ -1223,18 +1098,6 @@ class DeviceToolRunner(
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    /**
-     * Places a call through Telecom, which shows its own call screen. Starting the call activity directly is blocked
-     * while Ultron is in the background (a voice session running behind another app), and the call then never started.
-     */
-    @SuppressLint("MissingPermission") // The caller checks CALL_PHONE before reaching this.
-    private fun placeCall(number: String) {
-
-        val telecom = app.getSystemService(TelecomManager::class.java)
-        if (telecom == null) start(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)))
-        else telecom.placeCall(Uri.fromParts("tel", number, null), Bundle())
-    }
-
     private fun streamFor(name: String) = when (name) {
         "media" -> AudioManager.STREAM_MUSIC
         "ring" -> AudioManager.STREAM_RING
@@ -1445,18 +1308,15 @@ class DeviceToolRunner(
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
-        const val NO_TELEPHONY = "status=unavailable\nThis phone has no calling or SMS hardware, so that action is not possible."
         /** Tools that query contacts, calendar, files, usage stats, notifications or apps. */
         val BLOCKING_TOOLS = setOf(
-            DeviceTool.SEARCH_CONTACT, DeviceTool.CALL_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
+            DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE, DeviceTool.STORAGE_MEMORY,
-            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP, DeviceTool.SEND_SMS_CONTACT,
+            DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
-            DeviceTool.READ_CALL_LOG, DeviceTool.READ_SMS, DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING,
+            DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING,
             DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE
         )
-        /** How long a tool call waits for the phone to confirm a text. Some phones confirm late or never, and the assistant must not stay busy for it. */
-        private const val SMS_CONFIRM_WAIT_MS = 4_000L
         const val MISSING ="status=invalid\nA required value was missing."
     }
 }
