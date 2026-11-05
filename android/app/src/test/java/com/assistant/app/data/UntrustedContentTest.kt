@@ -20,7 +20,7 @@ class UntrustedContentTest {
         val brightness = "status=ok\nBrightness is 40%."
         assertEquals(brightness, UntrustedContent.track(DeviceTool.GET_BRIGHTNESS, brightness))
         val failed = "status=failed\nno access"
-        assertEquals(failed, UntrustedContent.track(DeviceTool.READ_SMS, failed))
+        assertEquals(failed, UntrustedContent.track(DeviceTool.READ_SCREEN, failed))
     }
 
     @Test fun everyToolThatReturnsOutsideTextIsWarned() {
@@ -28,10 +28,5 @@ class UntrustedContentTest {
             val out = UntrustedContent.track(tool, "status=ok\nsome text")
             assertTrue("$tool", out.contains("untrusted"))
         }
-    }
-
-    @Test fun sendingAndCallingToolsAreNeverBlocked() {
-        // The guard that asked for a tap is gone; the only thing left is the warning line on results.
-        assertTrue(DeviceTool.SEND_SMS !in UntrustedContent.TOOLS && DeviceTool.DIAL !in UntrustedContent.TOOLS)
     }
 }

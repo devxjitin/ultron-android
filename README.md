@@ -111,14 +111,13 @@ Every connector is defined in code with its fixed set of tools and a **surface**
 | Device controls | flashlight, brightness, volume, ringer mode, vibrate, do not disturb, media keys, screen timeout, auto-rotate | Voice |
 | Alarms and reminders | set an alarm, set a timer, schedule, list and cancel reminders | Voice |
 | Calendar | upcoming events, conflict check, create an event | Voice |
-| Contacts | search a contact, birthdays | Voice |
+| Contacts | search a contact, birthdays, open a form to save a contact | Voice |
 | Location | current location, directions | Voice |
 | Notifications | read current notifications | Voice |
 | App usage | most-used apps, app usage time | Voice |
 | DuckDuckGo | web search with sources | Voice |
 | YouTube Search | search videos, video details, available transcripts, and channel or playlist videos through the read-only AWS MCP service using yt-dlp; no API key. YouTube may block cloud lookups | Voice |
 | YouTube Downloads | a separate private MCP on the phone: list formats/qualities and save video or audio to Downloads/Ultron using NewPipe Extractor. Media never passes through AWS | Voice |
-| Calls | dial, call a contact, create a contact | Voice only |
 | Apps and settings | open an app, the camera and settings, clipboard, show a notification | Voice only |
 | Phone navigation | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot (accessibility service) | Voice only |
 | Screen control | read and tap what is on screen, type, wait for text (accessibility service) | Voice only |

@@ -14,8 +14,8 @@ object UntrustedContent {
 
     /** Device tools whose result contains text that other people or other apps wrote. */
     val TOOLS: Set<DeviceTool> = setOf(
-        DeviceTool.READ_SCREEN, DeviceTool.LOOK_AT_SCREEN, DeviceTool.READ_NOTIFICATIONS, DeviceTool.READ_CALL_LOG,
-        DeviceTool.READ_SMS, DeviceTool.GET_CLIPBOARD, DeviceTool.NOW_PLAYING, DeviceTool.SEARCH_FILES,
+        DeviceTool.READ_SCREEN, DeviceTool.LOOK_AT_SCREEN, DeviceTool.READ_NOTIFICATIONS,
+        DeviceTool.GET_CLIPBOARD, DeviceTool.NOW_PLAYING, DeviceTool.SEARCH_FILES,
         DeviceTool.UPCOMING_EVENTS, DeviceTool.WEB_SEARCH, DeviceTool.FETCH_WEBPAGE, DeviceTool.YOUTUBE_SEARCH,
         DeviceTool.YOUTUBE_INFO, DeviceTool.YOUTUBE_TRANSCRIPT, DeviceTool.YOUTUBE_CHANNEL
     )
