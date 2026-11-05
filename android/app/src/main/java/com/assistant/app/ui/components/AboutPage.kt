@@ -152,7 +152,7 @@ fun AboutPage(
         PageLabel("Privacy")
         PageCard {
             Text(
-                "Your memories and settings are stored only on this phone. What you say is sent to the AI services you set up, to write the replies, and to the connectors you turn on.",
+                "Your memories and settings stay on this phone. What you say goes to Gemini to reply.",
                 color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 21.sp
             )
         }

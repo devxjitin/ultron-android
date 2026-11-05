@@ -60,20 +60,20 @@ fun StoragePage(
 
         PageLabel("Clear data")
         PageCard {
-            ClearRow("Cache", "Temporary files such as downloaded updates and previews.", enabled = cacheBytes > 0) {
-                pending = Triple("Clear cache?", "Temporary files will be deleted. Nothing you saved is affected.", onClearCache)
+            ClearRow("Cache", "Temporary files.", enabled = cacheBytes > 0) {
+                pending = Triple("Clear cache?", "Temporary files will be deleted.", onClearCache)
             }
             Separator()
-            ClearRow("Memory", "Everything the assistant remembers about you.", enabled = memoryCount > 0) {
-                pending = Triple("Clear memory?", "Everything the assistant remembers about you will be forgotten.", onClearMemory)
+            ClearRow("Memory", "What the assistant remembers.", enabled = memoryCount > 0) {
+                pending = Triple("Clear memory?", "Everything it remembers will be forgotten.", onClearMemory)
             }
             Separator()
-            ClearRow("Usage statistics", "The counters shown on the Usage page.", enabled = hasUsage) {
-                pending = Triple("Reset usage statistics?", "The usage counters will start again from zero.", onResetUsage)
+            ClearRow("Usage statistics", "The numbers on the Usage page.", enabled = hasUsage) {
+                pending = Triple("Reset usage statistics?", "Usage will start again from zero.", onResetUsage)
             }
         }
         Text(
-            "Clearing cannot be undone. Settings, connectors and knowledge documents are never touched here.",
+            "This cannot be undone.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, start = 4.dp)
         )
     }

@@ -247,7 +247,7 @@ fun SettingsPage(
                 HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
                 Spacer(Modifier.height(16.dp))
                     SectionLabel("Knowledge API key (optional)")
-                    Text("Leave empty to use the Gemini key above for documents and search.", color = AssistantTextMuted)
+                    Text("Optional. Empty uses the key above.", color = AssistantTextMuted)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = embeddingKeyInput,
@@ -761,13 +761,13 @@ private fun GeneralSettingsContent(
         Spacer(Modifier.height(22.dp))
         ToggleCard(
             title = "Barge-in",
-            hint = "Talk over the assistant to interrupt it. Turn off if its voice echoes back on the speaker.",
+            hint = "Talk to interrupt. Turn off if it hears itself.",
             checked = settings.bargeInEnabled, onChange = onBargeInToggled
         )
         Spacer(Modifier.height(12.dp))
         ToggleCard(
             title = "Read out notifications",
-            hint = "While a voice session is open, the assistant tells you about new phone notifications. Needs notification access. Off by default, because the text is sent to Gemini.",
+            hint = "Tells you about new notifications while you talk. The text is shared with Gemini.",
             checked = settings.announceNotificationsEnabled, onChange = onAnnounceNotificationsToggled
         )
         DefaultAssistantSection()

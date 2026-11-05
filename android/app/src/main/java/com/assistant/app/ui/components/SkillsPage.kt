@@ -9,6 +9,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.unit.Dp
 import com.assistant.app.data.OWN_SKILLS_CATEGORY
+import com.assistant.app.data.displaySummary
 import com.assistant.app.ui.theme.AssistantSelectedBg
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -103,11 +104,6 @@ fun SkillsPage(
     } else {
         val categories = skills.map { it.category }.distinct().sortedWith(compareBy({ it == OWN_SKILLS_CATEGORY }, { it }))
         Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
-            Text(
-                "A skill is a set of instructions for one kind of task. The assistant opens a skill only when your request needs it.",
-                color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 4.dp)
-            )
-            Spacer(Modifier.height(14.dp))
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                     .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentAlt)))
@@ -194,7 +190,7 @@ private fun SkillCard(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: ()
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text(entry.group.description, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp)
+        Text(entry.group.displaySummary, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp)
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!entry.builtIn) {
                 TextButton(onClick = onEdit) { Text("Edit", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
@@ -240,7 +236,7 @@ private fun SkillDetail(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: 
                 }
             }
             PageLabel("About")
-            Text(group.description, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+            Text(group.displaySummary, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
             if (group.tasks.isNotEmpty()) {
                 PageLabel("What it can do (${group.tasks.size})")
                 group.tasks.forEach { task ->
@@ -250,7 +246,7 @@ private fun SkillDetail(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: 
                             .border(BorderStroke(1.dp, AssistantOutline), shape).padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
                         Text(task.name.replace('_', ' ').replaceFirstChar { it.uppercase() }, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(task.description, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+                        Text(task.displaySummary(), color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
                     }
                 }
             }
@@ -283,7 +279,7 @@ private fun SkillEditor(
             fileName to text
         }.getOrNull()
         if (read == null || read.second.isBlank()) {
-            error = "Could not read that file. Upload a .md or .txt file with text in it."
+            error = "Could not read that file. Use a .md or .txt file."
         } else {
             val draft = SkillParser.draftFromMarkdown(read.second, read.first)
             name = draft.name; description = draft.description; body = draft.instruction
@@ -299,8 +295,8 @@ private fun SkillEditor(
                     Text("Upload .md file")
                 }
                 SkillField(name, { name = it.take(48) }, "Name", "e.g. trip-planner", enabled = entry == null, singleLine = true)
-                SkillField(description, { description = it.take(300) }, "Description", "when to use it, one line")
-                SkillField(body, { body = it.take(MAX_SKILL_BODY_CHARS) }, "Instruction", "what to do, step by step", minLines = 6)
+                SkillField(description, { description = it.take(300) }, "Description", "What it is for")
+                SkillField(body, { body = it.take(MAX_SKILL_BODY_CHARS) }, "Instruction", "What the assistant should do", minLines = 6)
                 error?.let { Text(it, color = AssistantError, fontSize = 13.sp) }
             }
         },

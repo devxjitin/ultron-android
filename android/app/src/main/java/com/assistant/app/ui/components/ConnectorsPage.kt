@@ -352,8 +352,8 @@ fun ConnectorsPage(
             text = {
                 Text(
                     when (c.kind) {
-                        is Kind.Online -> "The assistant stops using this service."
-                        is Kind.Local -> "The assistant stops using these tools. Android's own permission or access stays until you remove it in the phone's settings."
+                        is Kind.Online -> "The assistant stops using it."
+                        is Kind.Local -> "The assistant stops using it. Android permissions stay until you remove them in Settings."
                     }
                 )
             },
@@ -494,14 +494,6 @@ private fun ConnectorDetail(
                 DetailSection("Your data", it.privacy)
             }
             SectionHeading("Tools" + if (tools.isNotEmpty()) " (${tools.size})" else "")
-            Text(
-                "When this connector is added, the assistant can use all of these tools.",
-                color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-            )
-            if (tools.isEmpty()) {
-                Text("The tool list appears here after you sign in.", color = AssistantTextMuted, fontSize = 14.sp,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
-            }
             tools.forEach { tool ->
                 val shape = RoundedCornerShape(14.dp)
                 Column(
