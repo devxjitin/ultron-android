@@ -42,9 +42,7 @@ const val DEFAULT_ASSISTANT_NAME = "Ultron"
  * Connectors that are on before the user has changed anything. Navigation and screen control let the assistant read and
  * tap other apps, so they stay off until the user adds them in Connectors.
  */
-val DEFAULT_CONNECTOR_IDS = listOf(
-    "device_info", "device_controls", "alarms", "apps_settings", "duckduckgo", "web_reader", "weather"
-)
+val DEFAULT_CONNECTOR_IDS: List<String> get() = ConnectorRegistry.defaultIds
 
 /** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
 private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
@@ -133,8 +131,6 @@ data class AssistantSettings(
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
-    /** Off by default: a model call after chats to write a title costs tokens; without it the title is the first question. */
-    /** Off by default: redrafting the assistant's instructions from the documents costs tokens on every document change. */
 ) {
     /** Names of [githubTools] the app uses: only the ones the server marks read-only. */
     val enabledGithubTools: Set<String> get() = effectiveMcpTools(githubTools)

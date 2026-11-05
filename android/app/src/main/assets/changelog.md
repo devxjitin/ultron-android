@@ -10,6 +10,7 @@ notes and the About page all read it from here. A date after the version is opti
 - Settings has a new "Read out notifications" switch. When it is on, the assistant tells you about new phone notifications during a voice session. It is off by default.
 
 ### Changed
+- Connectors are grouped into Essentials, Search & media, Personal data, Communication, Phone control and Accounts. Phone control carries a warning.
 - Ultron always uses your own Gemini API key for voice, documents and search. Add it in Developer settings.
 - The Knowledge API key is optional. Leave it empty and documents and search use your Gemini key.
 
