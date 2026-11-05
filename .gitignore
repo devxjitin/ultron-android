@@ -20,11 +20,10 @@ mcp/youtube-search/function.zip
 # MCP config containing secret URL
 .mcp.json
 
-mcp/google-workspace/function.zip
-mcp/google-workspace/.access_token
-
 mcp/ultron-updates/function.zip
 mcp/ultron-updates/.access_token
+
+
 
 # Built APKs and device screenshots
 *.apk
