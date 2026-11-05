@@ -415,8 +415,8 @@ enum class DeviceTool(
 
 
     WEB_SEARCH(
-        "web_search", "Search the web", "Look up the latest information with DuckDuckGo.",
-        "Searches the web with DuckDuckGo and returns the top results with title, address and excerpt. " +
+        "web_search", "Search the web", "Look up the latest information on the web.",
+        "Searches the web and returns the top results with title, address and excerpt. " +
             "Use it for recent or changing facts: news, prices, scores, releases, weather-like or time-sensitive questions, " +
             "and anything you are not sure is up to date. Answer from the results and mention the source by name. " +
             "Use fetch_webpage on one result address when you need the full page.",
