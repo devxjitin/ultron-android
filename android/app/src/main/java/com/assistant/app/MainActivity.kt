@@ -357,9 +357,6 @@ class MainActivity : ComponentActivity() {
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
                         onClearMemory = { viewModel.onClearMemory() },
                         onRestoreMemory = { viewModel.onRestoreMemory(it) },
-                        onStartGithubSignIn = { viewModel.onStartGithubSignIn() },
-                        onCancelGithubSignIn = { viewModel.onCancelGithubSignIn() },
-                        onDisconnectGithub = { viewModel.onDisconnectGithub() },
                         onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
                         onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
                         onRequestPermission = {

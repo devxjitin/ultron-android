@@ -1,10 +1,8 @@
 package com.assistant.app.network
 
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.GITHUB_TOOL_PREFIX
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
-import com.assistant.app.data.McpToolSpec
 import com.assistant.app.data.SkillGroup
 import com.assistant.app.data.USE_SKILL_TOOL
 import org.json.JSONArray
@@ -47,20 +45,6 @@ object ToolDeclarations {
                 .put("properties", JSONObject().put("query", JSONObject().put("type", "STRING").put("description", "The user's question, in their own words.")))
                 .put("required", JSONArray().put("query"))
         )
-
-    /** A tool from a connected MCP server, declared under a prefixed name so it cannot clash with device tools. */
-    fun mcp(
-        tool: McpToolSpec,
-        prefix: String = GITHUB_TOOL_PREFIX
-    ): JSONObject {
-        val analysis = McpSchema.analyze(tool.schema)
-        val note = if (analysis.issues.isEmpty()) "" else " (Argument types are simplified for this model: ${analysis.issues.joinToString()}.)"
-        val declaration = JSONObject()
-            .put("name", prefix + tool.name)
-            .put("description", tool.description.take(400) + note)
-        analysis.parameters?.let { declaration.put("parameters", it) }
-        return declaration
-    }
 
     /**
      * use_skill: opens one skill. Without a task it lists the skill's allowed tasks; with a task it loads only that task's

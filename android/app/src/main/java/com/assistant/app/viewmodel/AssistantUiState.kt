@@ -1,6 +1,5 @@
 package com.assistant.app.viewmodel
 
-import com.assistant.app.network.GithubDeviceCode
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
@@ -54,8 +53,6 @@ data class AssistantUiState(
     val memories: List<MemoryItem> = emptyList(),
     /** Notes the assistant removed itself, newest last; the Memory page offers to restore them. */
     val removedMemories: List<MemoryItem> = emptyList(),
-    /** Set while a GitHub sign-in waits for the user to approve it on github.com. */
-    val githubDeviceCode: GithubDeviceCode? = null,
     val errorMessage: String? = null,
     /** Name of the tool the assistant is running right now (or just ran), shown on the home screen. */
     val activeTool: String? = null,

@@ -56,7 +56,6 @@ class ConnectorsTest {
         assertEquals(ConnectorCategory.PHONE_CONTROL, category("screen"))
         assertEquals(ConnectorCategory.PHONE_CONTROL, category("navigation"))
         assertTrue(ConnectorCategory.PHONE_CONTROL.advanced)
-        assertEquals(ConnectorCategory.ACCOUNTS, category("github"))
     }
 
     @Test fun everyCategoryHasConnectors() {

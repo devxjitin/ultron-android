@@ -118,13 +118,12 @@ Every connector is defined in code with its fixed set of tools and a **surface**
 | DuckDuckGo | web search with sources | Voice |
 | YouTube Search | search videos, video details, available transcripts, and channel or playlist videos through the read-only AWS MCP service using yt-dlp; no API key. YouTube may block cloud lookups | Voice |
 | YouTube Downloads | a separate private MCP on the phone: list formats/qualities and save video or audio to Downloads/Ultron using NewPipe Extractor. Media never passes through AWS | Voice |
-| GitHub | repositories, issues, pull requests (sign in with GitHub, OAuth device flow) | Voice |
 | Calls | dial, call a contact, create a contact | Voice only |
 | Apps and settings | open an app, the camera and settings, clipboard, show a notification | Voice only |
 | Phone navigation | back, home, recents, notification shade, quick settings, scroll, lock screen, screenshot (accessibility service) | Voice only |
 | Screen control | read and tap what is on screen, type, wait for text (accessibility service) | Voice only |
 
-Tap any connector card to open its own page: what it does, where it runs, what it needs, where your data goes and every tool it has (for GitHub, the live tool list after sign-in).
+Tap any connector card to open its own page: what it does, where it runs, what it needs, where your data goes and every tool it has.
 
 A connector whose sign-in expires shows *Reconnect* and *Remove* instead of failing silently.
 
@@ -164,7 +163,6 @@ flowchart LR
     YTD -- "Media directly to phone" --> YT["YouTube"]
     Tools -- "Authenticated MCP over HTTPS" --> YTS["AWS YouTube Search<br/>yt-dlp, metadata only"]
     YTS --> YT
-    Tools -- "MCP over HTTPS" --> GH["GitHub MCP"]
     VM -- "update check" --> UP["Update Lambda"]
     UP --> S3[("Private S3 bucket<br/>Transfer Acceleration")]
 ```
@@ -184,7 +182,6 @@ memory, knowledge search and connectors.
 | Retrieval | `gemini-embedding-2` vectors, BM25, reciprocal rank fusion, ObjectBox |
 | Storage | Jetpack DataStore, ObjectBox, `EncryptedSharedPreferences` (AES-256) |
 | Networking | OkHttp 4, Kotlin coroutines and Flow |
-| Auth | GitHub OAuth device flow |
 | Connectors | Model Context Protocol over HTTPS (streamable HTTP, JSON responses) |
 | Backend | AWS Lambda (Python 3.14), API Gateway, S3 with Transfer Acceleration |
 | Build | Gradle (AGP 8.5.2), Android CLI for SDK, install and run, R8 shrinking for release and OTA builds |
@@ -286,7 +283,6 @@ All build-time values live in `android/local.properties` and are exposed to the 
 | Key | Required | Purpose |
 |---|---|---|
 | `sdk.dir` | if `ANDROID_HOME` is unset | Path to the Android SDK. |
-| `GITHUB_CLIENT_ID` | optional | Public client id of a GitHub App (device flow on, token expiry off, read-only permissions, installed on your repositories) for *Sign in with GitHub*. |
 
 **Gemini through Firebase.** If `android/app/google-services.json` exists (git-ignored), helper calls use the Firebase AI Logic SDK and the voice session connects through Firebase's endpoint, so no Gemini key is needed in the app. A key typed under Developer settings still wins and uses the direct Gemini API. Embeddings (knowledge base) are not offered by Firebase and keep using their own key.
 | `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | release builds | Release signing configuration. |

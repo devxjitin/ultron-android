@@ -132,9 +132,6 @@ fun AssistantScreen(
     onDeleteMemory: (String) -> Unit = {},
     onClearMemory: () -> Unit = {},
     onRestoreMemory: (String) -> Unit = {},
-    onStartGithubSignIn: () -> Unit = {},
-    onCancelGithubSignIn: () -> Unit = {},
-    onDisconnectGithub: () -> Unit = {},
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
     onRequestConnectorPermissions: (List<String>) -> Unit = {},
     onDismissSettings: () -> Unit,
@@ -296,13 +293,7 @@ fun AssistantScreen(
             if (tab == NavTab.CONNECTORS) {
                 ConnectorsPage(
                     issues = uiState.connectorIssues,
-                    githubLogin = uiState.settings.githubLogin,
-                    deviceCode = uiState.githubDeviceCode,
                     enabledTools = uiState.settings.enabledDeviceTools,
-                    onStartGithubSignIn = onStartGithubSignIn,
-                    onCancelGithubSignIn = onCancelGithubSignIn,
-                    onDisconnectGithub = onDisconnectGithub,
-                    githubTools = uiState.settings.githubTools,
                     onToolsEnabled = onConnectorToolsEnabled,
                     onRequestPermissions = onRequestConnectorPermissions,
                     modifier = Modifier.padding(top = topReserve)

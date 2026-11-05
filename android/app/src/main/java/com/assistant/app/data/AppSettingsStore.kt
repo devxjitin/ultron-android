@@ -49,13 +49,6 @@ private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
 const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
 const val MAX_GREETING_LENGTH = 60
-/**
- * OAuth scope requested at GitHub sign-in: the profile only. The app never writes to GitHub, so it does not ask for the
- * "repo" scope (which also grants write access); public repositories are readable with this token. Private repositories
- * need a GitHub App with read-only permissions as the sign-in client; a GitHub App ignores this value.
- */
-const val GITHUB_OAUTH_SCOPE = "read:user"
-
 const val DEFAULT_RETRIEVAL_CHUNK_LIMIT = 5
 const val MIN_RETRIEVAL_CHUNK_LIMIT = 1
 const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
@@ -101,10 +94,6 @@ data class AssistantSettings(
     /** Gemini Live model id; one of [AssistantOptions.liveModels]. */
     val liveModel: String = AssistantOptions.defaultLiveModel,
     val voiceName: String = AssistantOptions.defaultVoice,
-    /** GitHub account the connector is signed in as; empty when GitHub is not connected. */
-    val githubLogin: String = "",
-    /** Tools GitHub's MCP server offered at the last refresh, cached so a session can start offline. */
-    val githubTools: List<McpToolSpec> = emptyList(),
     val micSensitivity: MicSensitivity = MicSensitivity.MEDIUM,
     /** BCP-47 code for one of the kiosk's supported languages. */
     val languageCode: String = AssistantOptions.defaultLanguageCode,
@@ -131,17 +120,12 @@ data class AssistantSettings(
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
-) {
-    /** Names of [githubTools] the app uses: only the ones the server marks read-only. */
-    val enabledGithubTools: Set<String> get() = effectiveMcpTools(githubTools)
-}
+)
 
 /** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
 class AppSettingsStore(private val context: Context) {
 
     private val liveModelKey = stringPreferencesKey("live_model")
-    private val githubLoginKey = stringPreferencesKey("github_login")
-    private val githubToolsKey = stringPreferencesKey("github_mcp_tools")
     private val voiceKey = stringPreferencesKey("voice_name")
     private val micSensitivityKey = stringPreferencesKey("mic_sensitivity")
     private val languageCodeKey = stringPreferencesKey("language_code")
@@ -166,8 +150,6 @@ class AppSettingsStore(private val context: Context) {
             voiceName = prefs[voiceKey]
                 ?.takeIf(AssistantOptions::isApprovedVoice)
                 ?: AssistantOptions.defaultVoice,
-            githubLogin = prefs[githubLoginKey].orEmpty(),
-            githubTools = decodeMcpTools(prefs[githubToolsKey]),
             micSensitivity = MicSensitivity.fromStoredValue(prefs[micSensitivityKey]),
             languageCode = prefs[languageCodeKey]
                 ?.takeIf(AssistantOptions::isApprovedLanguage)
@@ -190,16 +172,6 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setLiveModel(id: String) {
         if (!AssistantOptions.isApprovedLiveModel(id)) throw UserInputException("Choose a supported model.")
         context.settingsDataStore.edit { it[liveModelKey] = id }
-    }
-
-    suspend fun setGithubTools(tools: List<McpToolSpec>) {
-        context.settingsDataStore.edit { if (tools.isEmpty()) it.remove(githubToolsKey) else it[githubToolsKey] = encodeMcpTools(tools) }
-    }
-
-    suspend fun setGithubLogin(login: String?) {
-        context.settingsDataStore.edit {
-            if (login.isNullOrBlank()) it.remove(githubLoginKey) else it[githubLoginKey] = login
-        }
     }
 
     suspend fun setVoice(voiceName: String) {
