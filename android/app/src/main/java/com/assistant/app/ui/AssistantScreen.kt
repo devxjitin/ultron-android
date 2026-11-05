@@ -196,6 +196,7 @@ fun AssistantScreen(
             AppDrawerContent(
                 selected = currentTab,
                 assistantName = uiState.settings.assistantName,
+                onClose = { scope.launch { drawerState.close() } },
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
