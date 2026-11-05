@@ -89,12 +89,15 @@ jobs:
         run: |
           python mcp/web-extract/build.py
           python mcp/youtube-search/build.py
+          python mcp/web-search/build.py
       - name: Import packaged Linux dependencies
         run: |
           python -m zipfile -e mcp/web-extract/function.zip "$RUNNER_TEMP/web-extract-py314"
           PYTHONPATH="$RUNNER_TEMP/web-extract-py314" python -c "import lambda_function, trafilatura, lxml.etree; assert lambda_function._metadata(b'<html><head><title>Python 3.14</title></head><body>Example</body></html>', 'https://example.com')['title'] == 'Python 3.14'"
           python -m zipfile -e mcp/youtube-search/function.zip "$RUNNER_TEMP/youtube-py314"
           PYTHONPATH="$RUNNER_TEMP/youtube-py314" python -c "import lambda_function, yt_dlp; assert len(lambda_function.TOOLS) == 4"
+          python -m zipfile -e mcp/web-search/function.zip "$RUNNER_TEMP/web-search-py314"
+          PYTHONPATH="$RUNNER_TEMP/web-search-py314" python -c "import lambda_function, ddgs; assert len(lambda_function.TOOLS) == 1"
 
   web:
     needs: changes

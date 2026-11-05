@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.4.0 - 2026-11-05
+
+### Changed
+- Web search now runs through Ultron's server using DDGS, with more search engines behind it. If the server cannot answer, your phone searches DuckDuckGo itself.
+- The DuckDuckGo connector is now called Web search.
+
 ## 1.3.0 - 2026-11-05
 
 ### Changed

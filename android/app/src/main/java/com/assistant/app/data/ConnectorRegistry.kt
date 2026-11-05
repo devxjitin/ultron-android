@@ -99,8 +99,8 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.GET_WEATHER)
         ),
         ConnectorSpec(
-            id = "duckduckgo", name = "DuckDuckGo", description = "Search the web.",
-            subtitle = "Free, no sign-in", category = ConnectorCategory.SEARCH_MEDIA, kind = ConnectorKind.ONLINE,
+            id = "duckduckgo", name = "Web search", description = "Search the web.",
+            subtitle = "No sign-in", category = ConnectorCategory.SEARCH_MEDIA, kind = ConnectorKind.ONLINE,
             permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
             tools = listOf(DeviceTool.WEB_SEARCH)
         ),
@@ -229,8 +229,8 @@ object ConnectorRegistry {
         "duckduckgo" to ConnectorInfo(
             "Searches the web and answers from the results.",
             "Nothing to allow.",
-            "Your search words go to DuckDuckGo.",
-            "Your phone"
+            "Your search words go to Ultron's server, which asks search engines. If it is down, your phone asks DuckDuckGo itself.",
+            "Ultron's server"
         ),
         "web_reader" to ConnectorInfo(
             "Reads a web page and gives you the main text.",
