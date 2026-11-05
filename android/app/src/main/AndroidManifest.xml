@@ -28,7 +28,7 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <!-- Reminders must ring on the minute. USE_EXACT_ALARM is granted at install on Android 13+, so nobody has to tap an
-         "Alarms & reminders" switch; SCHEDULE_EXACT_ALARM only covers Android 12. -->
+         "Reminders" switch; SCHEDULE_EXACT_ALARM only covers Android 12. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />

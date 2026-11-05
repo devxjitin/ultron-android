@@ -81,10 +81,16 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.FLASHLIGHT, DeviceTool.BRIGHTNESS, DeviceTool.GET_BRIGHTNESS, DeviceTool.VOLUME, DeviceTool.GET_VOLUME, DeviceTool.GET_RINGER, DeviceTool.SET_RINGER, DeviceTool.VIBRATE, DeviceTool.SET_DND, DeviceTool.MEDIA_CONTROL, DeviceTool.SCREEN_TIMEOUT, DeviceTool.AUTO_ROTATE, DeviceTool.OPEN_PANEL)
         ),
         ConnectorSpec(
-            id = "alarms", name = "Alarms & reminders", description = "Set alarms, timers and reminders.",
+            id = "alarms", name = "Alarms & timers", description = "Set alarms and timers.",
             subtitle = "On your phone", category = ConnectorCategory.ESSENTIALS, kind = ConnectorKind.PHONE,
             permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
-            tools = listOf(DeviceTool.SET_ALARM, DeviceTool.LIST_ALARMS, DeviceTool.CANCEL_ALARM, DeviceTool.MODIFY_ALARM, DeviceTool.SET_TIMER, DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER, DeviceTool.MODIFY_REMINDER)
+            tools = listOf(DeviceTool.SET_ALARM, DeviceTool.LIST_ALARMS, DeviceTool.CANCEL_ALARM, DeviceTool.MODIFY_ALARM, DeviceTool.SET_TIMER)
+        ),
+        ConnectorSpec(
+            id = "reminders", name = "Reminders", description = "Get reminded at a time, with a sound.",
+            subtitle = "On your phone", category = ConnectorCategory.ESSENTIALS, kind = ConnectorKind.PHONE,
+            permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
+            tools = listOf(DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER, DeviceTool.MODIFY_REMINDER)
         ),
         ConnectorSpec(
             id = "apps_settings", name = "Apps & settings", description = "Open apps and settings, use the clipboard.",
@@ -197,8 +203,13 @@ object ConnectorRegistry {
             "Nothing leaves your phone."
         ),
         "alarms" to ConnectorInfo(
-            "Sets alarms, timers and reminders, and lets you change or cancel them.",
-            "Keep notifications on for reminders.",
+            "Sets alarms and timers in your clock app, and lets you change or cancel alarms.",
+            "Nothing to allow.",
+            "Nothing leaves your phone."
+        ),
+        "reminders" to ConnectorInfo(
+            "Reminds you at a time or after a while, once or every day or week. It rings and vibrates.",
+            "Keep notifications on for Ultron.",
             "Nothing leaves your phone."
         ),
         "calendar" to ConnectorInfo(

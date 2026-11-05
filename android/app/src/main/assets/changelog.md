@@ -6,6 +6,7 @@ notes and the About page all read it from here. A date after the version is opti
 ## 1.6.0 - 2026-11-05
 
 ### Changed
+- Alarms and Reminders are now two separate connectors, each with its own switch.
 - Reminders now pop up with a sound and vibration, and stay until you dismiss them.
 - Reminders can be set for a clock time or a date, up to a year ahead, and can repeat daily or weekly.
 - Reminders go off on the exact minute, with nothing to switch on.
