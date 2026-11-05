@@ -114,10 +114,14 @@ object AutomationEngine {
 
     fun listScheduled(context: Context): String {
         val items = AutomationStore(context).schedules().sortedBy { it.atMillis }
-        if (items.isEmpty()) return "status=empty\nNothing is scheduled."
+        if (items.isEmpty()) return "status=empty\nNo reminders are waiting."
         return "status=ok\n" + items.joinToString("\n") {
-            "#${it.id}: ${it.toolName} ${it.argsJson} at ${format(it.atMillis)}" +
-                if (it.repeatMinutes > 0) ", every ${it.repeatMinutes} min" else ""
+            // A reminder reads as its own text; anything else saved by an older build keeps its tool name.
+            val what = if (it.toolName == DeviceTool.SHOW_NOTIFICATION.functionName) {
+                runCatching { JSONObject(it.argsJson).optString("message") }.getOrDefault("").ifBlank { "Reminder" }
+            } else it.toolName
+            "#${it.id}: \"$what\" at ${format(it.atMillis)}" +
+                when (it.repeatMinutes) { 0 -> ""; 1_440 -> ", every day"; 10_080 -> ", every week"; else -> ", every ${it.repeatMinutes} min" }
         }
     }
 
