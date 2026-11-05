@@ -5,6 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -68,7 +72,7 @@ enum class NavTab(val label: String, val icon: ImageVector) {
 /** Height of the slim bar at the top of every page; pages reserve this much space under it. */
 val AppTopBarHeight = 56.dp
 
-private val RowHeight = 44.dp
+private val RowHeight = 52.dp
 
 @Composable
 fun AppDrawerContent(
@@ -76,75 +80,102 @@ fun AppDrawerContent(
     assistantName: String,
     onSelect: (NavTab) -> Unit,
     modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
 ) {
-    Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 18.dp)) {
-        DrawerHeader(assistantName)
-        Spacer(Modifier.height(20.dp))
-        NavTab.entries.forEach { tab ->
-            // Small captions group the working pages, the preferences and the app info.
-            when (tab) {
-                NavTab.HOME -> Unit // Home sits on top, before any caption.
-                NavTab.KNOWLEDGE -> NavSection("Workspace")
-                NavTab.SETTINGS -> NavSection("Preferences")
-                NavTab.DEVELOPER -> NavSection("App")
-                else -> Unit
+    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
+        DrawerHeader(assistantName, onClose)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            Spacer(Modifier.height(10.dp))
+            NavTab.entries.filter { it != NavTab.SETTINGS }.forEach { tab ->
+                // Plain captions group the working pages, the numbers and the app info.
+                when (tab) {
+                    NavTab.USAGE -> NavSection("Insights")
+                    NavTab.DEVELOPER -> NavSection("App")
+                    else -> Unit
+                }
+                NavRow(tab, tab == selected) { onSelect(tab) }
             }
-            NavRow(tab, tab == selected) { onSelect(tab) }
+            Spacer(Modifier.height(16.dp))
         }
+        DrawerFooter(assistantName, selected == NavTab.SETTINGS) { onSelect(NavTab.SETTINGS) }
     }
 }
 
 @Composable
-private fun NavSection(title: String, first: Boolean = false) {
+private fun NavSection(title: String) {
     Text(
-        title.uppercase(),
+        title,
         color = AssistantTextMuted,
-        fontSize = 10.5.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.2.sp,
-        modifier = Modifier.padding(start = 12.dp, top = if (first) 0.dp else 16.dp, bottom = 6.dp)
+        fontSize = 15.sp,
+        modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 8.dp)
     )
 }
 
 @Composable
 private fun NavRow(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(50)
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 1.5.dp).height(RowHeight).clip(shape)
-            .then(
-                if (selected) Modifier.background(AssistantSelectedBg, shape)
-                    .border(BorderStroke(1.dp, AssistantAccent.copy(alpha = 0.35f)), shape)
-                else Modifier
-            )
-            .clickable(onClick = onClick).padding(horizontal = 12.dp),
+        Modifier.fillMaxWidth().height(RowHeight).clip(shape)
+            .then(if (selected) Modifier.background(AssistantSurfaceElevated, shape) else Modifier)
+            .clickable(onClick = onClick).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(tab.icon, contentDescription = null, modifier = Modifier.size(20.dp),
-            tint = if (selected) AssistantAccent else AssistantTextMuted)
-        Spacer(Modifier.size(14.dp))
+        Icon(tab.icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = AssistantTextPrimary)
+        Spacer(Modifier.size(22.dp))
         Text(
             tab.label,
-            color = if (selected) AssistantAccent else AssistantTextSecondary,
-            fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = AssistantTextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
     }
 }
 
+/** Large page title on the left and a close button on the right, like the rest of the menu: flat, no borders. */
 @Composable
-private fun DrawerHeader(assistantName: String) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        AppIconTile(44.dp)
-        Spacer(Modifier.size(14.dp))
+private fun DrawerHeader(assistantName: String, onClose: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().height(72.dp).padding(start = 28.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             assistantName,
             color = AssistantTextPrimary,
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (onClose != null) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Close menu", tint = AssistantTextPrimary, modifier = Modifier.size(28.dp))
+            }
+        }
+    }
+}
+
+/** Pinned at the bottom: the app icon and name on the left, a settings button on the right. */
+@Composable
+private fun DrawerFooter(assistantName: String, settingsSelected: Boolean, onSettings: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        AppIconTile(52.dp)
+        Spacer(Modifier.size(16.dp))
+        Text(
+            assistantName,
+            color = AssistantTextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(
+            onClick = onSettings,
+            modifier = Modifier.then(if (settingsSelected) Modifier.background(AssistantSurfaceElevated, CircleShape) else Modifier)
+        ) {
+            Icon(NavTab.SETTINGS.icon, contentDescription = "Settings", tint = AssistantTextSecondary, modifier = Modifier.size(26.dp))
+        }
     }
 }
 
@@ -165,15 +196,10 @@ fun AppTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showMenuButton) {
-            Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(AssistantSurfaceElevated)
-                    .border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(13.dp))
-                    .clickable(onClick = onMenuClick),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Menu, contentDescription = "Open menu", tint = AssistantTextPrimary, modifier = Modifier.size(20.dp))
+            IconButton(onClick = onMenuClick) {
+                Icon(Icons.Filled.Menu, contentDescription = "Open menu", tint = AssistantTextPrimary, modifier = Modifier.size(26.dp))
             }
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(4.dp))
         } else {
             Spacer(Modifier.size(12.dp))
         }
