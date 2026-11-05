@@ -127,3 +127,32 @@ fun CategoryChips(categories: List<String>, selected: String?, onSelect: (String
         }
     }
 }
+
+/** A row of buttons where exactly one choice (by id) is picked; unlike [CategoryChips] there is no "All". */
+@Composable
+fun ChoiceChips(options: List<Pair<String, String>>, selectedId: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.forEach { (id, label) ->
+            val on = id == selectedId
+            FilterChip(
+                selected = on,
+                onClick = { onSelect(id) },
+                label = { Text(label, fontSize = 13.sp) },
+                shape = RoundedCornerShape(50),
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = AssistantFieldBackground,
+                    labelColor = AssistantTextSecondary,
+                    selectedContainerColor = AssistantSelectedBg,
+                    selectedLabelColor = AssistantAccent
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true, selected = on,
+                    borderColor = AssistantOutline, selectedBorderColor = AssistantAccent
+                )
+            )
+        }
+    }
+}

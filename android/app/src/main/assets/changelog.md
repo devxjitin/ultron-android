@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.5.0 - 2026-11-05
+
+### Changed
+- The Usage page is simpler: talk time, conversations, messages and actions at a glance, a chart you can tap, and how this period compares with the last one.
+- Usage shows what the assistant was used for. Prices and token counts are gone.
+- The Connectors page no longer repeats its title.
+
 ## 1.2.0 - 2026-11-05
 
 ### Added
