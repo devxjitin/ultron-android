@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantSelectedBg
+import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantSurface
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
@@ -89,4 +94,36 @@ fun formatBytes(bytes: Long): String = when {
     bytes < 1024 * 1024 -> String.format(Locale.US, "%.0f KB", bytes / 1024.0)
     bytes < 1024L * 1024 * 1024 -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024))
     else -> String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024 * 1024))
+}
+
+/**
+ * A row of category buttons. [selected] null means "All". Tapping the chosen category again goes back to All.
+ */
+@Composable
+fun CategoryChips(categories: List<String>, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+    if (categories.size < 2) return
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        (listOf<String?>(null) + categories).forEach { category ->
+            val on = category == selected
+            FilterChip(
+                selected = on,
+                onClick = { onSelect(if (on) null else category) },
+                label = { Text(category ?: "All", fontSize = 13.sp) },
+                shape = RoundedCornerShape(50),
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = AssistantFieldBackground,
+                    labelColor = AssistantTextSecondary,
+                    selectedContainerColor = AssistantSelectedBg,
+                    selectedLabelColor = AssistantAccent
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true, selected = on,
+                    borderColor = AssistantOutline, selectedBorderColor = AssistantAccent
+                )
+            )
+        }
+    }
 }

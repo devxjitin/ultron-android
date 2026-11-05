@@ -7,18 +7,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 /** One instruction set: a short [description] the model sees, and a [body] that is loaded only when the model asks for it. */
-data class Skill(val name: String, val description: String, val body: String)
+data class Skill(val name: String, val description: String, val body: String, val category: String = "")
 
 /**
  * A built-in skill, grouped like an MCP server: the model always sees its [description], and its [tasks] only after it opens
  * the skill. [body] holds notes shared by every task; a skill without tasks is a single instruction set and [body] is it.
  */
-data class SkillGroup(val name: String, val description: String, val body: String, val tasks: List<Skill>)
+data class SkillGroup(val name: String, val description: String, val body: String, val tasks: List<Skill>, val category: String = "")
 
 const val USE_SKILL_TOOL = "use_skill"
 /** Most characters of one skill body returned to the model. */
 const val MAX_SKILL_BODY_CHARS = 8_000
 private const val MAX_SKILL_DESCRIPTION_CHARS = 300
+const val OWN_SKILLS_CATEGORY = "My skills"
 /** Skills that stay on: the assistant relies on them to describe itself honestly. */
 private val LOCKED_SKILLS = setOf("ultron-features")
 
@@ -45,7 +46,8 @@ object SkillParser {
         val description = fields["description"]?.takeIf { it.isNotBlank() }?.take(MAX_SKILL_DESCRIPTION_CHARS) ?: return null
         val body = lines.drop(bodyStart).joinToString("\n").trim().take(MAX_SKILL_BODY_CHARS)
         if (body.isEmpty() && !allowEmptyBody) return null
-        return Skill(name, description, body)
+        val category = fields["category"]?.trim()?.take(30).orEmpty()
+        return Skill(name, description, body, category)
     }
 }
 
@@ -84,6 +86,8 @@ fun SkillParser.draftFromMarkdown(text: String, fileName: String): SkillDraft {
  */
 data class SkillEntry(val group: SkillGroup, val builtIn: Boolean, val enabled: Boolean = true) {
     val locked: Boolean get() = builtIn && group.name in LOCKED_SKILLS
+    /** The group the Skills page files it under; the user's own skills are always in [OWN_SKILLS_CATEGORY]. */
+    val category: String get() = if (!builtIn) OWN_SKILLS_CATEGORY else group.category.ifBlank { "Other" }
 }
 
 /**
@@ -118,7 +122,7 @@ object SkillRegistry {
             val tasks = runCatching { app.assets.list("skills/$dir/tasks")?.sorted().orEmpty() }.getOrDefault(emptyList())
                 .filter { it.endsWith(".md") }
                 .mapNotNull { file -> readAsset(app, "skills/$dir/tasks/$file")?.let { SkillParser.parse(it, file.removeSuffix(".md")) } }
-            SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())?.let { builtIn[it.name] = SkillGroup(it.name, it.description, it.body, tasks) }
+            SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())?.let { builtIn[it.name] = SkillGroup(it.name, it.description, it.body, tasks, it.category) }
         }
         val own = userDir(app).listFiles()?.sortedBy { it.name }.orEmpty().mapNotNull { dir ->
             runCatching { File(dir, "SKILL.md").readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }

@@ -103,7 +103,7 @@ fun UsagePage(
                             )
                         }
                         Text(
-                            "in ${compactNumber(total.modelInput[model] ?: 0L)}  ·  out ${compactNumber(total.modelOutput[model] ?: 0L)}",
+                            "in ${compactNumber(total.modelInput[model] ?: 0L)}, out ${compactNumber(total.modelOutput[model] ?: 0L)}",
                             color = AssistantTextSecondary, fontSize = 13.sp
                         )
                     }

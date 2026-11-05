@@ -196,6 +196,7 @@ fun ConnectorsPage(
     }
 
     var query by remember { mutableStateOf("") }
+    var categoryFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var disconnecting by remember { mutableStateOf<Connector?>(null) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -320,6 +321,12 @@ fun ConnectorsPage(
             ),
             modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
         )
+        Spacer(Modifier.height(10.dp))
+        CategoryChips(
+            categories = ConnectorCategory.entries.filter { c -> Catalog.any { it.category == c } }.map { it.title },
+            selected = categoryFilter,
+            onSelect = { categoryFilter = it }
+        )
         Spacer(Modifier.height(14.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             if (shown.isEmpty()) {
@@ -327,7 +334,7 @@ fun ConnectorsPage(
             }
             ConnectorCategory.entries.forEach { category ->
                 val inGroup = shown.filter { it.category == category }
-                if (inGroup.isNotEmpty()) {
+                if (inGroup.isNotEmpty() && (categoryFilter == null || categoryFilter == category.title)) {
                     SectionHeading(category.title)
                     Text(category.summary, color = if (category.advanced) AssistantError else AssistantTextMuted,
                         fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
