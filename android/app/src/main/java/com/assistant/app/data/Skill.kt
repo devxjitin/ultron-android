@@ -7,13 +7,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 /** One instruction set: a short [description] the model sees, and a [body] that is loaded only when the model asks for it. */
-data class Skill(val name: String, val description: String, val body: String, val category: String = "")
+data class Skill(val name: String, val description: String, val body: String, val category: String = "", val summary: String = "")
 
 /**
  * A built-in skill, grouped like an MCP server: the model always sees its [description], and its [tasks] only after it opens
  * the skill. [body] holds notes shared by every task; a skill without tasks is a single instruction set and [body] is it.
  */
-data class SkillGroup(val name: String, val description: String, val body: String, val tasks: List<Skill>, val category: String = "")
+data class SkillGroup(val name: String, val description: String, val body: String, val tasks: List<Skill>, val category: String = "", val summary: String = "")
 
 const val USE_SKILL_TOOL = "use_skill"
 /** Most characters of one skill body returned to the model. */
@@ -47,7 +47,8 @@ object SkillParser {
         val body = lines.drop(bodyStart).joinToString("\n").trim().take(MAX_SKILL_BODY_CHARS)
         if (body.isEmpty() && !allowEmptyBody) return null
         val category = fields["category"]?.trim()?.take(30).orEmpty()
-        return Skill(name, description, body, category)
+        val summary = fields["summary"]?.trim()?.take(80).orEmpty()
+        return Skill(name, description, body, category, summary)
     }
 }
 
@@ -122,7 +123,7 @@ object SkillRegistry {
             val tasks = runCatching { app.assets.list("skills/$dir/tasks")?.sorted().orEmpty() }.getOrDefault(emptyList())
                 .filter { it.endsWith(".md") }
                 .mapNotNull { file -> readAsset(app, "skills/$dir/tasks/$file")?.let { SkillParser.parse(it, file.removeSuffix(".md")) } }
-            SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())?.let { builtIn[it.name] = SkillGroup(it.name, it.description, it.body, tasks, it.category) }
+            SkillParser.parse(text, dir, allowEmptyBody = tasks.isNotEmpty())?.let { builtIn[it.name] = SkillGroup(it.name, it.description, it.body, tasks, it.category, it.summary) }
         }
         val own = userDir(app).listFiles()?.sortedBy { it.name }.orEmpty().mapNotNull { dir ->
             runCatching { File(dir, "SKILL.md").readText() }.getOrNull()?.let { SkillParser.parse(it, dir.name) }
@@ -205,4 +206,15 @@ object SkillRegistry {
         val shared = if (group.body.isBlank()) "" else group.body + "\n\n"
         return "status=ok\nFollow these instructions for the current request.\n\n$shared${chosen.body}"
     }
+}
+
+/** One short line for the Skills page: the skill's own summary, else the first sentence of its description. */
+fun Skill.displaySummary(): String = summaryLine(summary, description)
+
+val SkillGroup.displaySummary: String get() = summaryLine(summary, description)
+
+private fun summaryLine(summary: String, description: String): String {
+    if (summary.isNotBlank()) return summary
+    val first = description.trim().split(Regex("(?<=[.!?])\\s")).first().trim()
+    return if (first.length <= 70) first else first.take(67).trimEnd() + "..."
 }

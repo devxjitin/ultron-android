@@ -85,7 +85,7 @@ fun KnowledgeDocEditDialog(
                 androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
                 if (chunkMode) {
                     Text(
-                        text = "${blocks.size} chunks, $changedCount changed. Only changed chunks are re-embedded.",
+                        text = "${blocks.size} sections, $changedCount changed.",
                         color = AssistantTextSecondary,
                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall
                     )
@@ -116,7 +116,7 @@ fun KnowledgeDocEditDialog(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
                         enabled = !isSaving,
                         label = { Text("Content") },
-                        placeholder = { Text("Separate different topics with a blank line so they are easier to find later.") }
+                        placeholder = { Text("Leave a blank line between topics.") }
                     )
                 }
                 if (isSaving) {

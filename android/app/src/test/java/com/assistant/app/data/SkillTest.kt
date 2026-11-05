@@ -116,4 +116,12 @@ class BuiltInSkillAssetsTest {
         assertEquals("Other", SkillEntry(SkillGroup("demo", "d", "b", emptyList()), builtIn = true).category)
         assertEquals(OWN_SKILLS_CATEGORY, SkillEntry(SkillGroup("demo", "d", "b", emptyList(), "Messaging"), builtIn = false).category)
     }
+
+    @Test fun skillPageShowsAShortLine() {
+        val withSummary = SkillGroup("a", "A long technical description. Use when the user says things.", "b", emptyList(), summary = "Send WhatsApp messages.")
+        assertEquals("Send WhatsApp messages.", withSummary.displaySummary)
+        val without = SkillGroup("a", "Plan a trip. Then book it and tell everyone about the plan in great detail.", "b", emptyList())
+        assertEquals("Plan a trip.", without.displaySummary)
+        assertTrue(SkillGroup("a", "x".repeat(200), "b", emptyList()).displaySummary.length <= 70)
+    }
 }

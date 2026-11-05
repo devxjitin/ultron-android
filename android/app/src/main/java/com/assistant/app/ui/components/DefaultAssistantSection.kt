@@ -45,9 +45,8 @@ fun DefaultAssistantSection() {
     Column {
         SettingsHeading("Default assistant")
         Text(
-            if (isDefault) "Ultron is your phone's assistant. Hold the home or power button to talk."
-            else "Make Ultron open and start talking when you hold the home or power button. " +
-                "Choose Ultron under “Digital assistant app”.",
+            if (isDefault) "Hold the home or power button to talk."
+            else "Open Ultron by holding the home or power button.",
             color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp)
         )
         if (!isDefault) {

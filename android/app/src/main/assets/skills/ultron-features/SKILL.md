@@ -1,6 +1,7 @@
 ---
 name: ultron-features
 category: Assistant
+summary: Lets the assistant describe what it can do.
 description: What Ultron can and cannot do on this phone, by feature, with the tool and the access each one needs. Use when asked what you can do, whether you can do something, or before saying you cannot.
 ---
 # What Ultron can do

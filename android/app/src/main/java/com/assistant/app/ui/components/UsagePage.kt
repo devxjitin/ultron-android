@@ -116,7 +116,7 @@ fun UsagePage(
                     }
                 }
                 Text(
-                    "Estimate from public list prices at about ₹${USD_TO_INR.toInt()} per US dollar. Output tokens include thinking tokens.",
+                    "Estimated cost.",
                     color = AssistantTextMuted, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp)
                 )
             }
@@ -153,11 +153,6 @@ fun UsagePage(
                 }
             }
         }
-
-        Text(
-            "Counted on this phone only and never sent anywhere. Model use is counted in tokens, per model; voice is measured in time.",
-            color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 16.dp, start = 4.dp)
-        )
     }
 }
 

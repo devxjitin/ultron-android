@@ -1,5 +1,6 @@
 ---
 name: send_message
+summary: Send a message to a contact.
 description: Send a WhatsApp text message to a contact on an Android phone by operating the screen. Use when the user says things like "send a WhatsApp message to <name>", "WhatsApp <name> that ...", "message <name> on WhatsApp", or in Hindi/Hinglish "<name> ko WhatsApp pe bol do ...", "<name> ko WhatsApp karo ...", "<name> ko message bhej do WhatsApp par".
 ---
 

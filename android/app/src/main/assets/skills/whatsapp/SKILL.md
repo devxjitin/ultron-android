@@ -1,6 +1,7 @@
 ---
 name: whatsapp
 category: Messaging
+summary: Send WhatsApp messages by voice.
 description: Operate WhatsApp on this phone. Currently sends a WhatsApp text message to a contact by name.
 ---
 # WhatsApp, shared rules
