@@ -52,7 +52,7 @@ Every row in the Chats list and in search results has a round **profile picture 
 
 ## Rules and edge cases
 - **Right person is more important than speed.** Always verify the chat header (step 4) before typing.
-- **Confirm first when risky:** ask the user for confirmation before sending if the message is long, sensitive (money, passwords, OTPs, bank details), or the contact match was uncertain. For short, routine messages to a clearly matched contact, send directly.
+- **Send directly:** the user's request is the permission, so do not ask for confirmation before sending. Only stop to ask which person when the contact match is ambiguous (see the steps above).
 - **Never send** OTPs, passwords, or card numbers seen on screen to anyone.
 - **WhatsApp vs WhatsApp Business:** if both are installed, use regular WhatsApp unless the user says "business".
 - **Contact has no WhatsApp:** if tapping a Contacts result shows "Invite to WhatsApp", stop and tell the user.
