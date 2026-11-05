@@ -108,4 +108,12 @@ class BuiltInSkillAssetsTest {
         val body = SkillParser.parse(File(root, "whatsapp/tasks/send_message.md").readText())!!.body
         assertTrue(body.length < MAX_SKILL_BODY_CHARS)
     }
+
+    @Test fun skillsAreFiledUnderCategories() {
+        val parsed = SkillParser.parse("---\nname: demo\ncategory: Messaging\ndescription: d\n---\nbody")!!
+        assertEquals("Messaging", parsed.category)
+        assertEquals("Messaging", SkillEntry(SkillGroup("demo", "d", "b", emptyList(), parsed.category), builtIn = true).category)
+        assertEquals("Other", SkillEntry(SkillGroup("demo", "d", "b", emptyList()), builtIn = true).category)
+        assertEquals(OWN_SKILLS_CATEGORY, SkillEntry(SkillGroup("demo", "d", "b", emptyList(), "Messaging"), builtIn = false).category)
+    }
 }
