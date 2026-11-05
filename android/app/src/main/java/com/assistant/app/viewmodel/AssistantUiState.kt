@@ -95,5 +95,4 @@ data class AssistantUiState(
     /** Bumps each time a tool needs Android permissions; the activity shows the dialog for [requestedPermissions]. */
     val permissionRequestId: Int = 0,
     val requestedPermissions: List<String> = emptyList(),
-    /** A call or text message waiting for the user's tap, shown as a dialog; null when nothing is waiting. */
 )

@@ -51,8 +51,6 @@ class ConnectorsTest {
 
     @Test fun riskyConnectorsLiveInTheirOwnCategories() {
         fun category(id: String) = ConnectorRegistry.get(id).category
-        assertEquals(ConnectorCategory.COMMUNICATION, category("calls"))
-        assertEquals(ConnectorCategory.COMMUNICATION, category("messages"))
         assertEquals(ConnectorCategory.PHONE_CONTROL, category("screen"))
         assertEquals(ConnectorCategory.PHONE_CONTROL, category("navigation"))
         assertTrue(ConnectorCategory.PHONE_CONTROL.advanced)

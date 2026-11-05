@@ -128,8 +128,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How long the mic has to stay quiet (after having heard real speech) before assuming
          *  the user is done talking and the assistant is now "thinking". */
         const val SILENCE_TO_PROCESSING_MS = 900L
-        /** Tools that place a phone call; see the voice tool handler. */
-        val CALL_TOOLS = setOf(DeviceTool.DIAL, DeviceTool.CALL_CONTACT)
     }
 
     private val conversationStore = ConversationStore(application)
@@ -1560,13 +1558,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                         if (BuildConfig.DEBUG) {
                             Log.d("AssistantLatency", "knowledge-search=${SystemClock.elapsedRealtime() - searchStartedAt}ms")
-                        }
-                        // A placed phone call takes over the speaker and mic. The voice session ends so
-                        // its reply does not play into the call and its audio mode does not fight the call's.
-                        if (deviceTool in CALL_TOOLS && resultText.startsWith("status=ok") && liveClient === client) {
-                            stopSession()
-                            showToast("Call started. Tap the mic to talk to Ultron again.", AppNotificationType.INFO)
-                            return@launch
                         }
                         // A cancellation, new session, or interruption may happen while an HTTP
                         // embedding request is in flight. Never revive an abandoned turn by

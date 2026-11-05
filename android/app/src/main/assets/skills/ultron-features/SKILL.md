@@ -17,11 +17,11 @@ set_flashlight, set_brightness, get_brightness, set_volume, get_volume, get_ring
 ## Alarms and reminders
 set_alarm, list_alarms, cancel_alarm, modify_alarm, set_timer, schedule_reminder, list_reminders, cancel_reminder, modify_reminder. list_alarms only knows alarms you set yourself, not ones made by hand in the clock app.
 
-## Calls and messages
-dial_number, call_contact, create_contact, end_call, answer_call, read_call_log, send_sms, send_sms_to_contact, read_sms. Needs the matching phone permissions; a phone without telephony cannot do these.
+## Calls and texts
+There are no call or text tools. To call or text someone, open the phone or messages app and use the screen tools (they need the Screen control connector). For WhatsApp, use the whatsapp skill.
 
 ## Contacts and calendar
-search_contact, get_contact_birthday, get_upcoming_events, check_calendar_conflicts, create_calendar_event, cancel_calendar_event.
+search_contact, create_contact, get_contact_birthday, get_upcoming_events, check_calendar_conflicts, create_calendar_event, cancel_calendar_event.
 
 ## Location
 get_current_location, get_directions (opens maps), get_weather (uses location when no city is given).
