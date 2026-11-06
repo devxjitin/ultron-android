@@ -25,6 +25,8 @@ class ConversationHistoryStore(store: BoxStore) {
         const val MIN_USER_CHARS = 2
         /** Most characters of one exchange sent for embedding and kept for display. */
         const val MAX_TURN_CHARS = 2_000
+        private const val EMBEDDING_BYTES = 768L * 4
+        private const val TEXT_BYTES_ESTIMATE = 1_024L
 
         /** The text that is embedded and keyword-searched for an exchange. */
         fun embeddingText(userText: String, assistantText: String): String =
@@ -85,6 +87,36 @@ class ConversationHistoryStore(store: BoxStore) {
     }
 
     fun count(): Long = box.count()
+
+    /** Deletes one exchange. Returns false when it was already gone. */
+    fun delete(id: Long): Boolean = box.remove(id)
+
+    /** Deletes every exchange whose time is inside the range (both ends inclusive). Returns how many were removed. */
+    fun deleteRange(fromMillis: Long, toMillis: Long): Int {
+        val query = box.query(ConversationTurnEntity_.timestampMillis.between(fromMillis, toMillis)).build()
+        return try {
+            query.remove().toInt()
+        } finally {
+            query.close()
+        }
+    }
+
+    /** Deletes everything. */
+    fun clearAll() = box.removeAll()
+
+    /**
+     * About how much space the saved exchanges take: a 768-number embedding is 3 KB, and the text of an exchange is
+     * counted as about 1 KB. An estimate for the Storage page, not an exact size.
+     */
+    fun approxBytes(): Long {
+        val embedded = box.query(ConversationTurnEntity_.embeddingModel.equal(GeminiEmbeddingClient.MODEL)).build()
+        val embeddedCount = try {
+            embedded.count()
+        } finally {
+            embedded.close()
+        }
+        return embeddedCount * EMBEDDING_BYTES + box.count() * TEXT_BYTES_ESTIMATE
+    }
 
     fun get(id: Long): StoredTurn? = box.get(id)?.toStored()
 

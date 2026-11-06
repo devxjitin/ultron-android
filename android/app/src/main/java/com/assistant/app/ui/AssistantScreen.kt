@@ -133,6 +133,10 @@ fun AssistantScreen(
     onDeleteMemory: (String) -> Unit = {},
     onClearMemory: () -> Unit = {},
     onRestoreMemory: (String) -> Unit = {},
+    onDeletePastConversation: (Long) -> Unit = {},
+    onDeletePastDay: (Long, Long) -> Unit = { _, _ -> },
+    onClearPastConversations: () -> Unit = {},
+    onShowOlderConversations: () -> Unit = {},
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
     onRequestConnectorPermissions: (List<String>) -> Unit = {},
     onDismissSettings: () -> Unit,
@@ -288,7 +292,13 @@ fun AssistantScreen(
                     onClearAll = onClearMemory,
                     modifier = Modifier.padding(top = topReserve),
                     removedByAssistant = uiState.removedMemories,
-                    onRestore = onRestoreMemory
+                    onRestore = onRestoreMemory,
+                    pastConversations = uiState.pastConversations,
+                    pastTotal = uiState.pastConversationCount,
+                    onDeletePast = onDeletePastConversation,
+                    onDeletePastDay = onDeletePastDay,
+                    onClearPast = onClearPastConversations,
+                    onShowOlder = onShowOlderConversations
                 )
             }
 
@@ -318,7 +328,10 @@ fun AssistantScreen(
                         onClearCache = onClearCache,
                         onClearMemory = onClearMemory,
                         onResetUsage = onResetUsage,
-                        modifier = pageModifier
+                        modifier = pageModifier,
+                        pastConversationCount = uiState.pastConversationCount,
+                        pastConversationBytes = uiState.pastConversationBytes,
+                        onClearPastConversations = onClearPastConversations
                     )
                     NavTab.ABOUT -> AboutPage(
                         assistantName = uiState.settings.assistantName,

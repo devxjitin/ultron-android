@@ -357,6 +357,10 @@ class MainActivity : ComponentActivity() {
                         onDeleteMemory = { viewModel.onDeleteMemory(it) },
                         onClearMemory = { viewModel.onClearMemory() },
                         onRestoreMemory = { viewModel.onRestoreMemory(it) },
+                        onDeletePastConversation = { viewModel.onDeletePastConversation(it) },
+                        onDeletePastDay = { from, to -> viewModel.onDeletePastDay(from, to) },
+                        onClearPastConversations = { viewModel.onClearPastConversations() },
+                        onShowOlderConversations = { viewModel.onShowOlderConversations() },
                         onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
                         onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
                         onRequestPermission = {

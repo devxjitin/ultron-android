@@ -104,6 +104,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How often the app asks the AWS update server for a newer build on its own, also while it stays open. */
         private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60_000L
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
+        /** Past exchanges shown on the Memory page at first, and added by each "Show older". */
+        private const val PAST_CONVERSATION_PAGE = 50
         private const val TOOL_LABEL_LINGER_MS = 0L
         private const val TOOL_LABEL_MAX_MS = 25_000L
         /** No conversational activity (transcript text or a turn boundary) for this long while
@@ -572,6 +574,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  because the page covers the status line and Stop control and the mic must not keep streaming behind it. */
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
+        if (page == AppPage.STORAGE || page == AppPage.MEMORY) refreshPastConversations()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
@@ -622,6 +625,55 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onClearMemory() {
         launchPersist("Memory cleared") { memoryStore.clear(); invalidateWarmSessionAndReprewarm() }
+    }
+
+    private var pastConversationLimit = PAST_CONVERSATION_PAGE
+
+    /** Reloads the saved past exchanges (newest [pastConversationLimit]) and their totals for the Memory and Storage pages. */
+    private fun refreshPastConversations() {
+        viewModelScope.launch {
+            try {
+                val (turns, count, bytes) = withContext(Dispatchers.IO) {
+                    Triple(
+                        conversationHistoryStore.recent(pastConversationLimit).reversed(),
+                        conversationHistoryStore.count().toInt(),
+                        conversationHistoryStore.approxBytes()
+                    )
+                }
+                _uiState.update { it.copy(pastConversations = turns, pastConversationCount = count, pastConversationBytes = bytes) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("AssistantError", "Could not read past conversations", e)
+            }
+        }
+    }
+
+    fun onShowOlderConversations() {
+        pastConversationLimit += PAST_CONVERSATION_PAGE
+        refreshPastConversations()
+    }
+
+    fun onDeletePastConversation(id: Long) = changePastConversations("Deleted") { conversationHistoryStore.delete(id) }
+
+    fun onDeletePastDay(fromMillis: Long, toMillis: Long) =
+        changePastConversations("Day deleted") { conversationHistoryStore.deleteRange(fromMillis, toMillis) }
+
+    fun onClearPastConversations() = changePastConversations("Past conversations cleared") { conversationHistoryStore.clearAll() }
+
+    private fun changePastConversations(successMessage: String, change: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { change() }
+                refreshPastConversations()
+                showToast(successMessage)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("AssistantError", "Could not change past conversations", e)
+                showToast("Could not delete that. Try again.", AppNotificationType.ERROR)
+            }
+        }
     }
 
     /** save_memory / forget_memory, called by the voice model. Memory is kept on this device only. */

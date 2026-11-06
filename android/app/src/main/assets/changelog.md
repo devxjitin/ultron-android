@@ -7,6 +7,7 @@ notes and the About page all read it from here. A date after the version is opti
 
 ### Added
 - Long-term memory: the assistant now remembers every past conversation and can look up what you said yesterday, last week or last month, and answer from it. It has its own switch in Connectors.
+- Memory now lists your past conversations by day. Tap one to read it all, delete one, delete a whole day, or clear everything. Storage shows how much they take.
 
 ### Changed
 - A new conversation no longer starts with your last few messages loaded. The assistant looks things up only when you refer to something from before, so it starts a little faster.

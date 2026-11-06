@@ -2,7 +2,7 @@
 
 Status: **planned, not built**. Written 2026-11-06. Owner: Jitin Kumar Sengar. Tracked in `Product-Manager/PM.md` (Open items, P1).
 
-Progress: **phase 1 merged** (PR 47). **Phase 2 built** (`ConversationHistorySearch`, `DateRange`, PR 48). **Phase 3 built** (tools, connector, prompt, no session-start history).
+Progress: **phase 1 merged** (PR 47). **Phase 2 built** (`ConversationHistorySearch`, `DateRange`, PR 48). **Phase 3 built** (tools, connector, prompt, no session-start history, PR 49). **Phase 4 built** (Memory page "Past conversations", Storage line, changelog). Remaining: phone test of all four phases.
 
 Phase 3 as built, where it differs from the sections below:
 - The Long-term memory connector is on for fresh installs **and for existing installs** until the user switches it off themselves (`effectiveDeviceTools`: a connector in `ON_UNTIL_CHOSEN_IDS` with no saved choice counts as on).

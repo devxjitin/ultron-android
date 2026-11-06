@@ -39,10 +39,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.MAX_MEMORY_TEXT_CHARS
+import com.assistant.app.data.DayGroup
 import com.assistant.app.data.MemoryItem
+import com.assistant.app.data.StoredTurn
+import com.assistant.app.data.groupByDay
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAccentFill
 import com.assistant.app.ui.theme.AssistantAccentAlt
@@ -66,11 +74,19 @@ fun MemoryPage(
     onClearAll: () -> Unit,
     modifier: Modifier = Modifier,
     removedByAssistant: List<MemoryItem> = emptyList(),
-    onRestore: (String) -> Unit = {}
+    onRestore: (String) -> Unit = {},
+    pastConversations: List<StoredTurn> = emptyList(),
+    pastTotal: Int = 0,
+    onDeletePast: (Long) -> Unit = {},
+    onDeletePastDay: (Long, Long) -> Unit = { _, _ -> },
+    onClearPast: () -> Unit = {},
+    onShowOlder: () -> Unit = {}
 ) {
     var draft by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<MemoryItem?>(null) }
     var confirmingClear by remember { mutableStateOf(false) }
+    var confirmingClearPast by remember { mutableStateOf(false) }
+    var deletingDay by remember { mutableStateOf<DayGroup?>(null) }
     val cardShape = RoundedCornerShape(22.dp)
 
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
@@ -165,7 +181,60 @@ fun MemoryPage(
                 }
             }
         }
+        if (pastTotal > 0) {
+            Spacer(Modifier.height(24.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "PAST CONVERSATIONS ($pastTotal)", color = AssistantTextMuted, fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f).padding(start = 4.dp)
+                )
+                TextButton(onClick = { confirmingClearPast = true }) { Text("Clear all", color = AssistantError, fontSize = 13.sp) }
+            }
+            Text(
+                "Kept on this phone. The assistant looks here when you refer to something from before.",
+                color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+            groupByDay(pastConversations).forEach { day ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        dayLabel(day), color = AssistantTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f).padding(start = 4.dp)
+                    )
+                    TextButton(onClick = { deletingDay = day }) { Text("Delete day", color = AssistantError, fontSize = 13.sp) }
+                }
+                day.turns.forEach { turn -> PastTurnRow(turn, onDelete = { onDeletePast(turn.id) }) }
+            }
+            if (pastTotal > pastConversations.size) {
+                TextButton(onClick = onShowOlder, modifier = Modifier.padding(top = 4.dp)) { Text("Show older") }
+            }
+        }
         Spacer(Modifier.height(24.dp))
+    }
+
+    deletingDay?.let { day ->
+        AlertDialog(
+            onDismissRequest = { deletingDay = null },
+            title = { Text("Delete this day?") },
+            text = { Text("The ${day.turns.size} conversations from ${dayLabel(day)} will be deleted.") },
+            confirmButton = {
+                TextButton(onClick = { onDeletePastDay(day.fromMillis, day.toMillis); deletingDay = null }) {
+                    Text("Delete", color = AssistantError)
+                }
+            },
+            dismissButton = { TextButton(onClick = { deletingDay = null }) { Text("Cancel") } }
+        )
+    }
+
+    if (confirmingClearPast) {
+        AlertDialog(
+            onDismissRequest = { confirmingClearPast = false },
+            title = { Text("Clear past conversations?") },
+            text = { Text("The assistant will no longer be able to look up anything said before. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { onClearPast(); confirmingClearPast = false }) { Text("Clear all", color = AssistantError) }
+            },
+            dismissButton = { TextButton(onClick = { confirmingClearPast = false }) { Text("Cancel") } }
+        )
     }
 
     editing?.let { item ->
@@ -194,6 +263,42 @@ fun MemoryPage(
             confirmButton = { TextButton(onClick = { onClearAll(); confirmingClear = false }) { Text("Clear all", color = AssistantError) } },
             dismissButton = { TextButton(onClick = { confirmingClear = false }) { Text("Cancel") } }
         )
+    }
+}
+
+private val dayFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.getDefault())
+private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
+
+private fun dayLabel(day: DayGroup): String = dayFormatter.format(day.date)
+
+/** One saved exchange: time, what was said, what was answered. Tap to read all of it; the cross deletes it. */
+@Composable
+private fun PastTurnRow(turn: StoredTurn, onDelete: () -> Unit) {
+    var expanded by remember(turn.id) { mutableStateOf(false) }
+    val time = timeFormatter.format(Instant.ofEpochMilli(turn.timestampMillis).atZone(ZoneId.systemDefault()))
+    val lines = if (expanded) Int.MAX_VALUE else 2
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(16.dp)).background(AssistantSurface)
+            .border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(16.dp))
+            .clickable { expanded = !expanded }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+            Text(time, color = AssistantTextMuted, fontSize = 11.sp)
+            Text(
+                turn.userText, color = AssistantTextPrimary, fontSize = 14.sp, lineHeight = 20.sp,
+                maxLines = lines, overflow = TextOverflow.Ellipsis
+            )
+            if (turn.assistantText.isNotBlank()) {
+                Text(
+                    turn.assistantText, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp,
+                    maxLines = lines, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).clickable { onDelete() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Close, contentDescription = "Delete this conversation", tint = AssistantTextMuted, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
