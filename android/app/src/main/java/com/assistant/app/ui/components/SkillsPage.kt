@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -72,8 +74,8 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 
 /**
  * The assistant's skills: instruction sets it loads only when a request needs one. Each skill has its own details page,
- * which never shows the instructions themselves. Every skill can be switched off except the one the assistant needs to
- * describe itself; your own skills can also be added, edited and deleted. Skills are filed under category buttons.
+ * which shows its instructions as formatted Markdown. Every skill can be switched off except the one the assistant needs to
+ * describe itself; only your own skills can be added, edited and deleted. Skills are filed under category buttons.
  * [onSave] returns an error to show, or null when saved.
  */
 @Composable
@@ -209,7 +211,7 @@ private fun SkillIcon(box: Dp, icon: Dp) {
     }
 }
 
-/** A skill's own page: what it is for and what it can do. The instructions themselves are never shown. */
+/** A skill's own page: what it is for, its instructions shown as formatted Markdown, and what it can do. Only your own skills can be edited. */
 @Composable
 private fun SkillDetail(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val group = entry.group
@@ -237,20 +239,40 @@ private fun SkillDetail(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: 
             }
             PageLabel("About")
             Text(group.displaySummary, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+            if (group.body.isNotBlank()) {
+                PageLabel("Instructions")
+                PageCard { MarkdownText(group.body) }
+            }
             if (group.tasks.isNotEmpty()) {
                 PageLabel("What it can do (${group.tasks.size})")
-                group.tasks.forEach { task ->
-                    val shape = RoundedCornerShape(14.dp)
-                    Column(
-                        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(shape).background(AssistantSurface)
-                            .border(BorderStroke(1.dp, AssistantOutline), shape).padding(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Text(task.name.replace('_', ' ').replaceFirstChar { it.uppercase() }, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(task.displaySummary(), color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
-                    }
-                }
+                group.tasks.forEach { task -> SkillTaskCard(task) }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/** One task of a skill: its name and summary, tap to read its instructions as formatted Markdown. */
+@Composable
+private fun SkillTaskCard(task: com.assistant.app.data.Skill) {
+    var open by rememberSaveable(task.name) { mutableStateOf(false) }
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(shape).background(AssistantSurface)
+            .border(BorderStroke(1.dp, AssistantOutline), shape).clickable { open = !open }.padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(task.name.replace('_', ' ').replaceFirstChar { it.uppercase() }, color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(task.displaySummary(), color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            if (task.body.isNotBlank()) {
+                Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = if (open) "Hide" else "Show instructions", tint = AssistantTextMuted)
+            }
+        }
+        if (open && task.body.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            MarkdownText(task.body)
         }
     }
 }
