@@ -169,7 +169,9 @@ private fun WhatsNew() {
     }
     if (entries.isEmpty()) return
     PageLabel("What's new")
-    entries.forEach { entry ->
+    entries.forEachIndexed { index, entry ->
+        // A gap between versions so each one reads as its own card.
+        if (index > 0) Spacer(Modifier.height(12.dp))
         PageCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Version ${entry.version}", color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -179,14 +181,16 @@ private fun WhatsNew() {
             }
             entry.sections.forEach { section ->
                 Text(
-                    section.title, color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(top = 10.dp)
+                    section.title.uppercase(), color = AssistantAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp, modifier = Modifier.padding(top = 14.dp, bottom = 2.dp)
                 )
+                // Each change as its own bullet, so long lines don't run into each other.
                 section.items.forEach { item ->
-                    Text(
-                        item, color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    Row(Modifier.padding(top = 6.dp)) {
+                        Text("•", color = AssistantTextMuted, fontSize = 14.sp, lineHeight = 20.sp,
+                            modifier = Modifier.padding(end = 10.dp))
+                        Text(item, color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
