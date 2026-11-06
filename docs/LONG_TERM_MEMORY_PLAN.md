@@ -2,7 +2,13 @@
 
 Status: **planned, not built**. Written 2026-11-06. Owner: Jitin Kumar Sengar. Tracked in `Product-Manager/PM.md` (Open items, P1).
 
-Progress: **phase 1 merged** (PR 47). **Phase 2 built** (`ConversationHistorySearch`, `DateRange`).
+Progress: **phase 1 merged** (PR 47). **Phase 2 built** (`ConversationHistorySearch`, `DateRange`, PR 48). **Phase 3 built** (tools, connector, prompt, no session-start history).
+
+Phase 3 as built, where it differs from the sections below:
+- The Long-term memory connector is on for fresh installs **and for existing installs** until the user switches it off themselves (`effectiveDeviceTools`: a connector in `ON_UNTIL_CHOSEN_IDS` with no saved choice counts as on).
+- With the connector **on**, a new session sends no history. With it **off**, the last few turns are still replayed as before, so nothing regresses. Saving to long-term memory stops while it is off.
+- `ConversationStore` (last 12 turns, 30 minutes) is **kept**: it feeds the notification line and the connector-off replay. The migration in 3.7 is dropped because phase 1 already saves every turn.
+- Tool results go through `ConversationHistoryTools` (testable) and are marked untrusted. `recent_conversation` skips the session in progress.
 
 ## 1. Goal
 

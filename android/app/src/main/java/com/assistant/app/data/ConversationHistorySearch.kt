@@ -59,7 +59,6 @@ class ConversationHistorySearch(
         private const val KEYWORD_CANDIDATES = 300
         /** With a date range the vector search looks wider first, because the range is applied afterwards. */
         private const val RANGE_VECTOR_FACTOR = 8
-        private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     }
 
     /** The matching exchanges, best session first and in order within it. Empty when nothing matches. */
@@ -140,9 +139,14 @@ class ConversationHistorySearch(
         ).take(limit)
     }
 
-    private fun render(turn: StoredTurn): String = buildString {
-        val time = formatter.format(Instant.ofEpochMilli(turn.timestampMillis).atZone(zone))
-        append('[').append(time).append("] You: ").append(turn.userText)
-        if (turn.assistantText.isNotBlank()) append("\n[").append(time).append("] Ultron: ").append(turn.assistantText)
-    }
+    private fun render(turn: StoredTurn): String = renderTurn(turn, zone)
+}
+
+private val turnTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+/** One exchange as the model reads it: both sides stamped with the local date and time. */
+internal fun renderTurn(turn: StoredTurn, zone: ZoneId): String = buildString {
+    val time = turnTimeFormatter.format(Instant.ofEpochMilli(turn.timestampMillis).atZone(zone))
+    append('[').append(time).append("] You: ").append(turn.userText)
+    if (turn.assistantText.isNotBlank()) append("\n[").append(time).append("] Ultron: ").append(turn.assistantText)
 }

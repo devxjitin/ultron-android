@@ -20,6 +20,7 @@ import com.assistant.app.data.UntrustedContent
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationHistoryIndexer
+import com.assistant.app.data.ConversationHistoryTools
 import com.assistant.app.data.ConversationHistoryStore
 import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
@@ -1003,7 +1004,29 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (tool !in _uiState.value.settings.enabledDeviceTools) {
             return "status=disabled\nThe user has turned this tool off. Tell them it is switched off in Settings."
         }
+        if (tool == DeviceTool.SEARCH_CONVERSATION_HISTORY || tool == DeviceTool.RECENT_CONVERSATION) {
+            return UntrustedContent.track(tool, runToolSafely(tool.functionName) { runHistoryTool(tool, args) })
+        }
         return UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
+    }
+
+    /** True while the Long-term memory connector is on: past talk is searched on demand instead of preloaded. */
+    private fun longTermMemoryOn(settings: AssistantSettings): Boolean =
+        DeviceTool.SEARCH_CONVERSATION_HISTORY in settings.enabledDeviceTools
+
+    /**
+     * Earlier turns replayed into a new Live session. With long-term memory on nothing is replayed, because the model
+     * looks things up when needed; with it off the last few turns are still replayed, as before.
+     */
+    private fun sessionStartHistory(settings: AssistantSettings, history: List<ConversationTurn>) =
+        if (longTermMemoryOn(settings)) emptyList() else KnowledgeBaseProvider.liveHistoryTurns(history)
+
+    private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {
+        ConversationHistoryTools(
+            store = conversationHistoryStore,
+            embedQuery = { text -> embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.QUERY).embedding },
+            currentSessionId = historySessionId
+        ).run(tool, args)
     }
 
     fun onSaveDeveloperChanges(
@@ -1363,10 +1386,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
                 if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                ownerName = settings.ownerName
+                ownerName = settings.ownerName,
+                longTermMemory = longTermMemoryOn(settings)
             )
             connectLiveSession(
-                apiKey, systemInstruction, settings, KnowledgeBaseProvider.liveHistoryTurns(history),
+                apiKey, systemInstruction, settings, sessionStartHistory(settings, history),
                 resumeHandle = if (isAutoReconnect) sessionResumptionHandle else null
             )
         }
@@ -1854,6 +1878,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 // Long-term memory: keep this exchange for good and make it searchable in the background.
                 try {
+                    if (!longTermMemoryOn(_uiState.value.settings)) return@launch
                     withContext(Dispatchers.IO) {
                         val id = conversationHistoryStore.append(sessionId, userText, assistantText, System.currentTimeMillis())
                         Log.i("AssistantMemory", "saved=${id != null} total=${conversationHistoryStore.count()}")
@@ -1953,13 +1978,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
                     if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                    ownerName = settings.ownerName
+                    ownerName = settings.ownerName,
+                    longTermMemory = longTermMemoryOn(settings)
                 )
 
                 if (generation != prewarmGeneration) return@launch
                 if (!isForeground || warmClient != null || _uiState.value.voiceState != VoiceState.IDLE) return@launch
                 connectLiveSession(
-                    apiKey, systemInstruction, settings, KnowledgeBaseProvider.liveHistoryTurns(history), isWarm = true
+                    apiKey, systemInstruction, settings, sessionStartHistory(settings, history), isWarm = true
                 )
             } finally {
                 // A newer prewarm may already own the flag; only the current generation resets it.

@@ -3,6 +3,15 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.7.0 - 2026-11-06
+
+### Added
+- Long-term memory: the assistant now remembers every past conversation and can look up what you said yesterday, last week or last month, and answer from it. It has its own switch in Connectors.
+
+### Changed
+- A new conversation no longer starts with your last few messages loaded. The assistant looks things up only when you refer to something from before, so it starts a little faster.
+- If the assistant goes quiet after you ask something, the app now reconnects by itself and asks again, so you do not have to repeat yourself.
+
 ## 1.6.0 - 2026-11-05
 
 ### Changed
