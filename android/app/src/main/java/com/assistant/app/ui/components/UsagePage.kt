@@ -42,11 +42,10 @@ private enum class UsageRange(val label: String, val days: Int) {
     TODAY("Today", 1), WEEK("7 days", 7), MONTH("30 days", 30), ALL("All", Int.MAX_VALUE)
 }
 
-private enum class UsageMetric(val label: String) { TALK("Talk time"), MESSAGES("Messages"), ACTIONS("Actions") }
+private enum class UsageMetric(val label: String) { TALK("Talk time"), ACTIONS("Actions") }
 
 private fun UsageDay.value(metric: UsageMetric): Double = when (metric) {
     UsageMetric.TALK -> voiceSeconds / 60.0
-    UsageMetric.MESSAGES -> chatMessages.toDouble()
     UsageMetric.ACTIONS -> toolCalls.toDouble()
 }
 
@@ -69,7 +68,7 @@ fun UsagePage(
     var metricIndex by rememberSaveable { mutableIntStateOf(UsageMetric.TALK.ordinal) }
     var picked by remember(rangeIndex, metricIndex) { mutableStateOf<Int?>(null) }
     val range = UsageRange.entries[rangeIndex]
-    val metric = UsageMetric.entries[metricIndex]
+    val metric = UsageMetric.entries[metricIndex.coerceIn(0, UsageMetric.entries.lastIndex)]
     val today = remember { LocalDate.now() }
 
     fun within(from: LocalDate, to: LocalDate): List<UsageDay> {
@@ -97,7 +96,7 @@ fun UsagePage(
         )
         Spacer(Modifier.height(16.dp))
 
-        if (total.voiceSeconds == 0L && total.voiceSessions == 0 && total.chatMessages == 0 && total.toolCalls == 0) {
+        if (total.voiceSeconds == 0L && total.voiceSessions == 0 && total.toolCalls == 0) {
             PageCard {
                 Text("Nothing yet for this period.", color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Text("Talk to the assistant and your usage will show up here.", color = AssistantTextMuted, fontSize = 13.sp,
@@ -111,10 +110,7 @@ fun UsagePage(
             StatTile("Conversations", total.voiceSessions.toString(), Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile("Messages", total.chatMessages.toString(), Modifier.weight(1f))
-            StatTile("Actions", total.toolCalls.toString(), Modifier.weight(1f))
-        }
+        StatTile("Actions", total.toolCalls.toString(), Modifier.fillMaxWidth())
 
         if (range != UsageRange.TODAY) {
             PageLabel("Over time")
@@ -195,7 +191,6 @@ private fun comparison(now: Double, before: Double, label: String): String? = wh
 
 private fun metricText(metric: UsageMetric, value: Double): String = when (metric) {
     UsageMetric.TALK -> durationText((value * 60).roundToInt().toLong())
-    UsageMetric.MESSAGES -> "${value.roundToInt()} " + if (value.roundToInt() == 1) "message" else "messages"
     UsageMetric.ACTIONS -> "${value.roundToInt()} " + if (value.roundToInt() == 1) "action" else "actions"
 }
 
