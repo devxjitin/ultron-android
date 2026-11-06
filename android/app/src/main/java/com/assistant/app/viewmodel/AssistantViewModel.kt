@@ -19,6 +19,8 @@ import com.assistant.app.data.AccessGate
 import com.assistant.app.data.UntrustedContent
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
+import com.assistant.app.data.ConversationHistoryIndexer
+import com.assistant.app.data.ConversationHistoryStore
 import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.UsageDay
@@ -131,6 +133,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private val conversationStore = ConversationStore(application)
+    /** Every finished exchange, kept for long-term memory. Opened on first use, off the main thread. */
+    private val conversationHistoryStore by lazy {
+        ConversationHistoryStore(RagDocumentStore.sharedObjectBoxStore(application))
+    }
+    /** Groups the exchanges of one mic session; a reconnect inside the session keeps it. */
+    private var historySessionId = java.util.UUID.randomUUID().toString()
+    private var historyIndexJob: Job? = null
     private val apiKeyStore = ApiKeyStore(application)
     private val settingsStore = AppSettingsStore(application)
     private val memoryStore = MemoryStore(application)
@@ -157,6 +166,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var isForeground = false
     /** True while a session keeps running after the app left the screen. */
     private var backgroundSessionAllowed = false
+
+    /**
+     * Embeds saved exchanges that are not searchable yet, in the background. Does nothing without a key, and a
+     * failure leaves the rest for the next pass, so a conversation is never held up by it.
+     */
+    private fun indexConversationHistory() {
+        if (resolveEmbeddingApiKey().isBlank() || historyIndexJob?.isActive == true) return
+        historyIndexJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val indexer = ConversationHistoryIndexer(conversationHistoryStore) { text ->
+                    embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.DOCUMENT).embedding
+                }
+                while (indexer.indexPending() > 0) Unit
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("AssistantError", "Indexing past conversations failed", e)
+            }
+        }
+    }
 
     /** Knowledge import and search use the optional Knowledge key when one is saved, otherwise the main Gemini key. */
     private fun resolveEmbeddingApiKey(): String =
@@ -293,6 +322,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             usageStore.days.catch { e -> Log.e("AssistantError", "Failed to read usage", e) }
                 .collect { days -> _uiState.update { it.copy(usageDays = days) } }
         }
+        // Exchanges saved while offline or without a key become searchable as soon as the app is up.
+        indexConversationHistory()
         // An app left open (kiosk, or just never swiped away) never gets a resume event, so it asks on its own too.
         viewModelScope.launch {
             while (true) {
@@ -1270,6 +1301,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         if (!isAutoReconnect) {
+            historySessionId = java.util.UUID.randomUUID().toString()
             retryQuestion = null
             silentTurnRetried = false
             voiceUsageStartMs = SystemClock.elapsedRealtime()
@@ -1807,6 +1839,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         assistantTextBuffer.clear()
 
         if (userText.isNotEmpty() || assistantText.isNotEmpty()) {
+            val sessionId = historySessionId
             viewModelScope.launch {
                 // Best-effort: a failure to persist recent history (e.g. storage full) must not
                 // crash the live conversation over what's only a "remember the last few turns"
@@ -1818,6 +1851,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     throw e
                 } catch (e: Exception) {
                     Log.e("AssistantError", "Failed to save conversation turn", e)
+                }
+                // Long-term memory: keep this exchange for good and make it searchable in the background.
+                try {
+                    withContext(Dispatchers.IO) {
+                        val id = conversationHistoryStore.append(sessionId, userText, assistantText, System.currentTimeMillis())
+                        Log.i("AssistantMemory", "saved=${id != null} total=${conversationHistoryStore.count()}")
+                    }
+                    indexConversationHistory()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("AssistantError", "Failed to save to long-term memory", e)
                 }
             }
         }

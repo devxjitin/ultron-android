@@ -3,6 +3,7 @@ package com.assistant.app.data
 import io.objectbox.annotation.Entity
 import io.objectbox.annotation.HnswIndex
 import io.objectbox.annotation.Id
+import io.objectbox.annotation.Index
 import io.objectbox.annotation.VectorDistanceType
 
 /** Persistent source document. The external id preserves DataStore-era document references. */
@@ -23,6 +24,22 @@ data class KnowledgeChunkEntity(
     var chunkIndex: Int = 0,
     var text: String = "",
     var heading: String? = null,
+    var embeddingModel: String = "",
+    @HnswIndex(dimensions = 768, distanceType = VectorDistanceType.COSINE)
+    var embedding: FloatArray? = null
+)
+
+/**
+ * One finished exchange from a past conversation, kept on the phone for long-term memory. [embeddingModel] is blank
+ * until the exchange has been embedded; until then it can only be found by keyword.
+ */
+@Entity
+data class ConversationTurnEntity(
+    @Id var id: Long = 0,
+    @Index var sessionId: String = "",
+    var userText: String = "",
+    var assistantText: String = "",
+    @Index var timestampMillis: Long = 0,
     var embeddingModel: String = "",
     @HnswIndex(dimensions = 768, distanceType = VectorDistanceType.COSINE)
     var embedding: FloatArray? = null

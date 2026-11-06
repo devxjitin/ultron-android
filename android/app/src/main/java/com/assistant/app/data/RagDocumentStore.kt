@@ -190,13 +190,13 @@ class RagDocumentStore(private val context: Context) {
     private val objectBoxStore: BoxStore by lazy { sharedObjectBoxStore(context.applicationContext) }
     private val objectBoxIndex by lazy { ObjectBoxKnowledgeIndex(objectBoxStore) }
 
-    private companion object {
+    companion object {
         private var sharedStore: BoxStore? = null
 
         /** One store per process: a restarted ViewModel must reuse it, since ObjectBox rejects a
          *  second open store on the same directory and the old one is never closed. */
         @Synchronized
-        fun sharedObjectBoxStore(appContext: Context): BoxStore =
+        internal fun sharedObjectBoxStore(appContext: Context): BoxStore =
             sharedStore?.takeUnless { it.isClosed } ?: MyObjectBox.builder()
                 .androidContext(appContext)
                 .name("knowledge-vector-store")

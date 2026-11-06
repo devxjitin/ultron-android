@@ -82,10 +82,60 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "3:654644292979236900",
+      "lastPropertyId": "7:921103228164194207",
+      "name": "ConversationTurnEntity",
+      "properties": [
+        {
+          "id": "1:9072770192951828446",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:99735527106841156",
+          "name": "sessionId",
+          "indexId": "2:2475905071970162764",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:5091418941602282741",
+          "name": "userText",
+          "type": 9
+        },
+        {
+          "id": "4:4001739293336179867",
+          "name": "assistantText",
+          "type": 9
+        },
+        {
+          "id": "5:8718349949771210876",
+          "name": "timestampMillis",
+          "indexId": "3:1737225026351017370",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "6:460315597269077737",
+          "name": "embeddingModel",
+          "type": 9
+        },
+        {
+          "id": "7:921103228164194207",
+          "name": "embedding",
+          "indexId": "4:2283004326873324807",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "2:8408025783144839081",
-  "lastIndexId": "1:7255239695036093985",
+  "lastEntityId": "3:654644292979236900",
+  "lastIndexId": "4:2283004326873324807",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
