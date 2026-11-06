@@ -541,3 +541,4 @@
 [2026-11-06 09:10] [Claude] [Fix: Gemini Live chup ho to naya connection khol kar sawaal ek baar dobara (PR #46, merged)]
 [2026-11-06 09:12] [Claude] [Docs: Long-term memory plan docs/LONG_TERM_MEMORY_PLAN.md; PM.md open items + roadmap update; no source changes]
 [2026-11-06 09:20] [Claude] [Feat: Long-term memory phase 1: every finished turn saved on the phone (ObjectBox) and embedded in the background; 8 new tests; not yet shown in UI or searchable by the assistant]
+[2026-11-06 09:45] [Claude] [Feat: Long-term memory phase 2: hybrid search over saved turns (vector + keyword, date range, neighbours, 4000 char cap); 11 new tests; tools and connector still to come]

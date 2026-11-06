@@ -2,6 +2,8 @@
 
 Status: **planned, not built**. Written 2026-11-06. Owner: Jitin Kumar Sengar. Tracked in `Product-Manager/PM.md` (Open items, P1).
 
+Progress: **phase 1 merged** (PR 47). **Phase 2 built** (`ConversationHistorySearch`, `DateRange`).
+
 ## 1. Goal
 
 Ultron should remember **every past conversation** on the phone, not just the last few minutes. A session does not start with old messages loaded. Instead, the assistant gets a **Long-term memory** connector with tools it calls during a conversation to look up what was said before, and then answers from what it found.
@@ -65,7 +67,7 @@ data class ConversationTurnEntity(
 New `data/ConversationHistorySearch.kt`, built like `RagSearchEngine`:
 
 1. Optional date filter first (`from_date` / `to_date`, phone's time zone).
-2. Vector ranking (HNSW) plus BM25 keyword ranking (generalise `Bm25Index` so it can index turns as well as chunks), fused with `fuseRankings` (RRF).
+2. Vector ranking (HNSW, cosine distance up to 0.5) plus keyword ranking, fused with Reciprocal Rank Fusion. Keyword ranking asks ObjectBox which turns contain each query word (case-insensitive, either side of the exchange), weights rarer words higher and ignores a word found in over 30% of turns, so it stays fast with a long history instead of loading every turn into memory like `Bm25Index` does for knowledge.
 3. Newer turns win ties.
 4. Add the turn just before and just after each match from the same session, so an answer is not cut off.
 5. Format, capped at about 4,000 characters:
