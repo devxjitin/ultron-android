@@ -36,6 +36,7 @@ object AutomationEngine {
 
     private const val RUN_TIMEOUT_MS = 8_000L
     private const val EVENT_COOLDOWN_MS = 5_000L
+    const val MAX_REMINDER_MINUTES = 525_600
 
     // ---------------------------------------------------------------- scheduled actions
 
@@ -58,21 +59,69 @@ object AutomationEngine {
             }
             else -> return "status=invalid\nGive either minutes or at_time."
         }
+        return scheduleAt(context, tool, args, at, repeat)
+    }
+
+    /** Saves and arms one action for an exact moment. [repeatMinutes] is 0 for a single run. */
+    fun scheduleAt(context: Context, tool: DeviceTool, argsJson: String, atMillis: Long, repeatMinutes: Int): String {
         val store = AutomationStore(context)
         val id = store.nextScheduleId()
-        val action = ScheduledAction(id, at, tool.functionName, args, repeat)
+        val action = ScheduledAction(id, atMillis, tool.functionName, argsJson, repeatMinutes)
         store.saveSchedule(action)
         setAlarm(context, action)
-        return "status=ok\nScheduled #$id: ${tool.functionName} at ${format(at)}" +
-            (if (repeat > 0) ", repeating every $repeat minutes" else "") + ". The time can be off by a few minutes."
+        return "status=ok\nScheduled #$id: ${tool.functionName} at ${format(atMillis)}" +
+            (if (repeatMinutes > 0) ", repeating every $repeatMinutes minutes" else "") + "."
+    }
+
+    /**
+     * When a reminder should go off: [minutes] from [now], or the clock time [atTime] (HH:MM) on [date] (YYYY-MM-DD).
+     * Without a date the next occurrence of that time is used, so "9 am" said at 10 pm means tomorrow.
+     * Throws [IllegalArgumentException] with a sentence the assistant can read out.
+     */
+    fun reminderTime(
+        minutes: Int?, atTime: String?, date: String?, now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()
+    ): Long {
+        val at = when {
+            minutes != null -> {
+                require(minutes in 1..MAX_REMINDER_MINUTES) { "Minutes must be 1-$MAX_REMINDER_MINUTES. For a clock time, give at_time instead." }
+                now + minutes * 60_000L
+            }
+            atTime != null -> {
+                val time = runCatching { LocalTime.parse(atTime) }.getOrNull() ?: throw IllegalArgumentException("Use at_time as HH:MM, 24-hour.")
+                if (date != null) {
+                    val day = runCatching { java.time.LocalDate.parse(date) }.getOrNull() ?: throw IllegalArgumentException("Use date as YYYY-MM-DD.")
+                    val target = day.atTime(time).atZone(zone).toInstant().toEpochMilli()
+                    require(target > now) { "That time has already passed." }
+                    target
+                } else {
+                    val today = java.time.LocalDate.ofInstant(Instant.ofEpochMilli(now), zone)
+                    val target = today.atTime(time).atZone(zone).toInstant().toEpochMilli()
+                    if (target > now) target else today.plusDays(1).atTime(time).atZone(zone).toInstant().toEpochMilli()
+                }
+            }
+            else -> throw IllegalArgumentException("Give either minutes or at_time.")
+        }
+        require(at - now <= MAX_REMINDER_MINUTES * 60_000L) { "A reminder can be at most one year ahead." }
+        return at
+    }
+
+    /** "daily" and "weekly" as minutes between runs; anything else is a single run. */
+    fun repeatMinutes(repeat: String?): Int = when (repeat?.lowercase()) {
+        "daily" -> 1_440
+        "weekly" -> 10_080
+        else -> 0
     }
 
     fun listScheduled(context: Context): String {
         val items = AutomationStore(context).schedules().sortedBy { it.atMillis }
-        if (items.isEmpty()) return "status=empty\nNothing is scheduled."
+        if (items.isEmpty()) return "status=empty\nNo reminders are waiting."
         return "status=ok\n" + items.joinToString("\n") {
-            "#${it.id}: ${it.toolName} ${it.argsJson} at ${format(it.atMillis)}" +
-                if (it.repeatMinutes > 0) ", every ${it.repeatMinutes} min" else ""
+            // A reminder reads as its own text; anything else saved by an older build keeps its tool name.
+            val what = if (it.toolName == DeviceTool.SHOW_NOTIFICATION.functionName) {
+                runCatching { JSONObject(it.argsJson).optString("message") }.getOrDefault("").ifBlank { "Reminder" }
+            } else it.toolName
+            "#${it.id}: \"$what\" at ${format(it.atMillis)}" +
+                when (it.repeatMinutes) { 0 -> ""; 1_440 -> ", every day"; 10_080 -> ", every week"; else -> ", every ${it.repeatMinutes} min" }
         }
     }
 
@@ -84,21 +133,24 @@ object AutomationEngine {
     }
 
     /** Changes the delay and/or text of a waiting reminder, keeping its number. */
-    fun modifyReminder(context: Context, id: Int?, minutes: Int?, message: String?): String {
-        if (id == null || (minutes == null && message == null)) return "status=invalid\nGive the reminder number and a new time or message."
-        if (minutes != null && minutes !in 1..1440) return "status=invalid\nMinutes must be 1-1440."
+    fun modifyReminder(context: Context, id: Int?, minutes: Int?, message: String?, atTime: String? = null, date: String? = null): String {
+        val newTime = minutes != null || atTime != null
+        if (id == null || (!newTime && message == null)) return "status=invalid\nGive the reminder number and a new time or message."
+        val newAt = if (newTime) {
+            runCatching { reminderTime(minutes, atTime, date) }.getOrElse { return "status=invalid\n${it.message}" }
+        } else null
         val store = AutomationStore(context)
         val item = store.schedules().firstOrNull { it.id == id } ?: return "status=not_found\nNo scheduled action #$id."
         if (item.toolName != DeviceTool.SHOW_NOTIFICATION.functionName) return "status=invalid\n#$id is not a reminder."
         val args = JSONObject(item.argsJson)
         if (message != null) args.put("message", message)
         val updated = item.copy(
-            atMillis = if (minutes != null) System.currentTimeMillis() + minutes * 60_000L else item.atMillis,
+            atMillis = newAt ?: item.atMillis,
             argsJson = args.toString()
         )
         store.saveSchedule(updated)
         setAlarm(context, updated)
-        return "status=ok\nReminder #$id updated, now due at ${format(updated.atMillis)}. The time can be off by a few minutes."
+        return "status=ok\nReminder #$id updated, now due at ${format(updated.atMillis)}."
     }
 
     /** Re-arms every saved alarm after a reboot (alarms do not survive one). Missed ones run shortly. */
@@ -121,7 +173,12 @@ object AutomationEngine {
                 val item = store.schedules().firstOrNull { it.id == id } ?: return@launch
                 runAndNotify(context, item.toolName, item.argsJson)
                 if (item.repeatMinutes > 0) {
-                    val next = item.copy(atMillis = System.currentTimeMillis() + item.repeatMinutes * 60_000L)
+                    // Counted from the planned time, so a daily 9 am reminder stays at 9 am instead of drifting later each day.
+                    val step = item.repeatMinutes * 60_000L
+                    var nextAt = item.atMillis + step
+                    val now = System.currentTimeMillis()
+                    if (nextAt <= now) nextAt += ((now - nextAt) / step + 1) * step
+                    val next = item.copy(atMillis = nextAt)
                     store.saveSchedule(next)
                     setAlarm(context, next)
                 } else {
@@ -220,7 +277,7 @@ object AutomationEngine {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
-    private fun format(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+    fun format(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("EEE d MMM, hh:mm a", Locale.ENGLISH))
 
     private val NOT_AUTOMATABLE =

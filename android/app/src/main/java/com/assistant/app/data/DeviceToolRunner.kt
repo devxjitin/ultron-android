@@ -177,7 +177,7 @@ class DeviceToolRunner(
                     .setPrimaryClip(ClipData.newPlainText("assistant", value))
                 "status=ok\nCopied to the clipboard."
             }
-            DeviceTool.SHOW_NOTIFICATION -> showNotification(text("title") ?: return MISSING, text("message") ?: return MISSING)
+            DeviceTool.SHOW_NOTIFICATION -> showNotification(text("title") ?: return MISSING, text("message") ?: return MISSING, args.optBoolean("urgent"))
             DeviceTool.FLASHLIGHT -> flashlight(text("state"))
             DeviceTool.MEDIA_CONTROL -> mediaControl(text("command"))
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
@@ -240,23 +240,26 @@ class DeviceToolRunner(
                 "status=ok\nCamera opened."
             }
             DeviceTool.SCHEDULE_REMINDER -> {
-                val minutes = number("minutes")?.takeIf { it in 1..1440 } ?: return "status=invalid\nMinutes must be 1-1440."
                 val message = text("message") ?: return MISSING
+                val due = runCatching { AutomationEngine.reminderTime(number("minutes"), text("at_time"), text("date")) }
+                    .getOrElse { return "status=invalid\n${it.message}" }
+                val repeat = AutomationEngine.repeatMinutes(text("repeat"))
                 if (!NotificationManagerCompat.from(app).areNotificationsEnabled()) {
                     return "status=unavailable\nNotifications are turned off for this app, so a reminder could not be shown."
                 }
                 // Saved like any scheduled action, so the reminder survives a restart of the phone.
-                val scheduled = AutomationEngine.schedule(
-                    app, DeviceTool.SHOW_NOTIFICATION.functionName,
-                    JSONObject().put("title", "Reminder").put("message", message).toString(),
-                    minutes, null, null
+                val scheduled = AutomationEngine.scheduleAt(
+                    app, DeviceTool.SHOW_NOTIFICATION,
+                    JSONObject().put("title", "Reminder").put("message", message).put("urgent", true).toString(),
+                    due, repeat
                 )
-                if (scheduled.startsWith("status=ok")) "status=ok\nReminder set for $minutes minutes from now. The time can be off by a few minutes."
+                val every = when (repeat) { 1_440 -> ", and again every day"; 10_080 -> ", and again every week"; else -> "" }
+                if (scheduled.startsWith("status=ok")) "status=ok\nReminder set for ${AutomationEngine.format(due)}$every."
                 else scheduled
             }
             DeviceTool.LIST_REMINDERS -> AutomationEngine.listScheduled(app)
             DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelScheduled(app, number("id"))
-            DeviceTool.MODIFY_REMINDER -> AutomationEngine.modifyReminder(app, number("id"), number("minutes"), text("message"))
+            DeviceTool.MODIFY_REMINDER -> AutomationEngine.modifyReminder(app, number("id"), number("minutes"), text("message"), text("at_time"), text("date"))
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
             DeviceTool.READ_NOTIFICATIONS -> readNotifications(number("limit") ?: 10)
@@ -432,6 +435,7 @@ class DeviceToolRunner(
             DeviceTool.MOST_USED_APPS -> mostUsedApps((number("days") ?: 1).coerceIn(1, 7), (number("limit") ?: 5).coerceIn(1, 10))
             DeviceTool.APP_USAGE -> appUsage(text("name") ?: return MISSING, (number("days") ?: 1).coerceIn(1, 7))
             DeviceTool.SET_ALARM -> {
+                needClockAccess()?.let { return it }
                 val hour = number("hour")?.takeIf { it in 0..23 } ?: return "status=invalid\nHour must be 0-23."
                 val minute = number("minute")?.takeIf { it in 0..59 } ?: return "status=invalid\nMinute must be 0-59."
                 setClockAlarm(hour, minute, text("label") ?: "")
@@ -439,13 +443,17 @@ class DeviceToolRunner(
             }
             DeviceTool.LIST_ALARMS -> {
                 val alarms = ClockAlarmStore(app).alarms()
-                if (alarms.isEmpty()) "status=empty\nNo alarms were set through the assistant. Alarms made by hand in the clock app cannot be listed."
+                // The phone reports its soonest alarm, whoever set it, so a hand-made or hand-deleted alarm still shows up here.
+                val next = app.getSystemService(android.app.AlarmManager::class.java).nextAlarmClock?.triggerTime
+                    ?.let { "Next alarm on the phone: ${AutomationEngine.format(it)}." }
+                if (alarms.isEmpty()) "status=empty\nNo alarms were set through the assistant. " + (next ?: "No alarm is coming up on the phone.")
                 else "status=ok\n" + alarms.joinToString("\n") {
                     "%02d:%02d".format(it.hour, it.minute) + if (it.label.isNotEmpty()) " (${it.label})" else ""
-                }
+                } + "\nThis is what was set through the assistant; the clock app may have changed since. " + (next ?: "")
             }
-            DeviceTool.CANCEL_ALARM -> cancelAlarm(number("hour"), number("minute"), text("label"))
+            DeviceTool.CANCEL_ALARM -> needClockAccess() ?: cancelAlarm(number("hour"), number("minute"), text("label"))
             DeviceTool.MODIFY_ALARM -> {
+                needClockAccess()?.let { return it }
                 val hour = number("hour")?.takeIf { it in 0..23 } ?: return "status=invalid\nHour must be 0-23."
                 val minute = number("minute")?.takeIf { it in 0..59 } ?: return "status=invalid\nMinute must be 0-59."
                 val newHour = number("new_hour")?.takeIf { it in 0..23 } ?: return "status=invalid\nnew_hour must be 0-23."
@@ -457,6 +465,7 @@ class DeviceToolRunner(
                 "status=ok\nThe clock app was asked to move the alarm from %02d:%02d to %02d:%02d.".format(hour, minute, newHour, newMinute)
             }
             DeviceTool.SET_TIMER -> {
+                needClockAccess()?.let { return it }
                 val seconds = number("seconds")?.takeIf { it in 1..86_400 } ?: return "status=invalid\nSeconds must be 1-86400."
                 start(Intent(AlarmClock.ACTION_SET_TIMER)
                     .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
@@ -677,6 +686,21 @@ class DeviceToolRunner(
         return "status=ok\nAdded \"$title\" to the calendar for $whenText, with a reminder 10 minutes before."
     }
 
+    /**
+     * The clock app can only be reached by starting one of its screens. Android silently drops that when this app is in the
+     * background, unless the Screen control service is on or "display over other apps" is allowed. Without this check the
+     * assistant would say an alarm was set when nothing happened. Returns a tool result when the clock is out of reach, else null.
+     */
+    private fun needClockAccess(): String? {
+        if (AssistantAccessibilityService.instance != null) return null
+        if (android.provider.Settings.canDrawOverlays(app)) return null
+        val state = android.app.ActivityManager.RunningAppProcessInfo().also { android.app.ActivityManager.getMyMemoryState(it) }
+        if (state.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return null
+        return "status=unavailable\nAndroid will not let the assistant open the clock while Ultron is in the background. " +
+            "Tell the user to turn on Screen control in Connectors (or allow display over other apps), or to open Ultron and ask again. " +
+            "A reminder (schedule_reminder) still works in the background."
+    }
+
     /** Sets a clock alarm and remembers it, since the clock app cannot list its alarms back. */
     private fun setClockAlarm(hour: Int, minute: Int, label: String) {
         start(Intent(AlarmClock.ACTION_SET_ALARM)
@@ -716,6 +740,7 @@ class DeviceToolRunner(
             when {
                 hour != null -> store.remove(hour, minute ?: 0)
                 !label.isNullOrBlank() -> store.alarms().filter { it.label.equals(label, ignoreCase = true) }.forEach { store.remove(it.hour, it.minute) }
+                else -> store.alarms().minByOrNull { minutesUntil(it.hour, it.minute) }?.let { store.remove(it.hour, it.minute) }
             }
             "status=ok\nThe clock app was asked to cancel $what. Android does not confirm it; tell the user it was requested."
         } catch (e: ActivityNotFoundException) {
@@ -723,6 +748,13 @@ class DeviceToolRunner(
         } catch (e: SecurityException) {
             "status=failed\nThe clock app refused the request. Tell the user to remove the alarm in the clock app."
         }
+    }
+
+    /** Minutes from now until the clock next shows [hour]:[minute]. */
+    private fun minutesUntil(hour: Int, minute: Int): Int {
+        val now = java.time.LocalTime.now()
+        val diff = (hour * 60 + minute) - (now.hour * 60 + now.minute)
+        return if (diff >= 0) diff else diff + 1440
     }
 
     /** Deletes the one upcoming, non-repeating event whose title matches; says so when none or several match. */
@@ -1188,8 +1220,8 @@ class DeviceToolRunner(
         }
     }
 
-    private fun showNotification(title: String, message: String): String =
-        if (AlertNotifications.show(app, title, message)) "status=ok\nNotification shown."
+    private fun showNotification(title: String, message: String, urgent: Boolean): String =
+        if (AlertNotifications.show(app, title, message, urgent)) "status=ok\nNotification shown."
         else "status=unavailable\nNotifications are turned off for this app."
 
     private fun flashlight(state: String?): String {

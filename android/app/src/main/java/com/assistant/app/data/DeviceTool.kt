@@ -282,11 +282,16 @@ enum class DeviceTool(
     ),
 
     SCHEDULE_REMINDER(
-        "schedule_reminder", "Reminder", "Remind you after some minutes with a notification.",
-        "Shows a reminder notification after the given number of minutes.",
+        "schedule_reminder", "Reminder", "Remind you at a time or after a while, with a sound.",
+        "Sets a reminder that pops up with a sound and vibration. Give minutes from now (up to a year), or at_time as HH:MM in 24-hour time, " +
+            "with an optional date (YYYY-MM-DD) for another day. Without a date, at_time means the next time the clock shows it. " +
+            "Add repeat daily or weekly for a reminder that keeps coming. Call get_current_time first if the date or time is unclear.",
         listOf(
-            ToolParam("minutes", ToolParamType.INTEGER, "Minutes from now, 1-1440."),
-            ToolParam("message", ToolParamType.STRING, "What to remind about.")
+            ToolParam("message", ToolParamType.STRING, "What to remind about."),
+            ToolParam("minutes", ToolParamType.INTEGER, "Minutes from now, 1-525600. Leave out when using at_time.", required = false),
+            ToolParam("at_time", ToolParamType.STRING, "Clock time HH:MM, 24-hour.", required = false),
+            ToolParam("date", ToolParamType.STRING, "Day for at_time as YYYY-MM-DD. Leave out for the next occurrence.", required = false),
+            ToolParam("repeat", ToolParamType.STRING, "daily or weekly. Leave out for a single reminder.", required = false)
         )
     ),
 
@@ -303,10 +308,12 @@ enum class DeviceTool(
 
     MODIFY_REMINDER(
         "modify_reminder", "Change a reminder", "Change the time or text of a waiting reminder.",
-        "Changes a waiting reminder by its number: a new delay in minutes, a new message, or both. Call list_reminders first to find the number.",
+        "Changes a waiting reminder by its number: a new time (minutes from now, or at_time with an optional date), a new message, or both. Call list_reminders first to find the number.",
         listOf(
             ToolParam("id", ToolParamType.INTEGER, "Reminder number from list_reminders."),
-            ToolParam("minutes", ToolParamType.INTEGER, "New delay in minutes from now, 1-1440.", required = false),
+            ToolParam("minutes", ToolParamType.INTEGER, "New delay in minutes from now, 1-525600.", required = false),
+            ToolParam("at_time", ToolParamType.STRING, "New clock time HH:MM, 24-hour.", required = false),
+            ToolParam("date", ToolParamType.STRING, "Day for at_time as YYYY-MM-DD.", required = false),
             ToolParam("message", ToolParamType.STRING, "New text of the reminder.", required = false)
         )
     ),

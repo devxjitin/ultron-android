@@ -146,6 +146,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "device_info" to Icons.Outlined.PhoneAndroid,
     "device_controls" to Icons.Outlined.Tune,
     "alarms" to Icons.Outlined.Alarm,
+    "reminders" to Icons.Outlined.Schedule,
     "calendar" to Icons.Outlined.CalendarMonth,
     "contacts" to Icons.Outlined.Contacts,
     "notifications" to Icons.Outlined.Notifications,
