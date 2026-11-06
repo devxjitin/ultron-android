@@ -83,6 +83,68 @@ class ConversationHistoryStore(store: BoxStore) {
 
     fun get(id: Long): StoredTurn? = box.get(id)?.toStored()
 
+    /** The turns with these ids, in the same order; ids that no longer exist are left out. */
+    fun getAll(ids: List<Long>): List<StoredTurn> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = box.get(ids).filterNotNull().associateBy { it.id }
+        return ids.mapNotNull { byId[it]?.toStored() }
+    }
+
+    /** Every turn of one session, oldest first. */
+    fun sessionTurns(sessionId: String): List<StoredTurn> {
+        val query = box.query(ConversationTurnEntity_.sessionId.equal(sessionId))
+            .order(ConversationTurnEntity_.timestampMillis).build()
+        return try {
+            query.find().map { it.toStored() }
+        } finally {
+            query.close()
+        }
+    }
+
+    /** Ids of the embedded turns closest in meaning to [vector], closest first. Distant turns are dropped. */
+    fun nearest(vector: FloatArray, limit: Int, maxDistance: Double = MAX_RETRIEVAL_DISTANCE): List<Long> {
+        if (limit <= 0) return emptyList()
+        val query = box.query(ConversationTurnEntity_.embedding.nearestNeighbors(vector, limit)).build()
+        return try {
+            query.findWithScores().filter { it.score <= maxDistance }.map { it.get().id }
+        } finally {
+            query.close()
+        }
+    }
+
+    private fun termCondition(term: String, fromMillis: Long?, toMillis: Long?): io.objectbox.query.QueryCondition<ConversationTurnEntity> {
+        val order = io.objectbox.query.QueryBuilder.StringOrder.CASE_INSENSITIVE
+        var condition = ConversationTurnEntity_.userText.contains(term, order)
+            .or(ConversationTurnEntity_.assistantText.contains(term, order))
+        if (fromMillis != null || toMillis != null) {
+            condition = condition.and(
+                ConversationTurnEntity_.timestampMillis.between(fromMillis ?: 0L, toMillis ?: Long.MAX_VALUE)
+            )
+        }
+        return condition
+    }
+
+    /** How many turns mention [term] (either side of the exchange) inside the date range. */
+    fun termCount(term: String, fromMillis: Long?, toMillis: Long?): Long {
+        val query = box.query(termCondition(term, fromMillis, toMillis)).build()
+        return try {
+            query.count()
+        } finally {
+            query.close()
+        }
+    }
+
+    /** Ids of up to [limit] turns that mention [term] inside the date range, newest first. */
+    fun termMatches(term: String, fromMillis: Long?, toMillis: Long?, limit: Int): List<Long> {
+        val query = box.query(termCondition(term, fromMillis, toMillis))
+            .orderDesc(ConversationTurnEntity_.timestampMillis).build()
+        return try {
+            query.findIds(0, limit.toLong()).toList()
+        } finally {
+            query.close()
+        }
+    }
+
     private fun ConversationTurnEntity.toStored() = StoredTurn(
         id = id,
         sessionId = sessionId,
