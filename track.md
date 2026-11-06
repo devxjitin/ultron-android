@@ -543,3 +543,4 @@
 [2026-11-06 09:20] [Claude] [Feat: Long-term memory phase 1: every finished turn saved on the phone (ObjectBox) and embedded in the background; 8 new tests; not yet shown in UI or searchable by the assistant]
 [2026-11-06 09:45] [Claude] [Feat: Long-term memory phase 2: hybrid search over saved turns (vector + keyword, date range, neighbours, 4000 char cap); 11 new tests; tools and connector still to come]
 [2026-11-06 10:30] [Claude] [Feat: Long-term memory phase 3: search_conversation_history + recent_conversation tools, Long-term memory connector (on by default, also for existing installs), prompt line, no history replay at session start while on; changelog 1.7.0; 13 new tests]
+[2026-11-06 11:15] [Claude] [Feat: Long-term memory phase 4: Past conversations on the Memory page (by day, read, delete one or a day, clear all), Storage page line and clear row; 9 new tests]

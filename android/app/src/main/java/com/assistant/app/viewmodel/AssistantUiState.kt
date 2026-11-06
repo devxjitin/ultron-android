@@ -3,6 +3,7 @@ package com.assistant.app.viewmodel
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
+import com.assistant.app.data.StoredTurn
 
 /** The page on screen. Exactly one is shown at a time; HOME is the voice screen. */
 enum class AppPage { HOME, KNOWLEDGE, MEMORY, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
@@ -53,6 +54,12 @@ data class AssistantUiState(
     val memories: List<MemoryItem> = emptyList(),
     /** Notes the assistant removed itself, newest last; the Memory page offers to restore them. */
     val removedMemories: List<MemoryItem> = emptyList(),
+    /** Saved past exchanges, newest first, as many as the Memory page has loaded. */
+    val pastConversations: List<StoredTurn> = emptyList(),
+    /** How many exchanges are saved in all, for the Memory and Storage pages. */
+    val pastConversationCount: Int = 0,
+    /** Rough space the saved exchanges take; see ConversationHistoryStore.approxBytes. */
+    val pastConversationBytes: Long = 0L,
     val errorMessage: String? = null,
     /** Name of the tool the assistant is running right now (or just ran), shown on the home screen. */
     val activeTool: String? = null,

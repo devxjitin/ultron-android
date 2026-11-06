@@ -37,7 +37,10 @@ fun StoragePage(
     onClearCache: () -> Unit,
     onClearMemory: () -> Unit,
     onResetUsage: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    pastConversationCount: Int = 0,
+    pastConversationBytes: Long = 0L,
+    onClearPastConversations: () -> Unit = {}
 ) {
     var pending by remember { mutableStateOf<Triple<String, String, () -> Unit>?>(null) }
     pending?.let { (title, text, action) ->
@@ -54,6 +57,11 @@ fun StoragePage(
         PageLabel("On this phone")
         PageCard {
             PageRow("Memory", "$memoryCount ${if (memoryCount == 1) "fact" else "facts"}")
+            PageRow(
+                "Past conversations",
+                if (pastConversationCount == 0) "None" else
+                    "$pastConversationCount ${if (pastConversationCount == 1) "exchange" else "exchanges"}, about ${formatBytes(pastConversationBytes)}"
+            )
             PageRow("Knowledge documents", knowledgeCount.toString())
             PageRow("Cache", formatBytes(cacheBytes))
         }
@@ -66,6 +74,14 @@ fun StoragePage(
             Separator()
             ClearRow("Memory", "What the assistant remembers.", enabled = memoryCount > 0) {
                 pending = Triple("Clear memory?", "Everything it remembers will be forgotten.", onClearMemory)
+            }
+            Separator()
+            ClearRow("Past conversations", "Everything you and the assistant said before.", enabled = pastConversationCount > 0) {
+                pending = Triple(
+                    "Clear past conversations?",
+                    "The assistant will no longer be able to look up anything said before.",
+                    onClearPastConversations
+                )
             }
             Separator()
             ClearRow("Usage statistics", "The numbers on the Usage page.", enabled = hasUsage) {
