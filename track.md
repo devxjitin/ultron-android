@@ -537,3 +537,7 @@
 [2026-11-04] [Codex] [Update: project Python target 3.14 across CI, Lambda templates and Linux package builders; .python-version added; 76 backend tests pass; live runtimes not redeployed]
 [2026-11-05] [Claude] [Remove: google-workspace Lambda code, tests and infra; Firebase AI Logic removed, Gemini now always uses the user's key (Knowledge key optional, falls back to Gemini key); 236 Android tests, lint 0 errors]
 [2026-11-05] [Claude] [Delete: AWS us-east-1 google-workspace-mcp, ultron-updates, web-extract-mcp Lambdas with roles and log groups; ultron-subscriptions table; /ultron/razorpay/* SSM params. Backups kept locally. Remaining: ultron-api stack, ultron-youtube stack, ultron-licenses table]
+[2026-11-05] [Claude] [Docs: add Product-Manager/PM.md with product summary, decisions log, open items, risks and roadmap]
+[2026-11-06 09:10] [Claude] [Fix: Gemini Live chup ho to naya connection khol kar sawaal ek baar dobara (PR #46, merged)]
+[2026-11-06 09:12] [Claude] [Docs: Long-term memory plan docs/LONG_TERM_MEMORY_PLAN.md; PM.md open items + roadmap update; no source changes]
+[2026-11-06 09:20] [Claude] [Feat: Long-term memory phase 1: every finished turn saved on the phone (ObjectBox) and embedded in the background; 8 new tests; not yet shown in UI or searchable by the assistant]
