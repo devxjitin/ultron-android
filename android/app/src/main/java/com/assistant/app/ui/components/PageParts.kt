@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -72,7 +73,8 @@ fun PageLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun PageRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = AssistantTextSecondary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(label, color = AssistantTextSecondary, fontSize = 14.sp, maxLines = 1)
+        Spacer(Modifier.width(16.dp))
         Text(value, color = AssistantTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
     }
 }

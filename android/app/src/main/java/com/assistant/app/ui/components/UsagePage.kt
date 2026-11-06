@@ -226,7 +226,8 @@ private fun BarChart(values: List<Double>, picked: Int?, onPick: (Int) -> Unit) 
 private fun StatTile(title: String, value: String, modifier: Modifier) {
     PageCard(modifier) {
         Text(title, color = AssistantTextSecondary, fontSize = 13.sp)
-        Text(value, color = AssistantTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Text(value, color = AssistantTextPrimary, fontSize = if (value.length > 7) 22.sp else 26.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

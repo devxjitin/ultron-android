@@ -40,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,8 +65,8 @@ enum class NavTab(val label: String, val icon: ImageVector) {
     SKILLS("Skills", Icons.Outlined.Bolt),
     CONNECTORS("Connectors", Icons.Outlined.Extension),
     SETTINGS("Settings", AssistantIcons.Settings),
-    USAGE("Usage", Icons.Outlined.BarChart),
-    STORAGE("Storage", Icons.Outlined.Storage),
+    USAGE("Usage", Icons.Outlined.Insights),
+    STORAGE("Storage", Icons.Outlined.Inventory2),
     DEVELOPER("Developer", Icons.Outlined.Code),
     ABOUT("About", Icons.Outlined.Info)
 }
@@ -104,9 +106,11 @@ fun AppDrawerContent(
 @Composable
 private fun NavSection(title: String) {
     Text(
-        title,
+        text = title.uppercase(),
         color = AssistantTextMuted,
-        fontSize = 15.sp,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.2.sp,
         modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 8.dp)
     )
 }
@@ -116,17 +120,17 @@ private fun NavRow(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Row(
         Modifier.fillMaxWidth().height(RowHeight).clip(shape)
-            .then(if (selected) Modifier.background(AssistantSurfaceElevated, shape) else Modifier)
+            .then(if (selected) Modifier.background(AssistantSelectedBg, shape) else Modifier)
             .clickable(onClick = onClick).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(tab.icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = AssistantTextPrimary)
+        Icon(tab.icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = if (selected) AssistantAccent else AssistantTextSecondary)
         Spacer(Modifier.size(22.dp))
         Text(
             tab.label,
-            color = AssistantTextPrimary,
+            color = if (selected) AssistantAccent else AssistantTextPrimary,
             fontSize = 17.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)

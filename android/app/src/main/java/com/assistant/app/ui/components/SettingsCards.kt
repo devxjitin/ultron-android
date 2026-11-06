@@ -41,8 +41,8 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 /** Heading above a group of settings. */
 @Composable
 fun SettingsHeading(text: String) {
-    Text(text, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 2.dp, top = 22.dp, bottom = 10.dp))
+    // Same small-caps caption as every other page, so Settings reads like the rest of the app.
+    PageLabel(text)
 }
 
 /** A full-width card with a title, a hint and an on/off switch. */

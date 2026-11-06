@@ -60,7 +60,7 @@ fun StoragePage(
             PageRow(
                 "Past conversations",
                 if (pastConversationCount == 0) "None" else
-                    "$pastConversationCount ${if (pastConversationCount == 1) "exchange" else "exchanges"}, about ${formatBytes(pastConversationBytes)}"
+                    "$pastConversationCount saved · ${formatBytes(pastConversationBytes)}"
             )
             PageRow("Knowledge documents", knowledgeCount.toString())
             PageRow("Cache", formatBytes(cacheBytes))

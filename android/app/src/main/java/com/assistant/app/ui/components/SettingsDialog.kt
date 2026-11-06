@@ -2,6 +2,11 @@ package com.assistant.app.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -186,7 +191,7 @@ fun SettingsPage(
         colorScheme = androidx.compose.material3.MaterialTheme.colorScheme,
         typography = compactTypography
     ) {
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
         key(activeBranch) {
         val contentScrollState = rememberScrollState()
         Column(modifier = Modifier.weight(1f).verticalScroll(contentScrollState)) {
@@ -196,7 +201,9 @@ fun SettingsPage(
                     onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, license, onRemoveLicense
                 )
                 1 -> Column {
-                    SectionLabel("Identity")
+                    PageLabel("Identity", Modifier.padding(top = 0.dp))
+                    PageCard {
+                    Text("Assistant name", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
                     OutlinedTextField(
                         value = nameInput,
                         onValueChange = { nameInput = it.take(MAX_ASSISTANT_NAME_LENGTH) },
@@ -204,17 +211,17 @@ fun SettingsPage(
                         singleLine = true,
                         colors = assistantTextFieldColors()
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
+                    Text("Greeting", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
                     OutlinedTextField(
                         value = greetingInput,
                         onValueChange = { greetingInput = it.take(MAX_GREETING_LENGTH) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = assistantTextFieldColors()
                     )
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                    Spacer(Modifier.height(16.dp))
-                    SectionLabel("Gemini API key")
+                    }
+                    PageLabel("Gemini API key")
+                    PageCard {
                     OutlinedTextField(
                         value = keyInput,
                         onValueChange = { keyInput = it },
@@ -243,12 +250,11 @@ fun SettingsPage(
                             }
                         }
                     }
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-                    SectionLabel("Knowledge API key (optional)")
-                    Text("Optional. Empty uses the key above.", color = AssistantTextMuted)
-                    Spacer(Modifier.height(8.dp))
+                    }
+                    PageLabel("Knowledge API key")
+                    PageCard {
+                    Text("Optional. Leave empty to use the Gemini key.", color = AssistantTextMuted, fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 8.dp))
                     OutlinedTextField(
                         value = embeddingKeyInput,
                         onValueChange = { embeddingKeyInput = it },
@@ -277,10 +283,10 @@ fun SettingsPage(
                             }
                         }
                     }
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = AssistantAccent.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-                    SectionLabel("Retrieval chunks")
+                    }
+                    PageLabel("Knowledge search")
+                    PageCard {
+                    Text("Sections read per answer", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
                     var retrievalLimitExpanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
                         expanded = retrievalLimitExpanded,
@@ -310,34 +316,44 @@ fun SettingsPage(
                             }
                         }
                     }
+                    }
                 }
                 2 -> Column {
-                    SectionLabel("Knowledge documents")
-                    Spacer(Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        androidx.compose.material3.FilledTonalButton(
+                    Text(
+                        "Documents the assistant can search when you ask about them.",
+                        color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        androidx.compose.material3.Button(
                             shape = AppButtonShape,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AssistantAccentFill,
+                                contentColor = androidx.compose.ui.graphics.Color.White
+                            ),
                             onClick = { showAddDocumentDialog = true },
                             enabled = !isSavingKnowledgeDocument && !knowledgeStoreCorrupt
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Add document")
+                            Text("Add document", color = androidx.compose.ui.graphics.Color.White, maxLines = 1, softWrap = false)
                         }
                         androidx.compose.material3.OutlinedButton(
                             shape = AppButtonShape,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.assistant.app.ui.theme.AssistantOutline),
                             onClick = onUploadMarkdownFile,
                             enabled = !isSavingKnowledgeDocument && !knowledgeStoreCorrupt
                         ) {
                             Icon(Icons.Filled.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Upload PDF")
+                            Text("Upload PDF", maxLines = 1, softWrap = false)
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(16.dp))
                     if (isSavingKnowledgeDocument &&
                         savingKnowledgeDocumentTarget == ADD_DOCUMENT_TARGET_ID &&
                         knowledgePreparationStage == KnowledgePreparationStage.ANALYZING
@@ -407,49 +423,21 @@ fun SettingsPage(
                             Text("Reset knowledge", color = AssistantError)
                         }
                     } else if (knowledgeDocuments.isEmpty()) {
-                        Text(
-                            text = "No documents yet.",
-                            color = AssistantTextMuted,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                        )
+                        PageCard {
+                            Text("No documents yet", color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 15.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            Text("Add notes or upload a PDF, then ask the assistant about them.",
+                                color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+                        }
                     } else {
+                        PageLabel("Documents (${knowledgeDocuments.size})", Modifier.padding(top = 4.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             knowledgeDocuments.forEach { doc ->
-                                androidx.compose.material3.Card(
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                    colors = androidx.compose.material3.CardDefaults.cardColors(
-                                        containerColor = AssistantSurfaceElevated
-                                    ),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, AssistantAccent.copy(alpha = 0.38f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Description,
-                                            contentDescription = null,
-                                            tint = AssistantAccent,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            text = doc.title,
-                                            color = AssistantTextSecondary,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        IconButton(onClick = { editingDocument = doc }) {
-                                            Icon(Icons.Filled.Edit, contentDescription = "Edit ${doc.title}", tint = AssistantTextMuted)
-                                        }
-                                        IconButton(onClick = { confirmingDeleteDocId = doc.id }) {
-                                            Icon(Icons.Filled.Delete, contentDescription = "Delete ${doc.title}", tint = AssistantError)
-                                        }
-                                    }
-                                }
+                                KnowledgeDocumentRow(
+                                    doc = doc,
+                                    onEdit = { editingDocument = doc },
+                                    onDelete = { confirmingDeleteDocId = doc.id }
+                                )
                             }
                         }
                     }
@@ -654,7 +642,11 @@ internal fun assistantTextFieldColors() = TextFieldDefaults.colors(
     unfocusedIndicatorColor = com.assistant.app.ui.theme.AssistantOutline,
     cursorColor = AssistantAccent,
     focusedLabelColor = AssistantAccent,
-    unfocusedLabelColor = AssistantAccent
+    unfocusedLabelColor = AssistantAccent,
+    focusedPlaceholderColor = AssistantTextMuted,
+    unfocusedPlaceholderColor = AssistantTextMuted,
+    focusedTrailingIconColor = AssistantTextSecondary,
+    unfocusedTrailingIconColor = AssistantTextMuted
 )
 
 @Composable
@@ -693,16 +685,14 @@ private fun GeneralSettingsContent(
     )
     Column {
         if (license != null) {
-            SettingsHeading("Activation")
-            Text(license.maskedKey, color = com.assistant.app.ui.theme.AssistantTextPrimary)
-            license.detailRows.forEach { (label, value) ->
-                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                    Text(label, color = AssistantTextMuted, modifier = Modifier.weight(0.35f))
-                    Text(value, color = com.assistant.app.ui.theme.AssistantTextPrimary, modifier = Modifier.weight(0.65f))
+            PageLabel("Activation", Modifier.padding(top = 0.dp))
+            PageCard {
+                Text(license.maskedKey, color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 15.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
+                license.detailRows.forEach { (label, value) -> PageRow(label, value) }
+                TextButton(onClick = { confirmingRemoveLicense = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                    Text("Remove key from this phone", color = AssistantError)
                 }
-            }
-            TextButton(onClick = { confirmingRemoveLicense = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                Text("Remove key from this phone", color = AssistantError)
             }
             if (confirmingRemoveLicense) {
                 AlertDialog(
@@ -744,7 +734,7 @@ private fun GeneralSettingsContent(
             value = ownerInput,
             onValueChange = { ownerInput = it.take(com.assistant.app.data.MAX_ASSISTANT_NAME_LENGTH) },
             singleLine = true,
-            placeholder = { Text("How should the assistant address you?") },
+            placeholder = { Text("How should the assistant address you?", color = AssistantTextMuted) },
             colors = assistantTextFieldColors(),
             keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
@@ -812,5 +802,44 @@ internal fun SettingsDropdown(
     }
     if (hint != null) {
         Text(text = hint, color = AssistantTextMuted, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** One knowledge document: icon tile, a one-line title with its size and date, and edit/delete actions. */
+@Composable
+private fun KnowledgeDocumentRow(doc: RagDocument, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
+    val updated = remember(doc.updatedAtMillis) {
+        java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(doc.updatedAtMillis))
+    }
+    val words = remember(doc.text) { doc.text.split(Regex("\\s+")).count { it.isNotBlank() } }
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(shape).background(com.assistant.app.ui.theme.AssistantSurface)
+            .border(androidx.compose.foundation.BorderStroke(1.dp, com.assistant.app.ui.theme.AssistantOutline), shape)
+            .clickable(onClick = onEdit).padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                .background(com.assistant.app.ui.theme.AssistantSelectedBg),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Icon(Icons.Outlined.Description, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                doc.title.replace('_', ' '), color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 15.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Text("$words words · $updated", color = AssistantTextMuted, fontSize = 12.sp, maxLines = 1)
+        }
+        IconButton(onClick = onEdit) {
+            Icon(Icons.Outlined.Edit, contentDescription = "Edit ${doc.title}", tint = AssistantTextMuted, modifier = Modifier.size(20.dp))
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Outlined.Delete, contentDescription = "Delete ${doc.title}", tint = AssistantTextMuted, modifier = Modifier.size(20.dp))
+        }
     }
 }

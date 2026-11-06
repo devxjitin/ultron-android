@@ -50,6 +50,8 @@ import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.LocationOn
@@ -147,6 +149,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "device_controls" to Icons.Outlined.Tune,
     "alarms" to Icons.Outlined.Alarm,
     "reminders" to Icons.Outlined.Schedule,
+    com.assistant.app.data.LONG_TERM_MEMORY_ID to Icons.Outlined.History,
     "calendar" to Icons.Outlined.CalendarMonth,
     "contacts" to Icons.Outlined.Contacts,
     "notifications" to Icons.Outlined.Notifications,
@@ -166,7 +169,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
 private val Catalog: List<Connector> = ConnectorRegistry.all.map { spec ->
     Connector(
         id = spec.id, name = spec.name, description = spec.description, subtitle = spec.subtitle,
-        icon = ConnectorIcons.getValue(spec.id),
+        icon = ConnectorIcons[spec.id] ?: Icons.Outlined.Extension,
         kind = when (spec.kind) {
             ConnectorKind.ONLINE -> Kind.Online
             ConnectorKind.PHONE -> Kind.Local(spec.permissions, spec.access)
@@ -412,19 +415,19 @@ private fun ConnectorCard(
             }
             Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(connector.name, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 21.sp)
+                Text(connector.name, color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, color = AssistantTextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.size(8.dp))
             when {
                 reconnect -> Pill(if (connector.kind is Kind.Local) "Repair" else "Reconnect", filled = true, onClick = onConnect)
-                connected -> Pill(connectedLabel, filled = false, check = true, onClick = onDisconnect)
+                connected -> StatusBadge(connectedLabel, onClick = onDisconnect)
                 else -> Pill(connectLabel, filled = true, onClick = onConnect)
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text(connector.description, color = AssistantTextSecondary, fontSize = 15.sp, lineHeight = 21.sp)
+        Text(connector.description, color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
         if (reconnect) {
             TextButton(onClick = onRemove) { Text("Remove", color = AssistantTextSecondary, fontSize = 13.sp) }
         }
@@ -543,5 +546,21 @@ private fun Pill(text: String, filled: Boolean, enabled: Boolean = true, check: 
             fontSize = if (check) 14.sp else 15.sp,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+/** Small green-dot "Connected" badge: tells the state without crowding the name. Tapping it offers to disconnect. */
+@Composable
+private fun StatusBadge(text: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier.height(30.dp).clip(shape).background(AssistantFieldBackground, shape)
+            .border(BorderStroke(1.dp, AssistantOutline), shape)
+            .clickable(onClick = onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(Color(0xFF22C55E)))
+        Spacer(Modifier.size(6.dp))
+        Text(text, color = AssistantTextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
