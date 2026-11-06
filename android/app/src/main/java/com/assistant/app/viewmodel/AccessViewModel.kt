@@ -13,6 +13,7 @@ import com.assistant.app.network.LicenseClient
 import com.assistant.app.network.LicenseException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,12 +37,19 @@ class AccessViewModel(application: Application) : AndroidViewModel(application) 
     private val _state = MutableStateFlow<AccessState>(AccessState.Checking)
     val state: StateFlow<AccessState> = _state.asStateFlow()
 
+    // At most one check and one activation run at a time. Removing the key or typing a new one cancels what is in
+    // flight, so a late answer for an old key can never save it again or unlock the app.
+    private var refreshJob: Job? = null
+    private var activateJob: Job? = null
+
     init {
         refresh()
     }
 
     /** Re-checks the saved key; [quiet] keeps the current screen while it loads, for example when the app comes back. */
     fun refresh(quiet: Boolean = false) {
+        if (activateJob?.isActive == true) return
+        refreshJob?.cancel()
         val key = store.key
         if (key == null) {
             setState(AccessState.NeedsKey())
@@ -51,9 +59,10 @@ class AccessViewModel(application: Application) : AndroidViewModel(application) 
         val usableOffline = isUsableOffline(cached, store.checkedAt, nowSeconds())
         if (usableOffline) setState(AccessState.Active(key, cached!!))
         else if (!quiet || _state.value !is AccessState.Active) setState(AccessState.Checking)
-        viewModelScope.launch {
+        refreshJob = viewModelScope.launch {
             try {
                 val status = withContext(Dispatchers.IO) { client.status(key) }
+                if (store.key != key) return@launch
                 store.save(key, status, nowSeconds())
                 setState(if (status.active) AccessState.Active(key, status) else AccessState.NeedsKey(error = messageFor(status.reason)))
             } catch (e: CancellationException) {
@@ -75,8 +84,9 @@ class AccessViewModel(application: Application) : AndroidViewModel(application) 
             setState(AccessState.NeedsKey(error = "That doesn't look like an activation key. It starts with ULTR-."))
             return
         }
+        refreshJob?.cancel()
         setState(AccessState.NeedsKey(busy = true))
-        viewModelScope.launch {
+        activateJob = viewModelScope.launch {
             try {
                 val status = withContext(Dispatchers.IO) { client.activate(key) }
                 if (status.active) {
@@ -98,6 +108,8 @@ class AccessViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Forgets the key on this phone only; it stays valid and can be activated again here or elsewhere. */
     fun removeKey() {
+        refreshJob?.cancel()
+        activateJob?.cancel()
         store.clear()
         setState(AccessState.NeedsKey())
     }

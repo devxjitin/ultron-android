@@ -3,6 +3,14 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.8.1 - 2026-11-06
+
+### Fixed
+- A page, message or notification that contains the word "untrusted" no longer switches off the safety warning Ultron adds to outside text.
+- Removing your activation key, or typing a new one, now cancels any check still running, so an old answer can no longer bring the old key back.
+- Setting the phone clock back no longer makes the offline grace period last longer.
+- The licence server now stops an activation when the key is revoked or expires at that same moment, and no longer sends the buyer's name, email and phone to a phone whose key is not active.
+
 ## 1.8.0 - 2026-11-06
 
 ### Added
