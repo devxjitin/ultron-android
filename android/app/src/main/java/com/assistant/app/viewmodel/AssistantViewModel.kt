@@ -253,6 +253,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  never trip the cap). */
     private var consecutiveAutoReconnects = 0
     private val maxAutoReconnects = 3
+    /** A question the server heard but never answered. It is asked again, as text, on a fresh connection. */
+    private var retryQuestion: String? = null
+    /** Set once the current question has been asked again, so a server that stays silent ends in an error, not a loop. */
+    private var silentTurnRetried = false
     private val reconnectBackoffMs = listOf(500L, 2000L, 5000L)
 
     private fun notificationStatus(state: VoiceState, tool: String?, last: ConversationTurn?): Pair<String, String> {
@@ -1266,6 +1270,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         if (!isAutoReconnect) {
+            retryQuestion = null
+            silentTurnRetried = false
             voiceUsageStartMs = SystemClock.elapsedRealtime()
             sessionResumptionHandle = null
             startSessionLimitTimer()
@@ -1399,6 +1405,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // proof that the original visitor interaction has resumed.
                 awaitingToolContinuation = false
                 lastAudioChunkAtMs = SystemClock.elapsedRealtime()
+                silentTurnRetried = false
                 cancelTurnTimeout()
                 val turn = client.latency.turn()
                 val firstAudio = turn?.audioReceived(receivedAtMs) == true
@@ -1490,6 +1497,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
             override fun onToolCall(calls: List<GeminiLiveClient.FunctionCall>) {
                 if (liveClient !== client) return
+                silentTurnRetried = false
                 cancelTurnTimeout()
                 resetIdleTimeout()
                 awaitingToolContinuation = true
@@ -1777,6 +1785,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
         client.latency.event("stream_ready")
+
+        // Re-ask the question the previous connection never answered.
+        retryQuestion?.let { question ->
+            retryQuestion = null
+            if (client.sendText(question)) {
+                userTextBuffer.append(question)
+                hasHeardSpeechThisTurn = true
+                startTurnTimeout()
+                _uiState.update { it.copy(voiceState = VoiceState.PROCESSING) }
+            } else {
+                silentTurnRetried = false
+            }
+        }
     }
 
     private fun finalizeTurnIfAny() {
@@ -1821,6 +1842,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // leaving buffered text around would otherwise bleed into whatever turn comes next.
         userTextBuffer.clear()
         assistantTextBuffer.clear()
+        retryQuestion = null
+        silentTurnRetried = false
         _uiState.update {
             it.copy(voiceState = VoiceState.IDLE)
         }
@@ -2034,6 +2057,23 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
             return
         }
+        // Seen live: the server transcribes the question and then sends nothing, while a new
+        // connection a moment later answers normally. Reconnect once and ask again, so the user
+        // doesn't have to tap the mic and repeat themselves.
+        val question = userTextBuffer.toString().trim()
+        if (!silentTurnRetried && question.isNotEmpty() && isNetworkAvailable()) {
+            Log.w("AssistantError", "No reply after ${turnResponseTimeoutMs}ms; reconnecting and asking again")
+            silentTurnRetried = true
+            retryQuestion = question
+            // Resuming would put us back into the server session that stopped answering.
+            sessionResumptionHandle = null
+            releaseResources()
+            _uiState.update { it.copy(voiceState = VoiceState.RESETTING) }
+            startSession(isAutoReconnect = true)
+            return
+        }
+        silentTurnRetried = false
+        retryQuestion = null
         Log.w("AssistantError", "Turn timed out after ${turnResponseTimeoutMs}ms with no server response")
         releaseResources()
         _uiState.update {
