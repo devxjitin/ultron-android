@@ -48,10 +48,15 @@ class ConversationHistoryStore(store: BoxStore) {
         )
     }
 
-    /** The newest [count] exchanges, oldest first, so they read as a conversation. */
-    fun recent(count: Int): List<StoredTurn> {
+    /**
+     * The newest [count] exchanges, oldest first, so they read as a conversation. Exchanges of [excludeSessionId]
+     * (the session in progress, already in the model's context) are left out.
+     */
+    fun recent(count: Int, excludeSessionId: String? = null): List<StoredTurn> {
         if (count <= 0) return emptyList()
-        val query = box.query().orderDesc(ConversationTurnEntity_.timestampMillis).build()
+        val builder = if (excludeSessionId == null) box.query()
+        else box.query(ConversationTurnEntity_.sessionId.notEqual(excludeSessionId))
+        val query = builder.orderDesc(ConversationTurnEntity_.timestampMillis).build()
         return try {
             query.find(0, count.toLong()).map { it.toStored() }.reversed()
         } finally {

@@ -66,9 +66,17 @@ fun effectiveDeviceTools(overrides: Set<String>?): Set<DeviceTool> {
         val parts = it.split("=", limit = 2)
         if (parts.size == 2 && parts[1] == "1") parts[0] else null
     }.toSet()
-    return PhoneConnectors.all.filter { connector -> connector.tools.any { it.functionName in on } }
-        .flatMap { it.tools }.toSet()
+    // A connector added after the user last chose their connectors that should start on: it stays on until the user
+    // switches it off themselves (saving "name=0"), because nothing was chosen for it yet.
+    val chosen = overrides.orEmpty().mapNotNull { it.split("=", limit = 2).firstOrNull() }.toSet()
+    return PhoneConnectors.all.filter { connector ->
+        connector.tools.any { it.functionName in on } ||
+            (connector.id in ON_UNTIL_CHOSEN_IDS && connector.tools.none { it.functionName in chosen })
+    }.flatMap { it.tools }.toSet()
 }
+
+/** Connectors added later that are on for existing installs until the user chooses; see [effectiveDeviceTools]. */
+private val ON_UNTIL_CHOSEN_IDS = setOf(LONG_TERM_MEMORY_ID)
 
 val DEFAULT_DOCUMENT_FORMAT_PROMPT = """
 Read the entire PDF carefully and convert all meaningful text and visual information into a complete, source-faithful dataset optimized for semantic search and RAG. Preserve all facts exactly as given, including names, dates, numbers, definitions, lists, tables, labels, captions, footnotes, formulas, charts, diagrams, and other meaningful information. Do not summarize, translate, interpret, correct, omit, or add information. Preserve the original order and language.

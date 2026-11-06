@@ -3,6 +3,11 @@ package com.assistant.app.data
 import com.assistant.app.util.UserInputException
 
 /** Fixed rules composed at session creation, including for saved custom personas. */
+/** Added to the system instruction while the Long-term memory connector is on; earlier talk is not in the context. */
+internal const val LONG_TERM_MEMORY_POLICY = """
+Earlier conversations with {owner} are not in your context. When {owner} refers to something from before (yesterday, last week, "what did I ask", "that thing you told me") or continues something you cannot see, call search_conversation_history, or recent_conversation for what was said just before, and answer from what it returns. Never guess about past conversations; if nothing is found, say you do not have it. Do not look things up for ordinary new questions.
+"""
+
 internal const val KNOWLEDGE_GROUNDING_POLICY = """
 Mandatory tool and answer policy (it takes precedence over conflicting persona preferences):
 Capabilities and secrecy:
@@ -122,7 +127,8 @@ object KnowledgeBaseProvider {
         memories: List<String> = emptyList(),
         style: String = "",
         skills: List<SkillGroup> = SkillRegistry.all(),
-        ownerName: String = ""
+        ownerName: String = "",
+        longTermMemory: Boolean = false
     ): String {
         return buildString {
             append(persona.trim().withOwner(ownerName))
@@ -150,6 +156,7 @@ object KnowledgeBaseProvider {
                 append("\n\nWhat you remember about {owner} (private notes from earlier; use them naturally when relevant):")
                 memories.forEach { append("\n- ").append(it) }
             }
+            if (longTermMemory) append("\n\n").append(LONG_TERM_MEMORY_POLICY.trim().withOwner(ownerName))
             append("\n\n").append(KNOWLEDGE_GROUNDING_POLICY.trim().withOwner(ownerName))
             SkillRegistry.promptSection(skills).takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
         }

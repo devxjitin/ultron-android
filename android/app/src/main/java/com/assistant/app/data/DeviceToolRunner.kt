@@ -263,6 +263,9 @@ class DeviceToolRunner(
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
             DeviceTool.READ_NOTIFICATIONS -> readNotifications(number("limit") ?: 10)
+            // Run by the view model through ConversationHistoryTools, which needs the history store and embedding key.
+            DeviceTool.SEARCH_CONVERSATION_HISTORY, DeviceTool.RECENT_CONVERSATION ->
+                "status=unavailable\nThis memory tool is not available here."
             DeviceTool.WIFI_INFO -> wifiInfo()
             DeviceTool.READ_SCREEN -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()

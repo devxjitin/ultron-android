@@ -38,7 +38,7 @@ class ConnectorsTest {
 
     @Test fun aFreshInstallStartsWithTheSameSafeConnectorsAsBefore() {
         assertEquals(
-            setOf("device_info", "device_controls", "alarms", "reminders", "apps_settings", "duckduckgo", "web_reader", "weather"),
+            setOf("device_info", "device_controls", "alarms", "reminders", "long_term_memory", "apps_settings", "duckduckgo", "web_reader", "weather"),
             ConnectorRegistry.defaultIds.toSet()
         )
     }

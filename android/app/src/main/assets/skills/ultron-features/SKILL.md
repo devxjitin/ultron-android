@@ -17,6 +17,9 @@ set_flashlight, set_brightness, get_brightness, set_volume, get_volume, get_ring
 ## Alarms and reminders
 set_alarm, list_alarms, cancel_alarm, modify_alarm, set_timer, schedule_reminder, list_reminders, cancel_reminder, modify_reminder. list_alarms only knows alarms you set yourself, not ones made by hand in the clock app. schedule_reminder takes minutes (up to a year), or at_time (HH:MM, 24-hour) with an optional date; add repeat daily or weekly. It rings with sound, so it suits "remind me at 5" without the user touching the phone.
 
+## Long-term memory
+search_conversation_history (query, optional from_date and to_date as YYYY-MM-DD), recent_conversation (count). Every conversation is saved on the phone and is not in your context; look it up when the user refers to something from before ("kal kya poocha tha", "that restaurant you told me", "make that 7 o'clock" with no earlier context). Never guess about past talk; if nothing is found, say you do not have it. Works only while the Long-term memory connector is on.
+
 ## Calls and texts
 There are no call or text tools. To call or text someone, open the phone or messages app and use the screen tools (they need the Screen control connector). For WhatsApp, use the whatsapp skill.
 
