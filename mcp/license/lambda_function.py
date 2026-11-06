@@ -87,7 +87,8 @@ def _answer(item, active, reason=""):
         "expiresAt": int(item.get("expiresAt", 0)) if item else 0,
         "reason": reason,
     }
-    if item:
+    # Buyer details only go to the phone that holds an active key, never in a moved/revoked/expired answer.
+    if item and active:
         body.update({
             "name": str(item.get("name", "")),
             "email": str(item.get("email", "")),
@@ -165,6 +166,12 @@ def activate(event):
         values[":prev"] = previous
     else:
         condition = "attribute_not_exists(#uid)"
+    # The key must still be active and unexpired at write time, so a revoke or expiry edit that lands between the
+    # read above and this write cannot be answered with active=true.
+    condition += " AND #status = :active AND (attribute_not_exists(expiresAt) OR expiresAt = :zero OR expiresAt > :now)"
+    names["#status"] = "status"
+    values[":active"] = "active"
+    values[":zero"] = 0
     try:
         updated = _db().update_item(
             Key={"keyHash": key_hash(key)},
@@ -174,9 +181,10 @@ def activate(event):
             ExpressionAttributeValues=values,
             ReturnValues="ALL_NEW",
         )["Attributes"]
-    except Exception as e:  # ConditionalCheckFailedException: another device took the key in the meantime.
+    except Exception as e:  # ConditionalCheckFailedException: another device took the key, or it was revoked or expired.
         if "ConditionalCheckFailed" in type(e).__name__ or "ConditionalCheckFailed" in str(e):
-            return _answer(item, False, "moved_recently")
+            fresh = _db().get_item(Key={"keyHash": key_hash(key)}, ConsistentRead=True).get("Item")
+            return _answer(fresh, False, _unusable_reason(fresh, now) or "moved_recently")
         raise
     return _answer(updated, True)
 

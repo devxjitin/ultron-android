@@ -110,7 +110,8 @@ const val LICENSE_OFFLINE_GRACE_SECONDS = 7 * 86_400L
 fun isUsableOffline(status: LicenseStatus?, checkedAt: Long, nowSeconds: Long): Boolean =
     status != null && status.active &&
         (status.expiresAt == 0L || status.expiresAt > nowSeconds) &&
-        nowSeconds - checkedAt < LICENSE_OFFLINE_GRACE_SECONDS
+        // A clock set back before the last check gives a negative age; that must not stretch the grace.
+        nowSeconds - checkedAt in 0 until LICENSE_OFFLINE_GRACE_SECONDS
 
 /**
  * Whether the assistant may run right now. The access screen opens it once the key is confirmed; the voice session code

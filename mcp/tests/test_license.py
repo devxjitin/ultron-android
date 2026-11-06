@@ -29,7 +29,7 @@ class FakeTable:
     def __init__(self):
         self.items = {}
 
-    def get_item(self, Key):
+    def get_item(self, Key, **_):
         item = self.items.get(Key["keyHash"])
         return {"Item": dict(item)} if item else {}
 
@@ -37,10 +37,14 @@ class FakeTable:
                     ExpressionAttributeValues, ReturnValues):
         item = self.items[Key["keyHash"]]
         names, values = ExpressionAttributeNames, ExpressionAttributeValues
-        if ConditionExpression == "attribute_not_exists(#uid)":
+        if ConditionExpression.startswith("attribute_not_exists(#uid)"):
             ok = "uid" not in item
         else:
             ok = item.get("uid") == values[":prev"]
+        if "#status = :active" in ConditionExpression:
+            ok = ok and item.get("status") == "active"
+            expires = int(item.get("expiresAt", 0))
+            ok = ok and (expires == 0 or expires > values[":now"])
         if not ok:
             raise ConditionalCheckFailedException("ConditionalCheckFailed")
         for part in UpdateExpression.removeprefix("SET ").split(", "):
@@ -94,6 +98,16 @@ class LicenseTests(unittest.TestCase):
         code, body = call(request("/v1/license/activate"))
         self.assertEqual(200, code)
         self.assertEqual({"active": False, "plan": "", "expiresAt": 0, "reason": "unknown_key"}, body)
+
+    def test_inactive_answers_do_not_carry_buyer_details(self):
+        self.add(name="Asha", email="asha@example.com", phone="+91 98765 43210", uid="old-phone", movedAt=int(time.time()))
+        for path in ("/v1/license/status", "/v1/license/activate"):
+            body = call(request(path, uid="stranger"))[1]
+            self.assertFalse(body["active"])
+            for field in ("name", "email", "phone"):
+                self.assertNotIn(field, body)
+        self.add(name="Asha", status="revoked")
+        self.assertNotIn("name", call(request("/v1/license/activate"))[1])
 
     def test_answer_carries_the_buyer_details(self):
         self.add(name="Asha", email="asha@example.com", phone="+91 98765 43210")
@@ -158,7 +172,7 @@ class LicenseTests(unittest.TestCase):
         self.add()
         original = self.table.get_item
 
-        def stale_read(Key):
+        def stale_read(Key, **kw):
             found = original(Key)
             self.table.items[Key["keyHash"]]["uid"] = "sneaky-phone"
             return found
@@ -166,6 +180,39 @@ class LicenseTests(unittest.TestCase):
         self.table.get_item = stale_read
         self.assertEqual("moved_recently", call(request("/v1/license/activate"))[1]["reason"])
         self.assertEqual("sneaky-phone", self.table.items[lic.key_hash(KEY)]["uid"])
+
+    def test_revoke_during_activation_is_not_answered_active(self):
+        self.add()
+        original = self.table.get_item
+        calls = []
+
+        def revoked_after_first_read(Key, **kw):
+            found = original(Key)
+            if not calls:
+                self.table.items[Key["keyHash"]]["status"] = "revoked"
+            calls.append(1)
+            return found
+
+        self.table.get_item = revoked_after_first_read
+        body = call(request("/v1/license/activate"))[1]
+        self.assertEqual((False, "revoked"), (body["active"], body["reason"]))
+        self.assertNotIn("uid", self.table.items[lic.key_hash(KEY)])
+
+    def test_expiry_during_activation_is_not_answered_active(self):
+        self.add()
+        original = self.table.get_item
+        calls = []
+
+        def expired_after_first_read(Key, **kw):
+            found = original(Key)
+            if not calls:
+                self.table.items[Key["keyHash"]]["expiresAt"] = int(time.time()) - 5
+            calls.append(1)
+            return found
+
+        self.table.get_item = expired_after_first_read
+        body = call(request("/v1/license/activate"))[1]
+        self.assertEqual((False, "expired"), (body["active"], body["reason"]))
 
 
 if __name__ == "__main__":

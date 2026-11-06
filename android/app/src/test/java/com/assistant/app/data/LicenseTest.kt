@@ -27,6 +27,9 @@ class LicenseTest {
         assertTrue(isUsableOffline(active, checkedAt = 1_000, nowSeconds = 2_000))
         assertFalse(isUsableOffline(active, checkedAt = 1_000, nowSeconds = 1_000 + LICENSE_OFFLINE_GRACE_SECONDS))
         assertFalse(isUsableOffline(active, checkedAt = 9_999_000, nowSeconds = 10_000_000))
+        // A clock set back before the last check does not stretch the grace.
+        assertFalse(isUsableOffline(active.copy(expiresAt = 0), checkedAt = 5_000, nowSeconds = 1_000))
+        assertTrue(isUsableOffline(active.copy(expiresAt = 0), checkedAt = 1_000, nowSeconds = 1_000))
         assertTrue(isUsableOffline(active.copy(expiresAt = 0), checkedAt = 1_000, nowSeconds = 2_000))
         assertFalse(isUsableOffline(active.copy(active = false), checkedAt = 1_000, nowSeconds = 2_000))
         assertFalse(isUsableOffline(null, checkedAt = 1_000, nowSeconds = 2_000))

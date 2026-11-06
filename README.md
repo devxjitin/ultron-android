@@ -201,7 +201,7 @@ Minimum Android version is 8.0 (API 26); the app targets API 35 and compiles aga
 │   │   ├── ui/                      Compose screens, pages and theme
 │   │   ├── util/                    Latency tracing, user-facing errors
 │   │   └── viewmodel/               AssistantViewModel and UI state
-│   ├── app/src/test/                Unit tests (19 test files)
+│   ├── app/src/test/                Unit tests (about 44 test files)
 │   └── local.properties.example     Template for local configuration
 ├── mcp/                             AWS Lambda servers
 │   ├── ultron-updates/              Update check and download-link service
@@ -283,7 +283,7 @@ All build-time values live in `android/local.properties` and are exposed to the 
 |---|---|---|
 | `sdk.dir` | if `ANDROID_HOME` is unset | Path to the Android SDK. |
 
-**Gemini through Firebase.** If `android/app/google-services.json` exists (git-ignored), helper calls use the Firebase AI Logic SDK and the voice session connects through Firebase's endpoint, so no Gemini key is needed in the app. A key typed under Developer settings still wins and uses the direct Gemini API. Embeddings (knowledge base) are not offered by Firebase and keep using their own key.
+**Gemini key.** Ultron always uses your own Gemini key (BYOK), entered in the app under **Developer** in the menu; the app licence key does not include Gemini usage. Firebase is used for sign-in, App Check, Crashlytics and Analytics only, not for Gemini. The Knowledge (embeddings) key is optional and falls back to the Gemini key.
 | `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | release builds | Release signing configuration. |
 
 Values that contain a secret token end up inside the APK, so do not share builds made with private URLs.
@@ -294,9 +294,10 @@ Values that contain a secret token end up inside the APK, so do not share builds
 
 The project targets **Python 3.14** locally, in CI, in Lambda templates and in Linux dependency packages. `.python-version` records the version. Rebuild the web-extract and YouTube ZIPs before deploying a runtime change; changing the PC interpreter or repository templates alone does not change deployed Lambda runtimes. AWS supports the managed `python3.14` runtime ([runtime documentation](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)).
 
-The connector servers are intentionally small: no database, no third-party dependency, and nothing is stored.
-Each one runs as a Lambda function behind a **Function URL**, with a secret first path segment (`ACCESS_TOKEN`) that rejects
-every other request.
+The connector servers are intentionally small Lambda functions. The current API ([`infra/api.yaml`](infra/api.yaml)) sits behind
+API Gateway with a Firebase sign-in (JWT) check. The licence servers keep only hashed activation keys and the buyer details in
+DynamoDB; the connector servers store no content. The older Function URL setup below (secret first path segment,
+`ACCESS_TOKEN`) is the original design and may not match what is deployed today, so check the `infra/` templates first.
 
 | Server | Folder | Tools | Notes |
 |---|---|---|---|
@@ -345,7 +346,7 @@ UI changes are checked by installing a build on a phone and walking through the 
 
 ## Privacy and security
 
-- **Your data stays on the phone.** Memory, knowledge documents and usage counters are stored locally. Usage counters are never sent anywhere.
+- **Your data is stored on the phone.** Memory, knowledge documents, conversation history and usage counters are saved locally. Usage counters are never sent anywhere. Stored on the phone does not mean processed on the phone: documents you add are sent to Gemini to be embedded, and the app also includes Firebase Crashlytics and Analytics, which send crash reports and app usage events to Google.
 - **API keys are encrypted at rest** (AES-256 through Android's keystore-backed `EncryptedSharedPreferences`). Private keys, tokens and signing files are git-ignored.
 - **What leaves the phone:** your voice goes to the AI provider you configured (Gemini) to produce replies, and tool calls go to the connectors you added.
 - **Connector servers hold nothing.** They are stateless; tokens travel per request and are never stored.
