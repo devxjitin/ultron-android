@@ -3,6 +3,20 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.8.0 - 2026-11-06
+
+### Added
+- Each skill's page now shows its instructions as neat, readable text. Tap a task to see its steps. Only your own skills can be edited.
+
+### Changed
+- Knowledge, Developer and Settings now look like the rest of the app: tidy cards and small headings. Knowledge shows each document with its size and date.
+- Connectors show a small "Connected" badge, so names fit on one line. The menu highlights the page you are on.
+- Usage no longer has Messages, because Ultron has no text chat. It shows talk time, conversations and actions.
+- About lists each version in its own card, with one bullet per change.
+
+### Fixed
+- Opening Connectors no longer closes the app.
+
 ## 1.7.0 - 2026-11-06
 
 ### Added
