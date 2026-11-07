@@ -54,17 +54,6 @@ private fun deviceInfoPermissions(): List<String> = buildList {
 private fun allFilesPermissions(): List<String> =
     if (Build.VERSION.SDK_INT >= 30) emptyList() else listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
 
-private fun filesPermissions(): List<String> = when {
-    Build.VERSION.SDK_INT >= 34 -> listOf(
-        Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO,
-        Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-    )
-    Build.VERSION.SDK_INT >= 33 -> listOf(
-        Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO
-    )
-    else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-}
-
 /**
  * The single list of connectors. The Connectors page, the tool list sent to the model, the fresh-install defaults and
  * the permission requests all read from here, so adding or changing a connector means editing this file only.
@@ -151,16 +140,10 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.LOCATION, DeviceTool.DIRECTIONS)
         ),
         ConnectorSpec(
-            id = "files", name = "Files", description = "Find and open photos, videos and files.",
-            subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
-            permissions = filesPermissions(), access = SpecialAccess.NONE, defaultOn = false,
-            tools = listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE)
-        ),
-        ConnectorSpec(
-            id = "all_files", name = "All files", description = "Browse folders and find any file on the phone.",
+            id = "files", name = "Files", description = "Browse folders, find any file and open it.",
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = allFilesPermissions(), access = SpecialAccess.ALL_FILES, defaultOn = false,
-            tools = listOf(DeviceTool.LIST_FOLDER)
+            tools = listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.LIST_FOLDER)
         ),
         ConnectorSpec(
             id = "images", name = "Pictures", description = "Show pictures you saved in Ultron, or photos from your phone.",
@@ -289,12 +272,7 @@ object ConnectorRegistry {
             "Clipboard text is shared only when you ask."
         ),
         "files" to ConnectorInfo(
-            "Finds photos, videos, audio and documents by name and opens them in your own apps.",
-            "Photos, videos and music access.",
-            "File names are read on your phone. The files are not sent anywhere."
-        ),
-        "all_files" to ConnectorInfo(
-            "Lets Ultron look inside any folder on the phone, and makes file search cover every folder, not only photos, videos and music.",
+            "Looks inside any folder on the phone, finds photos, videos, music, documents and any other file by name, and opens them in your own apps.",
             "All files access. A settings screen opens when you add it.",
             "Names and folders are read on your phone. File contents are not sent anywhere unless you ask Ultron to read a file aloud."
         ),

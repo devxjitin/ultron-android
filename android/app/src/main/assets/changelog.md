@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.10.1 - 2026-11-07
+
+### Changed
+- Files and All files are now one Files connector. It needs All files access, and it finds, browses and opens files in every folder. If you had either one on, Files is on.
+
 ## 1.10.0 - 2026-11-07
 
 ### Added

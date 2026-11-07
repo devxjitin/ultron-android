@@ -164,7 +164,6 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "apps_settings" to Icons.Outlined.Apps,
     "files" to Icons.Outlined.Folder,
     "images" to Icons.Outlined.Image,
-    "all_files" to Icons.Outlined.FolderOpen,
     "navigation" to Icons.Outlined.Explore,
     "screen" to Icons.Outlined.TouchApp
 )
