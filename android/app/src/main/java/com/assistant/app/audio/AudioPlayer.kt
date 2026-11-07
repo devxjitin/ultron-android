@@ -6,8 +6,10 @@ import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
 import com.assistant.app.network.GeminiLiveClient
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -62,7 +64,10 @@ class AudioPlayer(
     }
 
     private val sampleRate = GeminiLiveClient.OUTPUT_SAMPLE_RATE_HZ
-    private val scope = CoroutineScope(Dispatchers.IO)
+    // A failure nobody caught inside a launched coroutine would otherwise crash the app; it ends the reply instead.
+    private val scope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, _ -> failPlayback("Audio playback failed.") }
+    )
     // onUndeliveredElement re-queues a chunk that loses the receive()/timeout race in the player
     // loop below (withTimeoutOrNull cancelling receive() right as an element was being handed
     // over) -- without this that chunk is silently dropped instead of played.
@@ -310,13 +315,16 @@ class AudioPlayer(
                 // Release on this same thread, after the last write() has actually returned, so
                 // a stop() call from another thread can never release the AudioTrack out from
                 // under a write() that's still in flight.
-                try {
-                    audioTrack.stop()
-                } catch (_: IllegalStateException) {
-                    // already stopped
+                // Under the same lock as the barge-in flush, so that one never touches a released track.
+                synchronized(trackLock) {
+                    try {
+                        audioTrack.stop()
+                    } catch (_: IllegalStateException) {
+                        // already stopped
+                    }
+                    audioTrack.release()
+                    if (track === audioTrack) track = null
                 }
-                audioTrack.release()
-                if (track === audioTrack) track = null
             }
         }
         return true
@@ -387,13 +395,20 @@ class AudioPlayer(
         scope.launch {
             track?.let {
                 synchronized(trackLock) {
-                    it.pause()
-                    it.flush()
-                    it.play()
-                    // Discarded whatever was buffered -- resync the drain baseline to wherever
-                    // playback actually is now, so a later notifyTurnComplete() doesn't wait on
-                    // frames that were just thrown away.
-                    totalFramesWritten = it.playbackHeadPosition.toLong()
+                    // The player may have released the track while this waited for the lock.
+                    if (track === it) {
+                        try {
+                            it.pause()
+                            it.flush()
+                            it.play()
+                            // Discarded whatever was buffered -- resync the drain baseline to wherever
+                            // playback actually is now, so a later notifyTurnComplete() doesn't wait on
+                            // frames that were just thrown away.
+                            totalFramesWritten = it.playbackHeadPosition.toLong()
+                        } catch (_: IllegalStateException) {
+                            // released or broken underneath us; the player loop reports real failures
+                        }
+                    }
                 }
             }
             mainHandler.post { onPlaybackIdle() }

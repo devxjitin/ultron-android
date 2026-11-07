@@ -136,9 +136,9 @@ class GeminiLiveClient(
         firstAudioChunkLogged = false
         sentAudioChunks = 0
         latency.event("connect_start", mapOf("model" to model))
-        val url = "wss://$HOST/ws/$ENDPOINT?key=$apiKey"
-        val request = Request.Builder().url(url).build()
-        Log.i(TAG, "connect() opening wss://$HOST/ws/$ENDPOINT?key=*** (model=$model, voice=${settings.voiceName})")
+        // The key travels in a header, not the URL, so it cannot end up in a logged address.
+        val request = Request.Builder().url("wss://$HOST/ws/$ENDPOINT").header("x-goog-api-key", apiKey).build()
+        Log.i(TAG, "connect() opening wss://$HOST/ws/$ENDPOINT (model=$model, voice=${settings.voiceName})")
 
         val timeoutRunnable = Runnable {
             Log.e(TAG, "Setup timed out after ${SETUP_TIMEOUT_MS}ms -- no setupComplete or error received")

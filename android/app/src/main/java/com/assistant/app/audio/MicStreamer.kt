@@ -8,8 +8,10 @@ import android.os.Handler
 import android.os.Looper
 import com.assistant.app.network.GeminiLiveClient
 import com.assistant.app.data.MicSensitivity
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -30,7 +32,12 @@ class MicStreamer(
 ) {
     private var audioRecord: AudioRecord? = null
     private var job: Job? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    // An error nobody caught in the read loop would otherwise crash the app; it is reported as a lost microphone instead.
+    private val scope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, _ ->
+            mainHandler.post { callbackGate.run { onError("Lost access to the microphone. Please try again.") } }
+        }
+    )
     private val muted = AtomicBoolean(false)
     private val userMuted = AtomicBoolean(false)
     private val callPaused = AtomicBoolean(false)

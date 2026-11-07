@@ -352,7 +352,6 @@ fun AssistantScreen(
 
             if (tab == NavTab.CONNECTORS) {
                 ConnectorsPage(
-                    issues = uiState.connectorIssues,
                     enabledTools = uiState.settings.enabledDeviceTools,
                     onToolsEnabled = onConnectorToolsEnabled,
                     onRequestPermissions = onRequestConnectorPermissions,

@@ -44,8 +44,6 @@ import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
 import com.assistant.app.data.memoriesForPrompt
 import com.assistant.app.network.AppUpdater
-import com.assistant.app.network.McpException
-import com.assistant.app.network.McpClient
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
 import com.assistant.app.data.validateFormattedDataset
@@ -312,15 +310,21 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun isSessionActive(state: VoiceState) = state != VoiceState.IDLE && state != VoiceState.ERROR
 
+    // Kept as fields so onCleared can tell whether the static hooks still point at this instance: after a restart the
+    // new view model registers before the old one is cleared, and the old one must not wipe the new one's hooks.
+    private val stopFromNotification: () -> Unit = { stopSession() }
+    private val muteFromNotification: () -> Unit = { onMuteToggled() }
+    private val notificationAnnouncer: (String, String, String) -> Unit = { app, title, text ->
+        viewModelScope.launch { announceNotification(app, title, text) }
+    }
+
     init {
         SkillRegistry.load(application)
         // The notification mirrors the session: "listening" (with a Stop button) while one is
         // active, "ready" otherwise. A reconnect passes through RESETTING, so it never flickers.
-        AppForegroundService.onStopRequested = { stopSession() }
-        AppForegroundService.onMuteRequested = { onMuteToggled() }
-        com.assistant.app.AssistantNotificationListener.onNotification = { app, title, text ->
-            viewModelScope.launch { announceNotification(app, title, text) }
-        }
+        AppForegroundService.onStopRequested = stopFromNotification
+        AppForegroundService.onMuteRequested = muteFromNotification
+        com.assistant.app.AssistantNotificationListener.onNotification = notificationAnnouncer
         // Held notifications are spoken as soon as Ultron is quiet and listening again.
         viewModelScope.launch {
             _uiState.map { it.voiceState }.distinctUntilChanged().collect { if (it == VoiceState.LISTENING) flushAnnouncements() }
@@ -485,6 +489,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** The phone's assistant gesture opened Ultron: start a voice session unless one is already running. */
     fun onAssistInvoked() {
+        assistPending = true
+        startPendingAssist()
+    }
+
+    /** The gesture can arrive before the app is on screen and before the key check has finished (a cold start), so the
+     *  request waits here until both are true; [onAppForegrounded] and [onAccessChanged] try again. */
+    private var assistPending = false
+
+    private fun startPendingAssist() {
+        if (!assistPending || !AccessGate.unlocked || !isForeground) return
+        assistPending = false
         if (!isSessionActive(_uiState.value.voiceState)) startSession()
     }
 
@@ -797,22 +812,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 append("\nRelated older notes still saved: ").append(result.related.joinToString("; ")).append(". ")
                 append("If any of them is now outdated or contradicted, call save_memory again with the same fact and replaces set to that note.")
             }
-        }
-    }
-
-    /** Marks a connector as needing to be reconnected (or clears the mark) so Connectors can show "Reconnect". */
-    private fun setConnectorIssue(id: String, issue: Boolean) {
-        _uiState.update { state ->
-            val next = if (issue) state.connectorIssues + id else state.connectorIssues - id
-            if (next == state.connectorIssues) state else state.copy(connectorIssues = next)
-        }
-    }
-
-    /** Success clears the mark; a refused sign-in marks it. Network trouble proves nothing, so it changes nothing. */
-    private fun noteConnector(id: String, failure: Throwable?, badCodes: Set<Int> = setOf(401, 403)) {
-        when {
-            failure == null -> setConnectorIssue(id, false)
-            failure is McpException && failure.httpCode in badCodes -> setConnectorIssue(id, true)
         }
     }
 
@@ -2398,6 +2397,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (!isSessionActive(_uiState.value.voiceState)) return
         // The call took the audio mode and focus; claim them back for the voice session.
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        routeToSpeaker()
         audioFocusRequest?.let { audioManager.requestAudioFocus(it) }
         micStreamer?.setCallPaused(false)
         resetIdleTimeout()
@@ -2431,14 +2431,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         previousAudioMode = audioManager.mode
         previousSpeakerphoneOn = audioManager.isSpeakerphoneOn
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        usedCommunicationDevice = false
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            // isSpeakerphoneOn is deprecated and unreliable on Android 12+; pick the built-in speaker explicitly.
-            val speaker = audioManager.availableCommunicationDevices
-                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-            usedCommunicationDevice = speaker != null && audioManager.setCommunicationDevice(speaker)
-        }
-        if (!usedCommunicationDevice) audioManager.isSpeakerphoneOn = true
+        routeToSpeaker()
         // MODE_IN_COMMUNICATION routes assistant playback through the voice-call volume curve on
         // some OEMs, not the media one -- since this app never makes a real call, that stream's
         // volume can sit at 0 (never touched by the user's normal volume-button use), making
@@ -2453,6 +2446,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, raised, 0)
         }
         return true
+    }
+
+    /** Sends communication-mode audio to the built-in speaker. A phone call resets this routing, so it is also done again when a call ends. */
+    private fun routeToSpeaker() {
+        usedCommunicationDevice = false
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // isSpeakerphoneOn is deprecated and unreliable on Android 12+; pick the built-in speaker explicitly.
+            val speaker = audioManager.availableCommunicationDevices
+                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            usedCommunicationDevice = speaker != null && audioManager.setCommunicationDevice(speaker)
+        }
+        if (!usedCommunicationDevice) audioManager.isSpeakerphoneOn = true
     }
 
     private fun releaseCommunicationAudio() {
@@ -2490,6 +2495,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  would otherwise sit silently stuck in a "Listening..."/"Speaking..." state. */
     fun onAppBackgrounded() {
         clearAdminDrafts()
+        assistPending = false
         isForeground = false
         warmClient?.close()
         warmClient = null
@@ -2509,8 +2515,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onAccessChanged(unlocked: Boolean) {
         if (unlocked) {
             prewarmIfPossible()
+            startPendingAssist()
             return
         }
+        assistPending = false
         if (isSessionActive(_uiState.value.voiceState)) stopSession()
         cancelInFlightPrewarm()
         warmClient?.close()
@@ -2523,6 +2531,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isForeground = true
         backgroundSessionAllowed = false
         prewarmIfPossible()
+        startPendingAssist()
     }
 
     /** Resume also covers returning from dialogs without an intervening Activity stop. */
@@ -2533,9 +2542,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         super.onCleared()
-        AppForegroundService.onStopRequested = null
-        AppForegroundService.onMuteRequested = null
-        com.assistant.app.AssistantNotificationListener.onNotification = null
+        if (AppForegroundService.onStopRequested === stopFromNotification) AppForegroundService.onStopRequested = null
+        if (AppForegroundService.onMuteRequested === muteFromNotification) AppForegroundService.onMuteRequested = null
+        if (com.assistant.app.AssistantNotificationListener.onNotification === notificationAnnouncer) {
+            com.assistant.app.AssistantNotificationListener.onNotification = null
+        }
         prewarmJob?.cancel()
         stopSession()
         warmClient?.close()
