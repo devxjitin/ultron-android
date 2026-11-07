@@ -15,7 +15,7 @@ enum class ConnectorCategory(val title: String, val summary: String, val advance
 }
 
 /** Extra Android access (a special settings screen, not a normal permission) a connector needs before its tools work. */
-enum class SpecialAccess { NONE, NOTIFICATION_ACCESS, ACCESSIBILITY, USAGE_ACCESS }
+enum class SpecialAccess { NONE, NOTIFICATION_ACCESS, ACCESSIBILITY, USAGE_ACCESS, ALL_FILES }
 
 enum class ConnectorKind {
     /** Tools that run on this phone. */
@@ -49,6 +49,10 @@ private fun deviceInfoPermissions(): List<String> = buildList {
     if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
     if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
 }
+
+/** Before Android 11 the ordinary storage permission already reaches every file; from 11 the special All files screen is used. */
+private fun allFilesPermissions(): List<String> =
+    if (Build.VERSION.SDK_INT >= 30) emptyList() else listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
 
 private fun filesPermissions(): List<String> = when {
     Build.VERSION.SDK_INT >= 34 -> listOf(
@@ -151,6 +155,12 @@ object ConnectorRegistry {
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = filesPermissions(), access = SpecialAccess.NONE, defaultOn = false,
             tools = listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE)
+        ),
+        ConnectorSpec(
+            id = "all_files", name = "All files", description = "Browse folders and find any file on the phone.",
+            subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
+            permissions = allFilesPermissions(), access = SpecialAccess.ALL_FILES, defaultOn = false,
+            tools = listOf(DeviceTool.LIST_FOLDER)
         ),
         ConnectorSpec(
             id = "images", name = "Pictures", description = "Show pictures you saved in Ultron, or photos from your phone.",
@@ -282,6 +292,11 @@ object ConnectorRegistry {
             "Finds photos, videos, audio and documents by name and opens them in your own apps.",
             "Photos, videos and music access.",
             "File names are read on your phone. The files are not sent anywhere."
+        ),
+        "all_files" to ConnectorInfo(
+            "Lets Ultron look inside any folder on the phone, and makes file search cover every folder, not only photos, videos and music.",
+            "All files access. A settings screen opens when you add it.",
+            "Names and folders are read on your phone. File contents are not sent anywhere unless you ask Ultron to read a file aloud."
         ),
         "images" to ConnectorInfo(
             "Shows a picture on the screen when you ask, from the pictures you added on the Images page or from a photo found with Files.",

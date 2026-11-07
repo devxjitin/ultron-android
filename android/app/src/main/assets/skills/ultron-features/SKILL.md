@@ -38,6 +38,9 @@ open_app, list_installed_apps, open_camera, open_app_settings, open_settings, op
 ## Files (photos, videos and music permission)
 search_files, open_file. Finds images, videos, audio and documents. The words need not be an exact file name: partial names, small typos, a folder name and dates such as yesterday or last week all work. When one result is clearly the one asked for, open it straight away; when several fit, ask which. Opens the file in the default app for it.
 
+## All files (All files access)
+list_folder. Looks inside any folder of the phone (path such as Download or Documents/Bills, or part of a folder name) and lists sub-folders and files. While All files access is on, search_files also covers every folder and every file type, not only photos, videos and music, and open_file / show_image work on those results. If it is off, tell the user to turn on the All files connector.
+
 ## Pictures (no permission needed)
 show_image. Puts a picture over the screen: one of the pictures added on the Images page (found by name or by what is in it), or a photo found with search_files (pass its number as file_number). action close hides it again. Add pictures from the Images page in the menu; the Pictures connector must be on.
 
