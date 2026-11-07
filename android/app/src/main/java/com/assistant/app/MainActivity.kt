@@ -254,7 +254,7 @@ class MainActivity : ComponentActivity() {
                 ActivityResultContracts.GetContent()
             ) { uri -> viewModel.onImagePicked(uri) }
 
-            val markdownPickerLauncher = rememberLauncherForActivityResult(
+            val pdfPickerLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument()
             ) { uri ->
                 if (uri == null) return@rememberLauncherForActivityResult
@@ -279,7 +279,7 @@ class MainActivity : ComponentActivity() {
                     } else if (tooLarge) {
                         viewModel.onKnowledgePdfTooLarge()
                     } else {
-                        viewModel.onMarkdownFileUploadFailed()
+                        viewModel.onPdfFileUploadFailed()
                     }
                 }
             }
@@ -414,8 +414,8 @@ class MainActivity : ComponentActivity() {
                         onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
                         onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },
                         onResetKnowledge = { viewModel.onResetKnowledge() },
-                        onUploadMarkdownFile = {
-                            markdownPickerLauncher.launch(arrayOf("application/pdf"))
+                        onUploadPdfFile = {
+                            pdfPickerLauncher.launch(arrayOf("application/pdf"))
                         },
                         onDismissKnowledgeDocumentError = { viewModel.onDismissKnowledgeDocumentError() },
                         onDismissToast = { viewModel.onDismissToast() },

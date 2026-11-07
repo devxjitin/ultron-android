@@ -1,7 +1,7 @@
 """Tells the Ultron app whether a newer build exists and hands out a short-lived download link for it.
 
 GET /v1/releases/latest (JWT_AUTH=1, behind API Gateway) or GET /<ACCESS_TOKEN>/latest (legacy Function URL)  ->  contents of s3://BUCKET/latest.json plus `apkUrl`, a presigned link to the APK.
-The bucket stays private (the APK holds connector secrets), so the link expires after 30 minutes.
+The bucket stays private and the link expires after 30 minutes.
 The link uses S3 Transfer Acceleration (enabled on the bucket), so phones far from us-east-1 download
 through the nearest AWS edge.
 

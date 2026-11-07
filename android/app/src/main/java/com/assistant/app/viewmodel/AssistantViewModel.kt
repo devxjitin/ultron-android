@@ -93,7 +93,6 @@ const val ADD_DOCUMENT_TARGET_ID = "__add__"
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
-        /** How long a call or text message waits for the user's tap before it counts as refused. */
         /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
         val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
@@ -107,7 +106,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
         /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
-        private const val TOOL_LABEL_LINGER_MS = 0L
         private const val TOOL_LABEL_MAX_MS = 25_000L
         /** No conversational activity (transcript text or a turn boundary) for this long while
          *  a session is active auto-stops it and clears saved history, so a later session
@@ -502,8 +500,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (!isSessionActive(_uiState.value.voiceState)) startSession()
     }
 
-    /** Mutes/unmutes the user's mic without ending the session. Resets on every session boundary
-     *  (see [releaseResources]). */
+    /** Phone notifications waiting until Ultron is quiet and listening, oldest first. */
     private val pendingAnnouncements = ArrayDeque<String>()
 
     /**
@@ -530,6 +527,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         client.sendText(note)
     }
 
+    /** Mutes/unmutes the user's mic without ending the session. Resets on every session boundary
+     *  (see [releaseResources]). */
     fun onMuteToggled() {
         val state = _uiState.value.voiceState
         if (state == VoiceState.IDLE || state == VoiceState.ERROR) return
@@ -840,7 +839,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Keeps the tool name visible a moment after it finishes, then removes it if it is still the same one. */
-    private fun clearToolLater(label: String, afterMs: Long = TOOL_LABEL_LINGER_MS) {
+    private fun clearToolLater(label: String, afterMs: Long = 0L) {
         viewModelScope.launch {
             delay(afterMs)
             _uiState.update { if (it.activeTool == label && pendingToolCallIds.isEmpty()) it.copy(activeTool = null) else it }
@@ -869,7 +868,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var prefetchJob: Job? = null
     @Volatile private var showPrefetchProgress = false
 
-    /** Asks the AWS update server for a newer build; the automatic check runs at most every few hours. */
+    /** Asks the AWS update server for a newer build; the automatic check runs at most every [UPDATE_CHECK_INTERVAL_MS] (5 minutes). */
     fun checkForUpdate(manual: Boolean) {
         if (!AppUpdater.isConfigured) {
             if (manual) _uiState.update {
@@ -903,7 +902,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 },
                 onFailure = { error ->
-                    // A failed check (offline) must not block the next try for hours.
+                    // A failed check (offline) must not block the next try for a whole interval.
                     lastUpdateCheckMs = 0L
                     _uiState.update {
                         it.copy(
@@ -1412,7 +1411,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun onMarkdownFileUploadFailed() {
+    fun onPdfFileUploadFailed() {
         showToast("Choose a PDF file up to 10 MB.", AppNotificationType.ERROR)
     }
 
@@ -1922,7 +1921,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 resetSpeechDetection()
                 // PROCESSING is included so a turn that completes with no audio (empty reply)
                 // also returns to LISTENING here, instead of staying stuck until fresh speech
-                // or the 45s idle timeout.
+                // or the 2-minute idle timeout.
                 if (_uiState.value.voiceState == VoiceState.SPEAKING ||
                     _uiState.value.voiceState == VoiceState.PROCESSING
                 ) {
@@ -2070,9 +2069,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch { prewarmIfPossible() }
     }
 
-    /** Opens a session ahead of time so its (slow) system-instruction ingestion is already done
-     *  by the time the user actually taps the mic. No-op if one is already warm/warming, the app
-     *  has no key yet, or a real session is already active. */
     /** True while a prewarm coroutine is between its synchronous entry checks and actually
      *  setting [warmClient] -- guards against two overlapping callers (e.g. the ViewModel's own
      *  init block and MainActivity's onStart firing back-to-back on cold launch) both passing
@@ -2090,6 +2086,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         prewarmInFlight = false
     }
 
+    /** Opens a session ahead of time so its (slow) system-instruction ingestion is already done
+     *  by the time the user actually taps the mic. No-op if one is already warm/warming, the app
+     *  has no key yet, or a real session is already active. */
     private fun prewarmIfPossible() {
         if (!keysLoaded) return
         if (!AccessGate.unlocked) return
@@ -2508,8 +2507,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Called when the Activity comes back to the foreground -- re-arm the warm session so the
-     *  next mic tap is fast again. */
     /** The subscription screen opened or closed the app: warm up a session, or end everything that is running. */
     fun onAccessChanged(unlocked: Boolean) {
         if (unlocked) {
@@ -2526,6 +2523,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         activateWarmOnReady = false
     }
 
+    /** Called when the Activity comes back to the foreground -- re-arm the warm session so the
+     *  next mic tap is fast again. */
     fun onAppForegrounded() {
         isForeground = true
         backgroundSessionAllowed = false
