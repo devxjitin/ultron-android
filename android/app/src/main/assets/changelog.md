@@ -8,6 +8,9 @@ notes and the About page all read it from here. A date after the version is opti
 ### Fixed
 - Replying to a chat notification now needs the name of the person or group. Ultron answers only that chat, says who the reply went to, and asks you when several chats fit instead of replying to the newest one.
 
+### Changed
+- The Gemini key is now sent to the voice connection in a header instead of in the web address, so it cannot show up in logged addresses.
+
 ### Removed
 - The Reconnect mark for online connectors, which never showed up. Local connectors still show Repair when Android access is taken away.
 
