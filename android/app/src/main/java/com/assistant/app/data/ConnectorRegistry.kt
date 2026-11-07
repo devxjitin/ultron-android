@@ -153,6 +153,12 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE)
         ),
         ConnectorSpec(
+            id = "images", name = "Pictures", description = "Show pictures you saved in Ultron, or photos from your phone.",
+            subtitle = "On your phone", category = ConnectorCategory.SEARCH_MEDIA, kind = ConnectorKind.PHONE,
+            permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = false,
+            tools = listOf(DeviceTool.SHOW_IMAGE)
+        ),
+        ConnectorSpec(
             id = "app_usage", name = "App usage", description = "See which apps you use most.",
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = emptyList(), access = SpecialAccess.USAGE_ACCESS, defaultOn = false,
@@ -276,6 +282,11 @@ object ConnectorRegistry {
             "Finds photos, videos, audio and documents by name and opens them in your own apps.",
             "Photos, videos and music access.",
             "File names are read on your phone. The files are not sent anywhere."
+        ),
+        "images" to ConnectorInfo(
+            "Shows a picture on the screen when you ask, from the pictures you added on the Images page or from a photo found with Files.",
+            "Nothing. Add pictures on the Images page.",
+            "Pictures stay on your phone. They are not sent anywhere.",
         ),
         "navigation" to ConnectorInfo(
             "Goes back and home, opens recents, scrolls, locks the screen and takes screenshots.",

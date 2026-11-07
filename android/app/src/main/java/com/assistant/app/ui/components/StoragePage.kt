@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cached
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.Icon
@@ -71,7 +72,10 @@ fun StoragePage(
     pastConversationBytes: Long = 0L,
     onClearPastConversations: () -> Unit = {},
     memoryBytes: Long = 0L,
-    knowledgeBytes: Long = 0L
+    knowledgeBytes: Long = 0L,
+    imageCount: Int = 0,
+    imageBytes: Long = 0L,
+    onClearImages: () -> Unit = {}
 ) {
     var pending by remember { mutableStateOf<StorageItem?>(null) }
     pending?.let { item ->
@@ -101,6 +105,12 @@ fun StoragePage(
             AssistantIcons.Knowledge, AssistantAmber, "Knowledge documents",
             "$knowledgeCount ${if (knowledgeCount == 1) "document" else "documents"}",
             "Your own documents. Add or remove them in Knowledge.", knowledgeBytes
+        ),
+        StorageItem(
+            Icons.Outlined.Image, AssistantAccent, "Images",
+            if (imageCount == 0) "None" else "$imageCount ${if (imageCount == 1) "picture" else "pictures"}",
+            "Pictures you added for the assistant to show.", imageBytes,
+            "Clear all pictures?", "Every picture you added will be deleted.", if (imageCount > 0) onClearImages else null
         ),
         StorageItem(
             Icons.Outlined.Cached, AssistantTextSecondary, "Cache",

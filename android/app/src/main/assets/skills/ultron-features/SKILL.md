@@ -36,7 +36,13 @@ read_notifications, reply_to_notification, dismiss_notification, get_now_playing
 open_app, list_installed_apps, open_camera, open_app_settings, open_settings, open_url, share_text, get_clipboard_text, set_clipboard_text, show_notification, get_most_used_apps and get_app_usage_time (usage access).
 
 ## Files (photos, videos and music permission)
-search_files, open_file. Finds images, videos, audio and documents by name and opens one in his default app for it.
+search_files, open_file. Finds images, videos, audio and documents. The words need not be an exact file name: partial names, small typos, a folder name and dates such as yesterday or last week all work. When one result is clearly the one asked for, open it straight away; when several fit, ask which. Opens the file in the default app for it.
+
+## Pictures (no permission needed)
+show_image. Puts a picture over the screen: one of the pictures added on the Images page (found by name or by what is in it), or a photo found with search_files (pass its number as file_number). action close hides it again. Add pictures from the Images page in the menu; the Pictures connector must be on.
+
+## Requests
+On the Skills and Connectors pages, the card at the bottom ("Need something that is not here?") opens a form to ask the developer for a new skill or connector.
 
 ## Phone navigation (accessibility service)
 press_back, go_to_home_screen, open_recent_apps, switch_to_previous_app, open_notification_shade, open_quick_settings, scroll_screen, lock_screen, take_screenshot, open_power_menu, toggle_split_screen.

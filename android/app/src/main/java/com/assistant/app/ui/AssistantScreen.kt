@@ -68,6 +68,9 @@ import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.HistoryPage
+import com.assistant.app.ui.components.FeatureRequestDialog
+import com.assistant.app.ui.components.ImageOverlay
+import com.assistant.app.ui.components.ImagesPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
 import com.assistant.app.ui.components.AppDrawerContent
 import com.assistant.app.ui.theme.ThemeMode
@@ -135,6 +138,15 @@ fun AssistantScreen(
     onClearMemory: () -> Unit = {},
     onRestoreMemory: (String) -> Unit = {},
     onHistoryTapped: () -> Unit = {},
+    onImagesTapped: () -> Unit = {},
+    onPickImage: () -> Unit = {},
+    onSaveImage: (String, String) -> Unit = { _, _ -> },
+    onCancelPendingImage: () -> Unit = {},
+    onUpdateImage: (Long, String, String) -> Unit = { _, _, _ -> },
+    onDeleteImage: (Long) -> Unit = {},
+    onClearImages: () -> Unit = {},
+    onDismissShownImage: () -> Unit = {},
+    onSendFeatureRequest: (String, String, String, String, String, (String?) -> Unit) -> Unit = { _, _, _, _, _, _ -> },
     onDeletePastSession: (List<Long>) -> Unit = {},
     onClearPastConversations: () -> Unit = {},
     onShowOlderConversations: () -> Unit = {},
@@ -175,6 +187,11 @@ fun AssistantScreen(
         if (uiState.page in SETTINGS_PAGES) lastSettingsPage[0] = uiState.page
         // Space the pages leave free at the top for the slim top bar.
         val topReserve = AppTopBarHeight
+        // The request form is shared by Skills and Connectors, which both open it.
+        var requestType by remember { mutableStateOf<String?>(null) }
+        var requestSending by remember { mutableStateOf(false) }
+        var requestError by remember { mutableStateOf<String?>(null) }
+        val openRequest: (String) -> Unit = { requestError = null; requestType = it }
         val sessionActive = uiState.voiceState != VoiceState.IDLE && uiState.voiceState != VoiceState.ERROR
         var sessionStartMs by remember { mutableStateOf<Long?>(null) }
         LaunchedEffect(sessionActive) {
@@ -214,6 +231,7 @@ fun AssistantScreen(
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
                         NavTab.HISTORY -> guardedNav(onHistoryTapped)
+                        NavTab.IMAGES -> guardedNav(onImagesTapped)
                         NavTab.SETTINGS -> guardedNav(onSettingsTapped)
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
                         NavTab.ABOUT -> guardedNav(onAboutTapped)
@@ -309,13 +327,30 @@ fun AssistantScreen(
                 )
             }
 
+            if (tab == NavTab.IMAGES) {
+                val filesDir = androidx.compose.ui.platform.LocalContext.current.filesDir
+                ImagesPage(
+                    images = uiState.images,
+                    pendingUri = uiState.pendingImageUri,
+                    isSaving = uiState.isSavingImage,
+                    imageFile = { com.assistant.app.data.ImageLibrary.fileIn(filesDir, it) },
+                    onPick = onPickImage,
+                    onSave = onSaveImage,
+                    onCancelPending = onCancelPendingImage,
+                    onUpdate = onUpdateImage,
+                    onDelete = onDeleteImage,
+                    modifier = Modifier.padding(top = topReserve)
+                )
+            }
+
             if (tab == NavTab.CONNECTORS) {
                 ConnectorsPage(
                     issues = uiState.connectorIssues,
                     enabledTools = uiState.settings.enabledDeviceTools,
                     onToolsEnabled = onConnectorToolsEnabled,
                     onRequestPermissions = onRequestConnectorPermissions,
-                    modifier = Modifier.padding(top = topReserve)
+                    modifier = Modifier.padding(top = topReserve),
+                    onRequest = { openRequest("connector") }
                 )
             }
 
@@ -324,7 +359,7 @@ fun AssistantScreen(
                 when (tab) {
                     NavTab.SKILLS -> {
                         val skills by SkillRegistry.entries.collectAsState()
-                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
+                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier, onRequest = { openRequest("skill") })
                     }
                     NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                     NavTab.STORAGE -> StoragePage(
@@ -340,7 +375,10 @@ fun AssistantScreen(
                         pastConversationBytes = uiState.pastConversationBytes,
                         memoryBytes = uiState.memories.sumOf { it.text.length.toLong() },
                         knowledgeBytes = uiState.knowledgeDocuments.sumOf { it.text.length.toLong() },
-                        onClearPastConversations = onClearPastConversations
+                        onClearPastConversations = onClearPastConversations,
+                        imageCount = uiState.images.size,
+                        imageBytes = uiState.imageBytes,
+                        onClearImages = onClearImages
                     )
                     NavTab.ABOUT -> AboutPage(
                         assistantName = uiState.settings.assistantName,
@@ -419,6 +457,25 @@ fun AssistantScreen(
                 accent = true,
                 modifier = Modifier.padding(bottom = 28.dp)
             )
+        }
+
+        requestType?.let { initial ->
+            FeatureRequestDialog(
+                initialType = initial, sending = requestSending, error = requestError,
+                onSend = { form ->
+                    requestSending = true
+                    requestError = null
+                    onSendFeatureRequest(form.type, form.name, form.details, form.examples, form.email) { error ->
+                        requestSending = false
+                        if (error == null) requestType = null else requestError = error
+                    }
+                },
+                onDismiss = { requestType = null }
+            )
+        }
+
+        uiState.shownImage?.let { shown ->
+            androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, onDismissShownImage) }
         }
 
         AppTopBar(

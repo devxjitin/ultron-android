@@ -98,7 +98,9 @@ class DeviceToolRunner(
     /** Asks the on-screen activity to show Android's permission dialog for these permissions. */
     private val requestPermissions: (List<String>) -> Unit,
     /** Describes a screenshot (JPEG bytes) following the prompt; used by look_at_screen. */
-    private val describeScreen: suspend (ByteArray, String) -> String = { _, _ -> "" }
+    private val describeScreen: suspend (ByteArray, String) -> String = { _, _ -> "" },
+    /** Puts a picture on the screen (a null uri hides it). Called from the tool thread. */
+    private val showImage: (Uri?, String) -> Unit = { _, _ -> }
 ) {
     private val youtubeDownloads by lazy {
         val downloader = YouTubeDownloader(app)
@@ -183,6 +185,7 @@ class DeviceToolRunner(
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
             DeviceTool.SEARCH_FILES -> searchFiles(text("query"), text("kind"), (number("limit") ?: 5).coerceIn(1, 10))
             DeviceTool.OPEN_FILE -> openFile(number("number"), text("name"))
+            DeviceTool.SHOW_IMAGE -> showPicture(text("query"), number("file_number"), text("action"))
             DeviceTool.SEARCH_CONTACT -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
@@ -1152,7 +1155,7 @@ class DeviceToolRunner(
         return "status=ok\nSent $command."
     }
 
-    private class FoundFile(val uri: android.net.Uri, val mime: String, val name: String)
+    private class FoundFile(val uri: android.net.Uri, val mime: String, val name: String, val description: String)
 
     /** Asks for whatever media access is missing; null when the files can be read. */
     private fun fileAccessMissing(): String? {
@@ -1165,52 +1168,86 @@ class DeviceToolRunner(
         return missingPermission(*all.toTypedArray())
     }
 
-    private fun queryFiles(query: String?, kind: String?, limit: Int): List<Pair<FoundFile, String>> {
+    /** Everything the phone lists for [kind], newest first, as ranked-search candidates paired with their details. */
+    private fun allFiles(kind: String?): List<Pair<FileCandidate, FoundFile>> {
         val files = MediaStore.Files.getContentUri("external")
-        val where = mutableListOf<String>()
-        val args = mutableListOf<String>()
-        when (kind) {
-            "image" -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}")
-            "video" -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO}")
-            "audio" -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO}")
-            "document" -> where.add(
-                "(${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'text/%' OR ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'application/%')"
-            )
-            else -> where.add("${MediaStore.Files.FileColumns.MEDIA_TYPE} != ${MediaStore.Files.FileColumns.MEDIA_TYPE_NONE}")
+        val type = MediaStore.Files.FileColumns.MEDIA_TYPE
+        val mimeColumn = MediaStore.Files.FileColumns.MIME_TYPE
+        val where = when (kind) {
+            "image" -> "$type = ${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}"
+            "video" -> "$type = ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO}"
+            "audio" -> "$type = ${MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO}"
+            "document" -> "($mimeColumn LIKE 'text/%' OR $mimeColumn LIKE 'application/%')"
+            else -> "$type != ${MediaStore.Files.FileColumns.MEDIA_TYPE_NONE}"
         }
-        // Every word must appear in the file name or title, in any order.
-        query?.split(Regex("\\s+"))?.filter { it.isNotBlank() }?.forEach {
-            where.add("(${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE ? OR ${MediaStore.Files.FileColumns.TITLE} LIKE ?)")
-            args.add("%$it%"); args.add("%$it%")
-        }
+        val folderColumn = if (Build.VERSION.SDK_INT >= 29) MediaStore.MediaColumns.RELATIVE_PATH else MediaStore.Files.FileColumns.DATA
         val format = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
-        val found = mutableListOf<Pair<FoundFile, String>>()
+        val found = mutableListOf<Pair<FileCandidate, FoundFile>>()
         app.contentResolver.query(
             files,
             arrayOf(
-                MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME, MediaStore.Files.FileColumns.MIME_TYPE,
-                MediaStore.Files.FileColumns.SIZE, MediaStore.Files.FileColumns.DATE_ADDED
+                MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME, mimeColumn,
+                MediaStore.Files.FileColumns.SIZE, MediaStore.Files.FileColumns.DATE_ADDED, MediaStore.Files.FileColumns.DATE_MODIFIED,
+                MediaStore.Files.FileColumns.TITLE, folderColumn
             ),
-            where.joinToString(" AND "), args.toTypedArray(), "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
+            where, null, "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
         )?.use { cursor ->
-            while (cursor.moveToNext() && found.size < limit) {
+            while (cursor.moveToNext() && found.size < MAX_FILES_SCANNED) {
+                val id = cursor.getLong(0)
                 val name = cursor.getString(1).orEmpty()
+                val title = cursor.getString(6).orEmpty()
                 val mime = cursor.getString(2)?.takeIf { it.isNotBlank() } ?: "*/*"
-                val date = java.time.Instant.ofEpochSecond(cursor.getLong(4)).atZone(ZoneId.systemDefault()).format(format)
+                val seconds = maxOf(cursor.getLong(4), cursor.getLong(5))
+                val folder = cursor.getString(7).orEmpty().substringBeforeLast('/', "")
+                val date = java.time.Instant.ofEpochSecond(seconds).atZone(ZoneId.systemDefault()).format(format)
                 val size = android.text.format.Formatter.formatShortFileSize(app, cursor.getLong(3))
-                found.add(FoundFile(ContentUris.withAppendedId(files, cursor.getLong(0)), mime, name) to "$name ($mime, $size, $date)")
+                val place = folder.substringAfterLast("/storage/emulated/0/").trim('/').takeIf { it.isNotBlank() }?.let { ", in $it" }.orEmpty()
+                // The title often holds the readable name when the file name is only a code.
+                val searchable = if (title.isNotBlank() && !name.contains(title, ignoreCase = true)) "$name $title" else name
+                found.add(
+                    FileCandidate(searchable, folder, seconds * 1000, id) to
+                        FoundFile(ContentUris.withAppendedId(files, id), mime, name, "$name ($mime, $size, $date$place)")
+                )
             }
         }
         return found
     }
 
+    private class FileResult(val files: List<FoundFile>, val exact: Boolean, val ambiguous: Boolean, val nearest: List<FoundFile>)
+
+    private fun queryFiles(query: String?, kind: String?, limit: Int): FileResult {
+        val all = allFiles(kind)
+        val byKey = all.associate { it.first.key to it.second }
+        val request = FileSearch.parse(query)
+        val ranked = FileSearch.rank(all.map { it.first }, request)
+        if (ranked.isNotEmpty()) {
+            val top = ranked.take(limit)
+            val ambiguous = ranked.size > 1 && request.words.isNotEmpty() && ranked[0].score == ranked[1].score &&
+                ranked[0].file.name != ranked[1].file.name
+            return FileResult(top.mapNotNull { byKey[it.file.key] }, top.all { it.exact }, ambiguous, emptyList())
+        }
+        val nearest = FileSearch.closest(all.map { it.first }, request, limit).mapNotNull { byKey[it.key] }
+            .ifEmpty { all.take(limit).map { it.second } }
+        return FileResult(emptyList(), true, false, nearest)
+    }
+
+    private fun numbered(files: List<FoundFile>) = files.mapIndexed { i, it -> "${i + 1}. ${it.description}" }.joinToString("\n")
+
     private fun searchFiles(query: String?, kind: String?, limit: Int): String {
         fileAccessMissing()?.let { return it }
-        val found = queryFiles(query, kind, limit)
-        lastFiles = found.map { it.first }
-        if (found.isEmpty()) return "status=empty\nNo matching files. On Android 13 and newer, documents outside the media folders cannot be searched."
-        return "status=ok\n" + found.mapIndexed { i, it -> "${i + 1}. ${it.second}" }.joinToString("\n") +
-            "\nCall open_file with a number to show one."
+        val result = queryFiles(query, kind, limit)
+        if (result.files.isNotEmpty()) {
+            lastFiles = result.files
+            return "status=ok\n" + numbered(result.files) +
+                (if (result.exact) "" else "\nThese are close matches, not exact names.") +
+                "\nIf the first one is clearly what was asked for, call open_file with number 1 straight away; otherwise ask which one."
+        }
+        lastFiles = result.nearest
+        val hint = if (result.nearest.isEmpty()) ""
+        else "\nNothing matched those words, so these are the closest or newest files. Ask which one is meant, or search again with other words:\n" +
+            numbered(result.nearest)
+        return "status=empty\nNo file matches. Try other words, a part of the name, the folder name, or a date like yesterday." +
+            " On Android 13 and newer, documents outside the media folders cannot be searched.$hint"
     }
 
     private fun openFile(number: Int?, name: String?): String {
@@ -1218,7 +1255,19 @@ class DeviceToolRunner(
         val file = when {
             number != null -> lastFiles.getOrNull(number - 1)
                 ?: return "status=invalid\nNo file $number. Call search_files first and use a number from its list."
-            name != null -> queryFiles(name, "any", 1).firstOrNull()?.first ?: return "status=not_found\nNo file matches \"$name\"."
+            name != null -> {
+                val result = queryFiles(name, "any", 5)
+                if (result.files.isEmpty()) {
+                    lastFiles = result.nearest
+                    return "status=not_found\nNo file matches \"$name\"." +
+                        if (result.nearest.isEmpty()) "" else " Closest files:\n" + numbered(result.nearest)
+                }
+                if (result.ambiguous) {
+                    lastFiles = result.files
+                    return "status=ambiguous\nSeveral files fit equally. Ask which one, then call open_file with its number:\n" + numbered(result.files)
+                }
+                result.files.first()
+            }
             else -> return MISSING
         }
         // No chooser: Android opens the user's default app for this kind of file, and only asks when none is set.
@@ -1229,6 +1278,34 @@ class DeviceToolRunner(
         } catch (e: ActivityNotFoundException) {
             "status=unavailable\nNo app on the phone can open ${file.name}."
         }
+    }
+
+    private fun showPicture(query: String?, fileNumber: Int?, action: String?): String {
+        if (action == "close") {
+            showImage(null, "")
+            return "status=ok\nPicture hidden."
+        }
+        if (fileNumber != null) {
+            val file = lastFiles.getOrNull(fileNumber - 1)
+                ?: return "status=invalid\nNo file $fileNumber. Call search_files first and use a number from its list."
+            if (!file.mime.startsWith("image/")) return "status=invalid\n${file.name} is not a picture. Use open_file for it."
+            showImage(file.uri, file.name)
+            return "status=ok\nShowing ${file.name}."
+        }
+        val library = ImageLibrary.forApp(app)
+        val found = library.search(query)
+        if (found.isEmpty()) {
+            val saved = library.list().take(20)
+            return if (saved.isEmpty()) "status=empty\nNo pictures have been added to Ultron yet. The user can add some on the Images page. " +
+                "For photos on the phone, use search_files with kind image, then show_image with file_number."
+            else "status=not_found\nNo saved picture fits that. Saved pictures: " + saved.joinToString("; ") { it.title } +
+                ". Ask which one, or use search_files for photos on the phone."
+        }
+        val best = found.first()
+        showImage(Uri.fromFile(library.fileOf(best)), best.title)
+        val others = found.drop(1).take(3).joinToString("; ") { it.title }
+        return "status=ok\nShowing \"${best.title}\"." + (if (best.description.isNotBlank()) " It shows: ${best.description}" else "") +
+            (if (others.isNotEmpty()) "\nOther close matches: $others" else "")
     }
 
     /** Matches the launcher label exactly first, then by substring. Never returns the app list. */
@@ -1248,6 +1325,7 @@ class DeviceToolRunner(
     private companion object {
         /** The latest search_files list, so open_file can take a number from it. */
         @Volatile var lastFiles: List<FoundFile> = emptyList()
+        const val MAX_FILES_SCANNED = 6000
         /** The assistant's voice plays in communication mode, so it follows the call volume. */
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
@@ -1259,7 +1337,7 @@ class DeviceToolRunner(
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
             DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING,
-            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE
+            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.SHOW_IMAGE
         )
         const val MISSING ="status=invalid\nA required value was missing."
     }

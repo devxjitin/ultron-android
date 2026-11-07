@@ -5,8 +5,11 @@ import com.assistant.app.data.MemoryItem
 import com.assistant.app.data.RagDocument
 import com.assistant.app.data.StoredTurn
 
+/** A picture the assistant is showing over the home screen. [uri] is a file or content address. */
+data class ShownImage(val uri: String, val title: String, val id: Int)
+
 /** The page on screen. Exactly one is shown at a time; HOME is the voice screen. */
-enum class AppPage { HOME, KNOWLEDGE, MEMORY, HISTORY, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
+enum class AppPage { HOME, KNOWLEDGE, MEMORY, HISTORY, IMAGES, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }
@@ -60,6 +63,14 @@ data class AssistantUiState(
     val pastConversationCount: Int = 0,
     /** Rough space the saved exchanges take; see ConversationHistoryStore.approxBytes. */
     val pastConversationBytes: Long = 0L,
+    /** Pictures the user added for the assistant to show, newest first. */
+    val images: List<com.assistant.app.data.StoredImage> = emptyList(),
+    val imageBytes: Long = 0L,
+    /** A picture chosen in the picker that still needs a title before it is saved. */
+    val pendingImageUri: String? = null,
+    val isSavingImage: Boolean = false,
+    /** The picture the assistant is showing right now, or null. */
+    val shownImage: ShownImage? = null,
     val errorMessage: String? = null,
     /** Name of the tool the assistant is running right now (or just ran), shown on the home screen. */
     val activeTool: String? = null,

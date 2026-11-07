@@ -212,10 +212,11 @@ enum class DeviceTool(
 
     SEARCH_FILES(
         "search_files", "Search files", "Find images, videos, audio and documents by name.",
-        "Searches the files on the phone by name and lists the newest matches, each with a number. Leave the query empty to list the newest files of a kind. " +
-            "Call open_file with a number to show one.",
+        "Searches the files on the phone and lists the best matches, each with a number. The user rarely knows the exact name, so pass the words they said as they said them: " +
+            "partial names, typos, a folder name and dates like yesterday or last week all work. Leave the query empty to list the newest files of a kind. " +
+            "When one result is clearly the one asked for, call open_file with its number at once.",
         listOf(
-            ToolParam("query", ToolParamType.STRING, "Words in the file name or title. Leave out to list the newest.", required = false),
+            ToolParam("query", ToolParamType.STRING, "What the user said about the file: any words of its name, its folder, or a date. Leave out to list the newest.", required = false),
             ToolParam("kind", ToolParamType.STRING, "What to look for: image, video, audio, document or any. Default any.", required = false,
                 choices = listOf("image", "video", "audio", "document", "any")),
             ToolParam("limit", ToolParamType.INTEGER, "How many matches to list, 1-10. Default 5.", required = false)
@@ -228,6 +229,18 @@ enum class DeviceTool(
         listOf(
             ToolParam("number", ToolParamType.INTEGER, "Number from the latest search_files list.", required = false),
             ToolParam("name", ToolParamType.STRING, "File name to search for when there is no number.", required = false)
+        )
+    ),
+
+    SHOW_IMAGE(
+        "show_image", "Show a picture", "Show a picture on the screen.",
+        "Shows a picture over the home screen. By default it looks in the pictures the user added to Ultron, by what they said about it " +
+            "(a name, a person, a place, a thing in it). To show a photo found with search_files, pass its number as file_number. " +
+            "Use action close to hide the picture again. Use it whenever the user asks to see, show or look at a picture.",
+        listOf(
+            ToolParam("query", ToolParamType.STRING, "What the user said about the picture, as they said it.", required = false),
+            ToolParam("file_number", ToolParamType.INTEGER, "Number from the latest search_files list, to show that photo instead.", required = false),
+            ToolParam("action", ToolParamType.STRING, "show (default) or close.", required = false, choices = listOf("show", "close"))
         )
     ),
 

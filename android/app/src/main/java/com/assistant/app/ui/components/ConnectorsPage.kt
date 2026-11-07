@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Language
@@ -161,6 +162,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "youtube_downloads" to Icons.Outlined.Download,
     "apps_settings" to Icons.Outlined.Apps,
     "files" to Icons.Outlined.Folder,
+    "images" to Icons.Outlined.Image,
     "navigation" to Icons.Outlined.Explore,
     "screen" to Icons.Outlined.TouchApp
 )
@@ -184,7 +186,8 @@ fun ConnectorsPage(
     enabledTools: Set<DeviceTool>,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRequest: () -> Unit = {}
 ) {
     val context = LocalContext.current
     // Android permission and special-access state changes outside the app, so re-read it on resume.
@@ -342,6 +345,7 @@ fun ConnectorsPage(
                     inGroup.forEach { Card(it) }
                 }
             }
+            RequestCard(onRequest)
             Spacer(Modifier.height(24.dp))
         }
     }

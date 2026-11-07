@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import org.json.JSONObject
+import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -21,7 +22,9 @@ import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationHistoryIndexer
 import com.assistant.app.data.ConversationHistoryTools
+import com.assistant.app.data.AddImageResult
 import com.assistant.app.data.ConversationHistoryStore
+import com.assistant.app.data.ImageLibrary
 import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.UsageDay
@@ -96,6 +99,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
         val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
+        const val MAX_PICKED_IMAGE_BYTES = 25 * 1024 * 1024
         /** One quick retry for transient knowledge-search failures; keeps worst case well under the 15 s model watchdog. */
         private const val SEARCH_RETRY_LIMIT = 1
         private const val SEARCH_RETRY_DELAY_MS = 500L
@@ -575,6 +579,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
         if (page == AppPage.STORAGE || page == AppPage.HISTORY) refreshPastConversations()
+        if (page == AppPage.STORAGE || page == AppPage.IMAGES) refreshImages()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
@@ -590,6 +595,92 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onMemoryTapped() = openPage(AppPage.MEMORY)
 
     fun onHistoryTapped() = openPage(AppPage.HISTORY)
+
+    fun onImagesTapped() = openPage(AppPage.IMAGES)
+
+    private val imageLibrary by lazy { ImageLibrary.forApp(application) }
+
+    private fun refreshImages() {
+        viewModelScope.launch {
+            val (images, bytes) = withContext(Dispatchers.IO) { imageLibrary.list() to imageLibrary.totalBytes() }
+            _uiState.update { it.copy(images = images, imageBytes = bytes) }
+        }
+    }
+
+    /** A picture came back from the picker; the Images page asks for its title before it is saved. */
+    fun onImagePicked(uri: Uri?) {
+        if (uri != null) _uiState.update { it.copy(pendingImageUri = uri.toString()) }
+    }
+
+    fun onCancelPendingImage() = _uiState.update { it.copy(pendingImageUri = null) }
+
+    fun onSaveImage(title: String, description: String) {
+        val uri = _uiState.value.pendingImageUri?.let(Uri::parse) ?: return
+        if (_uiState.value.isSavingImage) return
+        _uiState.update { it.copy(isSavingImage = true) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes == null || bytes.size > MAX_PICKED_IMAGE_BYTES) null else imageLibrary.add(bytes, title, description)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            _uiState.update { it.copy(isSavingImage = false, pendingImageUri = if (result is AddImageResult.Added) null else it.pendingImageUri) }
+            when (result) {
+                is AddImageResult.Added -> { showToast("Picture added"); refreshImages() }
+                is AddImageResult.Duplicate -> showToast("That picture is already saved as \"${result.existing.title}\"", AppNotificationType.WARNING)
+                AddImageResult.LibraryFull -> showToast("You can keep up to ${ImageLibrary.MAX_IMAGES} pictures", AppNotificationType.WARNING)
+                AddImageResult.NotAnImage -> showToast("That file is not a picture", AppNotificationType.ERROR)
+                null -> showToast("Could not read that picture", AppNotificationType.ERROR)
+            }
+        }
+    }
+
+    fun onUpdateImage(id: Long, title: String, description: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { imageLibrary.update(id, title, description) }
+            refreshImages()
+        }
+    }
+
+    fun onDeleteImage(id: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { imageLibrary.delete(id) }
+            showToast("Picture deleted")
+            refreshImages()
+        }
+    }
+
+    fun onClearImages() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { imageLibrary.clearAll() }
+            showToast("Pictures cleared")
+            refreshImages()
+        }
+    }
+
+    fun onDismissShownImage() = _uiState.update { it.copy(shownImage = null) }
+
+    /** Sends a skill or connector request to the developer. [onDone] gets null when sent, else a message for the user. */
+    fun onSendFeatureRequest(type: String, name: String, details: String, examples: String, email: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch {
+            val error = withContext(Dispatchers.IO) {
+                try {
+                    com.assistant.app.network.FeatureRequestClient()
+                        .send(type, name, details, examples, email, com.assistant.app.BuildConfig.VERSION_NAME)
+                    null
+                } catch (e: com.assistant.app.network.FeatureRequestException) {
+                    e.message ?: "Could not send it."
+                } catch (e: Exception) {
+                    "Could not send it right now. Please try again later."
+                }
+            }
+            if (error == null) showToast("Request sent. Thank you!")
+            onDone(error)
+        }
+    }
 
     fun onMemoryEnabledToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Memory on" else "Memory off") {
@@ -1048,6 +1139,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         },
         describeScreen = { jpeg, prompt ->
             auxTextClient(resolveApiKey(), UsageStore.PURPOSE_SCREEN).describeImage(jpeg, prompt)
+        },
+        showImage = { uri, title ->
+            _uiState.update { state ->
+                state.copy(shownImage = uri?.let { ShownImage(it.toString(), title, (state.shownImage?.id ?: 0) + 1) })
+            }
         }
     )
 

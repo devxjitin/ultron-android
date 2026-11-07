@@ -250,6 +250,10 @@ class MainActivity : ComponentActivity() {
                 onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
             }
 
+            val imagePickerLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.GetContent()
+            ) { uri -> viewModel.onImagePicked(uri) }
+
             val markdownPickerLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument()
             ) { uri ->
@@ -358,6 +362,17 @@ class MainActivity : ComponentActivity() {
                         onClearMemory = { viewModel.onClearMemory() },
                         onRestoreMemory = { viewModel.onRestoreMemory(it) },
                         onHistoryTapped = { viewModel.onHistoryTapped() },
+                        onImagesTapped = { viewModel.onImagesTapped() },
+                        onPickImage = { imagePickerLauncher.launch("image/*") },
+                        onSaveImage = { title, description -> viewModel.onSaveImage(title, description) },
+                        onCancelPendingImage = { viewModel.onCancelPendingImage() },
+                        onUpdateImage = { id, title, description -> viewModel.onUpdateImage(id, title, description) },
+                        onDeleteImage = { viewModel.onDeleteImage(it) },
+                        onClearImages = { viewModel.onClearImages() },
+                        onDismissShownImage = { viewModel.onDismissShownImage() },
+                        onSendFeatureRequest = { type, name, details, examples, email, done ->
+                            viewModel.onSendFeatureRequest(type, name, details, examples, email, done)
+                        },
                         onDeletePastSession = { viewModel.onDeletePastSession(it) },
                         onClearPastConversations = { viewModel.onClearPastConversations() },
                         onShowOlderConversations = { viewModel.onShowOlderConversations() },
