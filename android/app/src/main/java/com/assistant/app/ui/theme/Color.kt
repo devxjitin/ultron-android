@@ -31,7 +31,7 @@ class AssistantPalette(
     val textPrimary: Color,
     val textSecondary: Color,
     val textMuted: Color,
-    /** Fill and text colour of the main button: light on a dark page, dark on a light page. */
+    /** Fill and text colour of the main button: near-black on a light page, Ultron red on a dark page. */
     val buttonFill: Color,
     val onButtonFill: Color
 )
@@ -78,8 +78,8 @@ val DarkPalette = AssistantPalette(
     textPrimary = Color(0xFFEDEDEA),
     textSecondary = Color(0xFFA9A7A1),
     textMuted = Color(0xFF8A8882),
-    buttonFill = Color(0xFFF2F1EC),
-    onButtonFill = Color(0xFF131313)
+    buttonFill = Color(0xFFC4232C),
+    onButtonFill = Color(0xFFFFFFFF)
 )
 
 /** The palette in use. A snapshot state, so every screen that read a colour redraws when the theme changes. */
@@ -109,6 +109,6 @@ val AssistantTextPrimary: Color get() = ActivePalette.current.textPrimary
 val AssistantTextSecondary: Color get() = ActivePalette.current.textSecondary
 val AssistantTextMuted: Color get() = ActivePalette.current.textMuted
 
-/** The main button: filled light on a dark page and dark on a light page, with matching text. */
+/** The main button: dark on a light page and Ultron red on a dark page, with matching text. */
 val AssistantButtonFill: Color get() = ActivePalette.current.buttonFill
 val AssistantOnButtonFill: Color get() = ActivePalette.current.onButtonFill

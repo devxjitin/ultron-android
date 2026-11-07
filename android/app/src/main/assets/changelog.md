@@ -3,6 +3,15 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.15.1 - 2026-11-07
+
+### Changed
+- The menu is in a clearer order, in groups: Home and Profile; Assistant (Skills, Connectors, Schedule); Your data (Knowledge, Memory, History, Images); Insights; App. The picture at the bottom is now the first letter of the assistant's name.
+
+### Fixed
+- In the dark theme, the main buttons (Update now, Send, Add a schedule, Add pictures and more) were pale. They are now Ultron red with white text. The light theme is unchanged.
+- About no longer says "Checking for updates…" on its own. Ultron still looks for updates quietly in the background, and shows "Checking" only when you tap Check for updates.
+
 ## 1.15.0 - 2026-11-07
 
 ### Added

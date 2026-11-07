@@ -878,6 +878,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     /** Silent download started right after a check finds a build, so tapping Update can install at once. */
     private var prefetchJob: Job? = null
     @Volatile private var showPrefetchProgress = false
+    /** True while a check is running, so two never overlap. The page only shows "Checking" for a check the user started. */
+    private var updateCheckInFlight = false
 
     /** Asks the AWS update server for a newer build; the automatic check runs at most every [UPDATE_CHECK_INTERVAL_MS] (5 minutes). */
     fun checkForUpdate(manual: Boolean) {
@@ -887,12 +889,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             return
         }
-        if (_uiState.value.updateDownloadProgress != null || _uiState.value.updateCheckState == UpdateCheckState.CHECKING) return
+        if (_uiState.value.updateDownloadProgress != null || updateCheckInFlight) return
         if (!manual && System.currentTimeMillis() - lastUpdateCheckMs < UPDATE_CHECK_INTERVAL_MS) return
         lastUpdateCheckMs = System.currentTimeMillis()
-        _uiState.update { it.copy(updateCheckState = UpdateCheckState.CHECKING, updateCheckError = null) }
+        updateCheckInFlight = true
+        // An automatic check runs quietly. "Checking" is only shown when the user taps Check for updates.
+        if (manual) _uiState.update { it.copy(updateCheckState = UpdateCheckState.CHECKING, updateCheckError = null) }
         viewModelScope.launch {
-            AppUpdater.check().fold(
+            val result = AppUpdater.check()
+            updateCheckInFlight = false
+            result.fold(
                 onSuccess = { info ->
                     val checkedAt = System.currentTimeMillis()
                     if (info != null) {
@@ -915,7 +921,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 onFailure = { error ->
                     // A failed check (offline) must not block the next try for a whole interval.
                     lastUpdateCheckMs = 0L
-                    _uiState.update {
+                    // A quiet check that fails says nothing; only a check the user asked for shows the error.
+                    if (manual) _uiState.update {
                         it.copy(
                             updateCheckState = UpdateCheckState.FAILED,
                             updateCheckError = "Could not reach the update server. Check your connection and try again."

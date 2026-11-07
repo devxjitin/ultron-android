@@ -86,6 +86,15 @@ val AppTopBarHeight = 56.dp
 
 private val RowHeight = 40.dp
 
+/** The menu in reading order: the basics, what Ultron does, what it knows about you, the numbers, then the app itself. */
+private val DrawerGroups: List<Pair<String?, List<NavTab>>> = listOf(
+    null to listOf(NavTab.HOME, NavTab.PROFILE),
+    "Assistant" to listOf(NavTab.SKILLS, NavTab.CONNECTORS, NavTab.SCHEDULE),
+    "Your data" to listOf(NavTab.KNOWLEDGE, NavTab.MEMORY, NavTab.HISTORY, NavTab.IMAGES),
+    "Insights" to listOf(NavTab.USAGE, NavTab.STORAGE),
+    "App" to listOf(NavTab.DEVELOPER, NavTab.HELP, NavTab.ABOUT)
+)
+
 @Composable
 fun AppDrawerContent(
     selected: NavTab,
@@ -98,14 +107,10 @@ fun AppDrawerContent(
         DrawerHeader(assistantName, onClose)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
             Spacer(Modifier.height(4.dp))
-            NavTab.entries.filter { it != NavTab.SETTINGS }.forEach { tab ->
-                // A hairline and a plain caption group the working pages, the numbers and the app info.
-                when (tab) {
-                    NavTab.USAGE -> NavSection("Insights")
-                    NavTab.DEVELOPER -> NavSection("App")
-                    else -> Unit
-                }
-                NavRow(tab, tab == selected) { onSelect(tab) }
+            // A hairline and a plain caption start each group. Settings sits in the footer.
+            DrawerGroups.forEach { (title, tabs) ->
+                if (title != null) NavSection(title)
+                tabs.forEach { tab -> NavRow(tab, tab == selected) { onSelect(tab) } }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -175,7 +180,12 @@ private fun DrawerHeader(assistantName: String, onClose: (() -> Unit)?) {
 @Composable
 private fun DrawerFooter(assistantName: String, settingsSelected: Boolean, onSettings: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        AppIconTile(40.dp)
+        Box(Modifier.size(40.dp).background(AssistantSurfaceElevated, CircleShape), contentAlignment = Alignment.Center) {
+            Text(
+                assistantName.trim().firstOrNull()?.uppercase() ?: "U",
+                color = AssistantTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium
+            )
+        }
         Spacer(Modifier.size(14.dp))
         Text(
             assistantName,
