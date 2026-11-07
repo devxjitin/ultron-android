@@ -6,10 +6,11 @@ token belongs to a verified admin email):
   GET   /v1/admin/licenses                      -> {"licenses": [...]} every key, newest first
   POST  /v1/admin/licenses                      -> creates keys, answers {"keys": ["ULTR-..."], "licenses": [...],
                                                    "emailed": true|false}; name, email, phone, plan and durationDays are
-                                                   required. The full key is shown only in this answer and in the email
+                                                   required, amount (rupees paid per key, default 0) is optional. The
+                                                   full key is shown only in this answer and in the email
                                                    to the buyer ("sendEmail": false skips the email); the table keeps
                                                    just its SHA-256
-  PATCH /v1/admin/licenses/{id}                 -> edits name, email, phone, note, plan, status, durationDays, expiresAt
+  PATCH /v1/admin/licenses/{id}                 -> edits name, email, phone, note, plan, status, durationDays, expiresAt, amount
   POST  /v1/admin/licenses/{id}/allow-move      -> lets the key move to another phone right now (skips the one-day wait)
   POST  /v1/admin/licenses/{id}/reissue         -> a key cannot be read back, so this revokes it, creates a new one with the
                                                    same buyer and plan, and emails that one
@@ -31,6 +32,7 @@ import time
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 MAX_CREATE = 50
 MAX_DAYS = 3650
+MAX_AMOUNT = 1_000_000  # rupees per key
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[0-9+()\-\s.]{3,30}$")
 
@@ -119,6 +121,7 @@ def _public(item, now):
         "phone": str(item.get("phone", "")),
         "note": str(item.get("note", "")),
         "emailedAt": int(item.get("emailedAt", 0)),
+        "amount": int(item.get("amount", 0)),
     }
 
 
@@ -161,13 +164,13 @@ def list_licenses(event, now):
     return _resp(200, {"licenses": licenses})
 
 
-def _make_keys(count, fields, plan, days, now):
+def _make_keys(count, fields, plan, days, now, amount=0):
     """Stores [count] new keys and returns (keys, public items). The keys are never stored, only their hashes."""
     keys, created = [], []
     for _ in range(count):
         key = new_key()
         item = {"keyHash": key_hash(key), "status": "active", "plan": plan, "durationDays": days, "expiresAt": 0,
-                "createdAt": now, "hint": key[-4:], **fields}
+                "createdAt": now, "hint": key[-4:], "amount": amount, **fields}
         _db().put_item(Item=item, ConditionExpression="attribute_not_exists(keyHash)")
         keys.append(key)
         created.append(item)
@@ -178,7 +181,8 @@ def _send_keys(keys, items):
     """Emails [keys] to the buyer on [items][0]. Returns True when SES accepted it and records emailedAt."""
     first = items[0]
     try:
-        _mail().send_email(**_key_email(first.get("name", ""), first["email"], keys, first["plan"], first["durationDays"]))
+        paid = sum(int(i.get("amount", 0)) for i in items)
+        _mail().send_email(**_key_email(first.get("name", ""), first["email"], keys, first["plan"], first["durationDays"], paid))
     except Exception:  # SES not set up, sender not verified, throttled: the admin still has the keys on screen.
         return False
     sent_at = int(time.time())
@@ -223,9 +227,12 @@ def create(event, now):
     if error or count == 0:
         return _resp(400, {"error": "bad_count"})
     count = count or 1
+    amount, error = _clean_int(data, "amount", MAX_AMOUNT)
+    if error:
+        return _resp(400, {"error": error})
     send = data.get("sendEmail", True) is not False
 
-    keys, items = _make_keys(count, fields, plan, days, now)
+    keys, items = _make_keys(count, fields, plan, days, now, amount or 0)
     emailed = _send_keys(keys, items) if send else False
     return _resp(200, {"keys": keys, "licenses": [_public(i, now) for i in items], "emailed": emailed})
 
@@ -238,14 +245,15 @@ def reissue(event, now, license_id):
     fields = {f: old[f] for f in (*REQUIRED_DETAILS, "note") if old.get(f)}
     if not all(fields.get(f) for f in REQUIRED_DETAILS):
         return _resp(400, {"error": "details_missing"})
-    keys, items = _make_keys(1, {**fields, "reissuedFrom": license_id}, str(old.get("plan", "")), int(old.get("durationDays", 0)), now)
+    # A replacement carries no amount: the buyer already paid for the key it replaces.
+    keys, items = _make_keys(1, {**fields, "reissuedFrom": license_id}, str(old.get("plan", "")), int(old.get("durationDays", 0)), now, 0)
     # Only once the new key exists is the old one switched off, so a failure never leaves the buyer with nothing.
     _apply(license_id, {"status": "revoked"}, now)
     emailed = _send_keys(keys, items)
     return _resp(200, {"keys": keys, "licenses": [_public(i, now) for i in items], "emailed": emailed})
 
 
-def _key_email(name, to, keys, plan, days):
+def _key_email(name, to, keys, plan, days, paid=0):
     """The SES arguments for the mail that carries the activation key(s) to the buyer."""
     sender = os.environ["SENDER_EMAIL"]
     support = os.environ.get("SUPPORT_EMAIL", "")
@@ -261,11 +269,12 @@ def _key_email(name, to, keys, plan, days):
         "Open Ultron and paste your activation key when asked.",
         "Say hello.",
     ]
+    paid_text = f" Amount paid: Rs. {paid:,}." if paid else ""
     text = "\n".join([
         greeting, "",
         f"Thank you for choosing Ultron. Here {'are your activation keys' if plural else 'is your activation key'}:", "",
         *keys, "",
-        f"Plan: {plan.title()}. Each key works on one phone at a time and {validity}.", "",
+        f"Plan: {plan.title()}.{paid_text} Each key works on one phone at a time and {validity}.", "",
         "Getting started", *[f"{i}. {step}" for i, step in enumerate(steps, 1)], "",
         "Keep this email safe: anyone who has the key can use it." + (f" Need help? Write to {support}." if support else ""),
         "", "Ultron by StarkMind",
@@ -286,7 +295,7 @@ def _key_email(name, to, keys, plan, days):
         f'<p style="margin:0 0 12px">{esc(greeting)}</p>'
         f'<p style="margin:0 0 6px">Thank you for choosing Ultron. Here {"are your activation keys" if plural else "is your activation key"}:</p>'
         f'{key_rows}'
-        f'<p style="margin:12px 0;color:#4b5563">Plan: <b>{esc(plan.title())}</b>. Each key works on one phone at a time and {esc(validity)}.</p>'
+        f'<p style="margin:12px 0;color:#4b5563">Plan: <b>{esc(plan.title())}</b>.{esc(paid_text)} Each key works on one phone at a time and {esc(validity)}.</p>'
         f'{button}'
         '<h3 style="margin:22px 0 6px;font-size:16px">Getting started</h3>'
         f'<ol style="margin:0;padding-left:20px">{step_rows}</ol>'
@@ -320,7 +329,7 @@ def update(event, now, license_id):
         if data["status"] not in ("active", "revoked"):
             return _resp(400, {"error": "bad_status"})
         changes["status"] = data["status"]
-    for field, high in (("durationDays", MAX_DAYS), ("expiresAt", 4_102_444_800)):
+    for field, high in (("durationDays", MAX_DAYS), ("expiresAt", 4_102_444_800), ("amount", MAX_AMOUNT)):
         value, error = _clean_int(data, field, high)
         if error:
             return _resp(400, {"error": error})

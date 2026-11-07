@@ -46,6 +46,16 @@ function showError(id, message) {
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 const formatDate = (seconds) => dateFormat.format(new Date(seconds * 1000));
+// The plans on sale. The id is what is stored on the key; days is its validity from first activation.
+// price is in rupees and is only the amount the form starts with; what was really paid is stored on each key.
+const PLANS = {
+  spark: { label: "Spark", days: 7, price: 199, length: "7 days" },
+  surge: { label: "Surge", days: 30, price: 699, length: "1 month" },
+  apex: { label: "Apex", days: 90, price: 1499, length: "3 months" },
+};
+const money = (rupees) => `₹${Number(rupees || 0).toLocaleString("en-IN")}`;
+/** "Spark" for a known plan; older keys keep their own plan name, capitalised. */
+const planLabel = (plan) => PLANS[plan]?.label || (plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "-");
 const STATE_LABEL = { active: "Active", unused: "Not activated", expired: "Expired", revoked: "Revoked" };
 const STATE_COLOR = { active: "var(--ok)", unused: "var(--warn)", expired: "var(--idle)", revoked: "var(--bad)" };
 const nowSeconds = () => Date.now() / 1000;
@@ -84,12 +94,17 @@ function renderDashboard() {
   const expiring = licenses.filter((l) => l.state === "active" && l.expiresAt && l.expiresAt - t <= 30 * DAY)
     .sort((a, b) => a.expiresAt - b.expiresAt);
   const stat = (label, n, cls = "") => h("div", { class: `stat ${cls}` }, h("b", {}, String(n)), h("span", {}, label));
+  // Revoked keys are not counted as revenue (a revoked key is usually a refund).
+  const paid = licenses.filter((l) => l.state !== "revoked");
+  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000;
+  const sum = (rows) => rows.reduce((total, l) => total + (l.amount || 0), 0);
   $("stats").replaceChildren(
+    stat("Revenue", money(sum(paid))),
+    stat("Revenue this month", money(sum(paid.filter((l) => l.createdAt >= startOfMonth)))),
     stat("Total keys", licenses.length),
     stat("Active", count("active")),
     stat("Not activated yet", count("unused")),
-    stat("Expiring in 30 days", expiring.length, expiring.length ? "warn" : ""),
-    stat("Expired or revoked", count("expired") + count("revoked"))
+    stat("Expiring in 30 days", expiring.length, expiring.length ? "warn" : "")
   );
 
   const total = licenses.length || 1;
@@ -155,7 +170,7 @@ function renderKeys() {
     return h("tr", { tabindex: "0", onclick: open, onkeydown: (e) => { if (e.key === "Enter") open(); } },
       h("td", {}, h("span", { class: "cell-main" }, l.name || "No name"),
         h("span", { class: "cell-sub" }, [l.email, l.phone].filter(Boolean).join("  |  ") || "No contact details")),
-      h("td", {}, h("span", { class: "cell-main" }, l.plan || "-"), h("span", { class: "cell-sub mono" }, `…${l.hint || "????"}`)),
+      h("td", {}, h("span", { class: "cell-main" }, planLabel(l.plan)), h("span", { class: "cell-sub" }, `${money(l.amount)} · …${l.hint || "????"}`)),
       h("td", {}, h("span", { class: `badge ${l.state}` }, STATE_LABEL[l.state] || l.state)),
       h("td", {}, h("span", { class: "cell-main" }, v.main), h("span", { class: "cell-sub" }, v.sub)),
       h("td", {}, l.emailedAt ? h("span", { class: "sent" }, "Sent") : h("span", { class: "not-sent" }, "Not sent")));
@@ -176,9 +191,9 @@ function csvCell(value) {
 }
 
 function exportCsv() {
-  const header = ["Name", "Email", "Phone", "Plan", "State", "Created", "Activated", "Expires", "Emailed", "Note"];
+  const header = ["Name", "Email", "Phone", "Plan", "Amount (INR)", "State", "Created", "Activated", "Expires", "Emailed", "Note"];
   const date = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 10) : "");
-  const lines = [header, ...visibleRows().map((l) => [l.name, l.email, l.phone, l.plan, STATE_LABEL[l.state], date(l.createdAt),
+  const lines = [header, ...visibleRows().map((l) => [l.name, l.email, l.phone, planLabel(l.plan), l.amount || 0, STATE_LABEL[l.state], date(l.createdAt),
     date(l.activatedAt), date(l.expiresAt), date(l.emailedAt), l.note])];
   const blob = new Blob(["﻿" + lines.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
   const link = h("a", { href: URL.createObjectURL(blob), download: `ultron-keys-${new Date().toISOString().slice(0, 10)}.csv` });
@@ -229,6 +244,12 @@ function checkBuyer(values) {
   return errors;
 }
 
+/** An error message when [text] is not a whole number of rupees in range, else "". */
+function checkAmount(text) {
+  const n = Number(text);
+  return text === "" || !Number.isInteger(n) || n < 0 || n > 1_000_000 ? "Enter a whole number of rupees, 0 or more." : "";
+}
+
 function showFieldErrors(form, errors) {
   form.querySelectorAll(".field-error").forEach((el) => (el.textContent = errors[el.dataset.for] || ""));
   for (const input of form.elements) if (input.name) input.classList.toggle("invalid", Boolean(errors[input.name]));
@@ -238,12 +259,16 @@ function showFieldErrors(form, errors) {
 
 // ---------- create
 
-const PLAN_DAYS = { monthly: 30, yearly: 365, lifetime: 0, gift: 30 };
+/** Starts validity and amount from the chosen plan; both stay editable. */
+function applyPlan(form, plan) {
+  form.elements.durationDays.value = PLANS[plan]?.days ?? 30;
+  form.elements.amount.value = PLANS[plan]?.price ?? 0;
+}
 
 function openCreate() {
   const form = $("create-form");
   form.reset();
-  form.elements.durationDays.value = PLAN_DAYS.yearly;
+  applyPlan(form, form.elements.plan.value);
   showFieldErrors(form, {});
   showError("create-error", "");
   $("create-dialog").showModal();
@@ -257,13 +282,15 @@ async function submitCreate(event) {
   const body = {
     name: value("name"), email: value("email"), phone: value("phone"), plan: value("plan"),
     durationDays: Number(value("durationDays")), count: Number(value("count") || 1),
-    sendEmail: form.elements.sendEmail.checked,
+    amount: Number(value("amount")), sendEmail: form.elements.sendEmail.checked,
   };
   const errors = checkBuyer(body);
   if (value("durationDays") === "" || !Number.isInteger(body.durationDays) || body.durationDays < 0 || body.durationDays > 3650) {
     errors.durationDays = "Enter a whole number of days, 0 to 3650.";
   }
   if (!Number.isInteger(body.count) || body.count < 1 || body.count > 50) errors.count = "Between 1 and 50.";
+  const amountError = checkAmount(value("amount"));
+  if (amountError) errors.amount = amountError;
   showFieldErrors(form, errors);
   if (Object.keys(errors).length) return;
   if (value("note")) body.note = value("note");
@@ -287,7 +314,8 @@ function showCreated(keys, emailed, buyer) {
   const status = $("created-status");
   if (emailed) {
     status.className = "notice ok";
-    status.textContent = `Emailed to ${buyer.email}. You can still copy ${keys.length === 1 ? "it" : "them"} below.`;
+    status.textContent = `Emailed to ${buyer.email}. You can still copy ${keys.length === 1 ? "it" : "them"} below.` +
+      (buyer.amount ? ` Recorded ${money(buyer.amount * keys.length)}.` : "");
   } else if (buyer.sendEmail === false) {
     status.className = "notice";
     status.textContent = "Email was skipped. Copy the key and send it to the customer yourself.";
@@ -336,6 +364,7 @@ function openDetail(l) {
   $("until-field").hidden = !started;
   form.elements.durationDays.value = l.durationDays;
   form.elements.validUntil.value = toDateInput(l.expiresAt);
+  form.elements.amount.value = l.amount || 0;
   $("detail-title").textContent = `Key ending ${l.hint || "(older key)"}`;
   const badge = $("detail-badge");
   badge.className = `badge ${l.state}`;
@@ -384,10 +413,13 @@ function submitDetail(event) {
   const values = {};
   for (const field of ["name", "email", "phone", "plan", "note"]) values[field] = fields[field].value.trim();
   const errors = checkBuyer(values);
+  const amountError = checkAmount(String(fields.amount.value).trim());
+  if (amountError) errors.amount = amountError;
   showFieldErrors(form, errors);
   if (Object.keys(errors).length) return;
 
   const changes = {};
+  if (Number(fields.amount.value) !== (current.amount || 0)) changes.amount = Number(fields.amount.value);
   for (const field of ["name", "email", "phone", "plan", "note"]) if (values[field] !== (current[field] || "")) changes[field] = values[field];
   if (!$("days-field").hidden) {
     const days = Number(fields.durationDays.value);
@@ -509,9 +541,11 @@ function wire() {
   $("next").addEventListener("click", () => { page += 1; renderKeys(); });
   $("export").addEventListener("click", exportCsv);
   $("create-form").addEventListener("submit", submitCreate);
-  $("create-form").elements.plan.addEventListener("change", (e) => {
-    $("create-form").elements.durationDays.value = PLAN_DAYS[e.target.value] ?? 30;
-  });
+  const planSelect = $("create-form").elements.plan;
+  planSelect.replaceChildren(...Object.entries(PLANS).map(([id, p]) =>
+    h("option", { value: id, selected: id === "surge" }, `${p.label} · ${p.length} · ${money(p.price)}`)));
+  $("plans").replaceChildren(...Object.keys(PLANS).map((id) => h("option", { value: id })));
+  planSelect.addEventListener("change", (e) => applyPlan($("create-form"), e.target.value));
   $("detail-form").addEventListener("submit", submitDetail);
   $("copy-keys").addEventListener("click", copyKeys);
   $("reissue").addEventListener("click", reissue);

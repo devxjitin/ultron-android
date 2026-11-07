@@ -54,6 +54,7 @@ const MESSAGES = {
   plan_too_long: "Plan name is too long.",
   bad_durationDays: "Validity must be a whole number of days, 0 to 3650.",
   bad_count: "How many keys: 1 to 50.",
+  bad_amount: "Amount must be a whole number of rupees, 0 to 10,00,000.",
   not_found: "That key no longer exists. Refresh the list.",
 };
 

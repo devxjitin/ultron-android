@@ -120,19 +120,16 @@
         <label class="field">Email *<input name="email" type="email" maxlength="120" autocomplete="off" required><small class="field-error" data-for="email"></small></label>
         <label class="field">Phone *<input name="phone" type="tel" maxlength="30" autocomplete="off" placeholder="+91 98765 43210" required><small class="field-error" data-for="phone"></small></label>
         <label class="field">Plan *
-          <select name="plan" required>
-            <option value="monthly">Monthly</option>
-            <option value="yearly" selected>Yearly</option>
-            <option value="lifetime">Lifetime</option>
-            <option value="gift">Gift</option>
-          </select>
+          <select name="plan" required></select>
           <small class="field-error" data-for="plan"></small>
         </label>
-        <label class="field">Validity in days *<input name="durationDays" type="number" min="0" max="3650" value="365" inputmode="numeric" required>
-          <small class="hint">Counted from first activation. 0 never expires.</small><small class="field-error" data-for="durationDays"></small></label>
-        <label class="field span2">Note <span class="muted">(only you see this)</span><input name="note" maxlength="300" autocomplete="off"></label>
+        <label class="field">Validity in days *<input name="durationDays" type="number" min="0" max="3650" value="30" inputmode="numeric" required>
+          <small class="hint">Filled from the plan. Counted from first activation, 0 never expires.</small><small class="field-error" data-for="durationDays"></small></label>
+        <label class="field">Amount paid per key (₹) *<input name="amount" type="number" min="0" max="1000000" inputmode="numeric" required>
+          <small class="hint">Filled from the plan price. Use 0 for a gift.</small><small class="field-error" data-for="amount"></small></label>
         <label class="field">How many keys<input name="count" type="number" min="1" max="50" value="1" inputmode="numeric">
           <small class="hint">All go to the same email.</small><small class="field-error" data-for="count"></small></label>
+        <label class="field span2">Note <span class="muted">(only you see this)</span><input name="note" maxlength="300" autocomplete="off"></label>
         <label class="check span2"><input type="checkbox" name="sendEmail" checked> Email the key to the customer now</label>
       </div>
       <p id="create-error" class="error" role="alert" hidden></p>
@@ -168,9 +165,10 @@
         <label class="field">Email *<input name="email" type="email" maxlength="120" autocomplete="off" required><small class="field-error" data-for="email"></small></label>
         <label class="field">Phone *<input name="phone" type="tel" maxlength="30" autocomplete="off" required><small class="field-error" data-for="phone"></small></label>
         <label class="field">Plan *<input name="plan" maxlength="40" required list="plans"><small class="field-error" data-for="plan"></small></label>
-        <datalist id="plans"><option value="monthly"><option value="yearly"><option value="lifetime"><option value="gift"></datalist>
+        <datalist id="plans"></datalist>
         <label class="field" id="days-field">Validity in days <input name="durationDays" type="number" min="0" max="3650" inputmode="numeric"></label>
         <label class="field" id="until-field">Valid until <input name="validUntil" type="date"><small class="hint">Leave empty for no end date.</small></label>
+        <label class="field">Amount paid (₹)<input name="amount" type="number" min="0" max="1000000" inputmode="numeric"><small class="field-error" data-for="amount"></small></label>
         <label class="field span2">Note <span class="muted">(only you see this)</span><input name="note" maxlength="300" autocomplete="off"></label>
       </div>
       <p id="detail-error" class="error" role="alert" hidden></p>

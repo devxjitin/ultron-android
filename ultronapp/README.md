@@ -5,6 +5,11 @@ and it is emailed to the buyer at once. A dashboard shows keys by state, keys ex
 Keys page searches, filters, sorts and exports to CSV. Each key can be edited, revoked, replaced (a lost key is revoked and a
 new one emailed) or allowed to move to a new phone. The Ultron app shows these details on its Profile page after activation.
 
+Plans and prices live in one place, `PLANS` at the top of `app.js`: Spark (7 days, ₹199), Surge (1 month, ₹699) and Apex
+(3 months, ₹1,499). Choosing a plan fills the validity and the amount; both stay editable (use 0 for a gift). The amount paid
+is saved on each key, so changing a price later never rewrites past sales. The dashboard adds it up as revenue, leaving out
+revoked keys.
+
 It is plain HTML and ES modules, so there is nothing to build.
 
 ## How it works

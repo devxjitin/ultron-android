@@ -69,7 +69,7 @@ class FakeMail:
 
 
 # Everything a key must carry; tests change one field at a time.
-BUYER = {"name": "Asha Verma", "email": "asha@example.com", "phone": "+91 98765 43210", "plan": "yearly", "durationDays": 365}
+BUYER = {"name": "Asha Verma", "email": "asha@example.com", "phone": "+91 98765 43210", "plan": "surge", "durationDays": 30}
 
 
 def request(method, path, body=None, email="boss@example.com", verified="true"):
@@ -133,7 +133,7 @@ class AdminTests(unittest.TestCase):
     def test_create_makes_several_keys_at_once(self):
         answer = self.create(count=3)
         self.assertEqual(3, len(set(answer["keys"])))
-        self.assertEqual(("yearly", 365), (answer["licenses"][0]["plan"], answer["licenses"][0]["durationDays"]))
+        self.assertEqual(("surge", 30), (answer["licenses"][0]["plan"], answer["licenses"][0]["durationDays"]))
 
     def test_create_requires_the_buyer_details_plan_and_validity(self):
         for field in ("name", "email", "phone", "plan", "durationDays"):
@@ -174,7 +174,8 @@ class AdminTests(unittest.TestCase):
             self.assertIn(key, body)
             self.assertIn("Asha Verma", body)
             self.assertIn("https://example.com/get", body)
-            self.assertIn("365 days", body)
+            self.assertIn("30 days", body)
+            self.assertIn("Surge", body)
             self.assertIn("Install anyway", body)
         self.assertGreater(call(request("GET", "/v1/admin/licenses"))[1]["licenses"][0]["emailedAt"], 0)
 
@@ -191,9 +192,51 @@ class AdminTests(unittest.TestCase):
         self.assertNotIn("<script>", page)
         self.assertIn("&lt;script&gt;", page)
 
-    def test_a_lifetime_key_says_it_never_expires(self):
+    def test_each_plan_names_its_own_length_in_the_email(self):
+        for plan, days in (("spark", 7), ("apex", 90)):
+            self.create(plan=plan, durationDays=days)
+            text = self.mail.sent[-1]["Message"]["Body"]["Text"]["Data"]
+            self.assertIn(f"Plan: {plan.title()}", text)
+            self.assertIn(f"{days} days", text)
+
+    def test_a_key_without_an_end_date_says_it_never_expires(self):
         self.create(plan="lifetime", durationDays=0)
         self.assertIn("never expires", self.mail.sent[0]["Message"]["Body"]["Text"]["Data"])
+
+    def test_the_amount_is_stored_listed_and_shown_in_the_email(self):
+        answer = self.create(plan="apex", durationDays=90, amount=1199)
+        self.assertEqual(1199, answer["licenses"][0]["amount"])
+        self.assertEqual(1199, self.table.items[adm.key_hash(answer["keys"][0])]["amount"])
+        text = self.mail.sent[0]["Message"]["Body"]["Text"]["Data"]
+        self.assertIn("Amount paid: Rs. 1,199", text)
+        self.assertIn("Rs. 1,199", self.mail.sent[0]["Message"]["Body"]["Html"]["Data"])
+        self.assertEqual(1199, call(request("GET", "/v1/admin/licenses"))[1]["licenses"][0]["amount"])
+
+    def test_several_keys_email_the_total_paid(self):
+        self.create(count=3, amount=499)
+        self.assertIn("Amount paid: Rs. 1,497", self.mail.sent[0]["Message"]["Body"]["Text"]["Data"])
+
+    def test_without_an_amount_it_is_zero_and_the_email_has_no_price(self):
+        answer = self.create()
+        self.assertEqual(0, answer["licenses"][0]["amount"])
+        self.assertNotIn("Amount paid", self.mail.sent[0]["Message"]["Body"]["Text"]["Data"])
+
+    def test_a_bad_amount_is_refused(self):
+        for amount in (-1, "499", 1_000_001, 4.5):
+            self.assertEqual((400, {"error": "bad_amount"}),
+                             call(request("POST", "/v1/admin/licenses", {**BUYER, "amount": amount})), amount)
+        self.assertEqual({}, self.table.items)
+
+    def test_the_amount_can_be_corrected_later(self):
+        listed = self.create(amount=499)["licenses"][0]
+        code, body = call(request("PATCH", f"/v1/admin/licenses/{listed['id']}", {"amount": 0}))
+        self.assertEqual((200, 0), (code, body["license"]["amount"]))
+
+    def test_a_reissued_key_carries_no_amount_so_revenue_is_not_counted_twice(self):
+        old = self.create(amount=499)
+        answer = call(request("POST", f"/v1/admin/licenses/{old['licenses'][0]['id']}/reissue"))[1]
+        self.assertEqual(0, answer["licenses"][0]["amount"])
+        self.assertNotIn("Amount paid", self.mail.sent[1]["Message"]["Body"]["Text"]["Data"])
 
     def test_email_can_be_skipped(self):
         answer = self.create(sendEmail=False)
@@ -218,7 +261,7 @@ class AdminTests(unittest.TestCase):
         self.assertTrue(answer["emailed"])
         self.assertEqual("revoked", self.table.items[old_id]["status"])
         new = self.table.items[adm.key_hash(answer["keys"][0])]
-        self.assertEqual(("Asha Verma", "asha@example.com", "yearly", 365, old_id),
+        self.assertEqual(("Asha Verma", "asha@example.com", "surge", 30, old_id),
                          (new["name"], new["email"], new["plan"], new["durationDays"], new["reissuedFrom"]))
         self.assertEqual(2, len(self.mail.sent))
         self.assertIn(answer["keys"][0], self.mail.sent[1]["Message"]["Body"]["Text"]["Data"])
