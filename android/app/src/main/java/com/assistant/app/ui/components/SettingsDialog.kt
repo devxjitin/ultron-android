@@ -330,8 +330,8 @@ fun SettingsPage(
                             modifier = Modifier.weight(1f).height(48.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = AssistantAccentFill,
-                                contentColor = androidx.compose.ui.graphics.Color.White
+                                containerColor = com.assistant.app.ui.theme.AssistantButtonFill,
+                                contentColor = com.assistant.app.ui.theme.AssistantOnButtonFill
                             ),
                             onClick = { showAddDocumentDialog = true },
                             enabled = !isSavingKnowledgeDocument && !knowledgeStoreCorrupt
@@ -459,8 +459,8 @@ fun SettingsPage(
                 enabled = !isSavingDeveloper,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = AssistantAccentFill,
-                    contentColor = androidx.compose.ui.graphics.Color.White
+                    containerColor = com.assistant.app.ui.theme.AssistantButtonFill,
+                    contentColor = com.assistant.app.ui.theme.AssistantOnButtonFill
                 ),
                 shape = AppButtonShape,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp)

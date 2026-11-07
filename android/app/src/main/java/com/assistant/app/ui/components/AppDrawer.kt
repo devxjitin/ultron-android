@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -80,7 +80,7 @@ enum class NavTab(val label: String, val icon: ImageVector) {
 /** Height of the slim bar at the top of every page; pages reserve this much space under it. */
 val AppTopBarHeight = 56.dp
 
-private val RowHeight = 42.dp
+private val RowHeight = 40.dp
 
 @Composable
 fun AppDrawerContent(
@@ -95,7 +95,7 @@ fun AppDrawerContent(
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
             Spacer(Modifier.height(4.dp))
             NavTab.entries.filter { it != NavTab.SETTINGS }.forEach { tab ->
-                // Plain captions group the working pages, the numbers and the app info.
+                // A hairline and a plain caption group the working pages, the numbers and the app info.
                 when (tab) {
                     NavTab.USAGE -> NavSection("Insights")
                     NavTab.DEVELOPER -> NavSection("App")
@@ -111,32 +111,33 @@ fun AppDrawerContent(
 
 @Composable
 private fun NavSection(title: String) {
+    Spacer(Modifier.height(10.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(AssistantOutline))
     Text(
-        text = title.uppercase(),
+        text = title,
         color = AssistantTextMuted,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.2.sp,
-        modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp)
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)
     )
 }
 
 @Composable
 private fun NavRow(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
+    val shape = RoundedCornerShape(12.dp)
     Row(
         Modifier.fillMaxWidth().height(RowHeight).clip(shape)
             .then(if (selected) Modifier.background(AssistantSelectedBg, shape) else Modifier)
-            .clickable(onClick = onClick).padding(horizontal = 16.dp),
+            .clickable(onClick = onClick).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(tab.icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = if (selected) AssistantAccent else AssistantTextSecondary)
-        Spacer(Modifier.size(18.dp))
+        Icon(tab.icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = if (selected) AssistantTextPrimary else AssistantTextSecondary)
+        Spacer(Modifier.size(16.dp))
         Text(
             tab.label,
-            color = if (selected) AssistantAccent else AssistantTextPrimary,
-            fontSize = 17.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = AssistantTextPrimary,
+            fontSize = 15.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
@@ -144,14 +145,15 @@ private fun NavRow(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Large page title on the left and a close button on the right, like the rest of the menu: flat, no borders. */
+/** The assistant's name in a serif on the left and a thin close button on the right: flat, no borders. */
 @Composable
 private fun DrawerHeader(assistantName: String, onClose: (() -> Unit)?) {
-    Row(Modifier.fillMaxWidth().height(72.dp).padding(start = 28.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(64.dp).padding(start = 24.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             assistantName,
             color = AssistantTextPrimary,
-            fontSize = 28.sp,
+            fontFamily = com.assistant.app.ui.theme.AssistantSerif,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -159,7 +161,7 @@ private fun DrawerHeader(assistantName: String, onClose: (() -> Unit)?) {
         )
         if (onClose != null) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close menu", tint = AssistantTextPrimary, modifier = Modifier.size(28.dp))
+                Icon(Icons.Outlined.Close, contentDescription = "Close menu", tint = AssistantTextSecondary, modifier = Modifier.size(22.dp))
             }
         }
     }
@@ -168,13 +170,13 @@ private fun DrawerHeader(assistantName: String, onClose: (() -> Unit)?) {
 /** Pinned at the bottom: the app icon and name on the left, a settings button on the right. */
 @Composable
 private fun DrawerFooter(assistantName: String, settingsSelected: Boolean, onSettings: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        AppIconTile(52.dp)
-        Spacer(Modifier.size(16.dp))
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        AppIconTile(40.dp)
+        Spacer(Modifier.size(14.dp))
         Text(
             assistantName,
             color = AssistantTextPrimary,
-            fontSize = 20.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -184,12 +186,26 @@ private fun DrawerFooter(assistantName: String, settingsSelected: Boolean, onSet
             onClick = onSettings,
             modifier = Modifier.then(if (settingsSelected) Modifier.background(AssistantSurfaceElevated, CircleShape) else Modifier)
         ) {
-            Icon(NavTab.SETTINGS.icon, contentDescription = "Settings", tint = AssistantTextSecondary, modifier = Modifier.size(26.dp))
+            Icon(NavTab.SETTINGS.icon, contentDescription = "Settings", tint = AssistantTextSecondary, modifier = Modifier.size(22.dp))
         }
     }
 }
 
-/** Slim bar above every page: menu button (hidden when the menu is always visible) and the page title. */
+/** Three thin lines of different length, left aligned: the menu button used on every page. */
+@Composable
+private fun MenuLinesIcon(tint: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier.size(24.dp)) {
+        val stroke = 1.7.dp.toPx()
+        val left = 3.dp.toPx()
+        val lines = listOf(6.dp.toPx() to 18.dp.toPx(), 12.dp.toPx() to 12.dp.toPx(), 18.dp.toPx() to 7.dp.toPx())
+        lines.forEach { (y, length) ->
+            drawLine(tint, androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(left + length, y),
+                strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+    }
+}
+
+/** Slim bar above every page: a thin menu button on the left, the page title in a serif in the middle, the theme button on the right. */
 @Composable
 fun AppTopBar(
     title: String,
@@ -201,38 +217,32 @@ fun AppTopBar(
     onToggleTheme: (() -> Unit)? = null,
     isDarkTheme: Boolean = false
 ) {
-    Row(
-        modifier.fillMaxWidth().height(height).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (showMenuButton) {
-            IconButton(onClick = onMenuClick) {
-                Icon(Icons.Filled.Menu, contentDescription = "Open menu", tint = AssistantTextPrimary, modifier = Modifier.size(26.dp))
-            }
-            Spacer(Modifier.size(4.dp))
-        } else {
-            Spacer(Modifier.size(12.dp))
-        }
+    Box(modifier.fillMaxWidth().height(height).padding(horizontal = 8.dp)) {
         Text(
             title,
             color = AssistantTextPrimary,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            fontFamily = com.assistant.app.ui.theme.AssistantSerif,
+            fontSize = 18.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 56.dp)
         )
+        if (showMenuButton) {
+            IconButton(onClick = onMenuClick, modifier = Modifier.align(Alignment.CenterStart)) {
+                MenuLinesIcon(AssistantTextPrimary)
+            }
+        }
         if (onToggleTheme != null) {
-            IconButton(onClick = onToggleTheme) {
+            IconButton(onClick = onToggleTheme, modifier = Modifier.align(Alignment.CenterEnd)) {
                 Icon(
                     if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
                     contentDescription = if (isDarkTheme) "Switch to day theme" else "Switch to night theme",
-                    tint = AssistantTextPrimary
+                    tint = AssistantTextPrimary, modifier = Modifier.size(22.dp)
                 )
             }
         }
-        Spacer(Modifier.size(8.dp))
     }
 }
 
 /** Drawer surface colour, shared by the modal and permanent variants. */
-val AppDrawerContainerColor: Color get() = AssistantSurface
+val AppDrawerContainerColor: Color get() = com.assistant.app.ui.theme.AssistantBackground

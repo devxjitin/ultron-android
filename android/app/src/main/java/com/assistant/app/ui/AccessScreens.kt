@@ -155,7 +155,7 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
         shape = AppButtonShape,
-        colors = ButtonDefaults.buttonColors(containerColor = AssistantAccentFill, contentColor = Color.White),
+        colors = ButtonDefaults.buttonColors(containerColor = com.assistant.app.ui.theme.AssistantButtonFill, contentColor = com.assistant.app.ui.theme.AssistantOnButtonFill),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp)
     ) { Text(text) }
 }

@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.11.0 - 2026-11-07
+
+### Changed
+- A cleaner, calmer look across the app. Warm near-black and paper-white colours, flat grey cards without borders, smaller text, and a serif for page titles and the menu heading.
+- The menu is lighter: thin icons, smaller labels, a soft highlight for the open page, hairlines between groups, and a new thin menu button on every page. Page titles now sit in the middle of the top bar.
+- Buttons are round pills, and the main button is light on a dark page and dark on a light page. Text boxes have a thin grey border.
+
 ## 1.10.2 - 2026-11-07
 
 ### Changed
