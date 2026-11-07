@@ -8,7 +8,8 @@ import org.junit.Test
 class ConnectorsTest {
     @Test fun everyDeviceToolBelongsToExactlyOneConnector() {
         val owners = PhoneConnectors.all.flatMap { c -> c.tools.map { it to c.id } }.groupBy({ it.first }, { it.second })
-        DeviceTool.entries.forEach { assertEquals("$it", 1, owners[it]?.size ?: 0) }
+        DeviceTool.entries.filter { it !in DeviceTool.ASSISTANT_OWN }.forEach { assertEquals("$it", 1, owners[it]?.size ?: 0) }
+        DeviceTool.ASSISTANT_OWN.forEach { assertEquals("$it", 0, owners[it]?.size ?: 0) }
     }
 
     @Test fun functionNamesAreUnique() {
@@ -38,7 +39,7 @@ class ConnectorsTest {
 
     @Test fun aFreshInstallStartsWithTheSameSafeConnectorsAsBefore() {
         assertEquals(
-            setOf("device_info", "device_controls", "alarms", "reminders", "long_term_memory", "apps_settings", "duckduckgo", "web_reader", "weather"),
+            setOf("device_info", "device_controls", "alarms", "reminders", "apps_settings", "duckduckgo", "web_reader", "weather"),
             ConnectorRegistry.defaultIds.toSet()
         )
     }

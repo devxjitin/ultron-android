@@ -3,6 +3,20 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.9.0 - 2026-11-07
+
+### Added
+- Ultron now runs its own alarms and timers. They ring with sound, and you can ask it to list, change or cancel them, including timers, without the Clock app opening.
+- Alarms can repeat every day or week.
+
+### Fixed
+- "Cancel my alarm" no longer just opens the Clock app. The alarm is removed, and Ultron tells you which one.
+- An alarm you already turned off or that already rang is no longer reported as still set.
+- Ultron now looks up earlier conversations whenever you ask about them, and remembers the last few exchanges from the start of every chat.
+
+### Changed
+- Long-term memory is no longer a connector. Remembering past conversations is part of Ultron itself and is always on. You can still clear it from Storage.
+
 ## 1.8.1 - 2026-11-06
 
 ### Fixed

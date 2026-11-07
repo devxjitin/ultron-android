@@ -66,9 +66,6 @@ private fun filesPermissions(): List<String> = when {
  * the permission requests all read from here, so adding or changing a connector means editing this file only.
  * A tool belongs to exactly one connector.
  */
-/** Id of the connector that stores and searches every past conversation. */
-const val LONG_TERM_MEMORY_ID = "long_term_memory"
-
 object ConnectorRegistry {
     val all: List<ConnectorSpec> = listOf(
         ConnectorSpec(
@@ -87,19 +84,13 @@ object ConnectorRegistry {
             id = "alarms", name = "Alarms & timers", description = "Set alarms and timers.",
             subtitle = "On your phone", category = ConnectorCategory.ESSENTIALS, kind = ConnectorKind.PHONE,
             permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
-            tools = listOf(DeviceTool.SET_ALARM, DeviceTool.LIST_ALARMS, DeviceTool.CANCEL_ALARM, DeviceTool.MODIFY_ALARM, DeviceTool.SET_TIMER)
+            tools = listOf(DeviceTool.SET_ALARM, DeviceTool.LIST_ALARMS, DeviceTool.CANCEL_ALARM, DeviceTool.MODIFY_ALARM, DeviceTool.SET_TIMER, DeviceTool.LIST_TIMERS, DeviceTool.CANCEL_TIMER)
         ),
         ConnectorSpec(
             id = "reminders", name = "Reminders", description = "Get reminded at a time, with a sound.",
             subtitle = "On your phone", category = ConnectorCategory.ESSENTIALS, kind = ConnectorKind.PHONE,
             permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
             tools = listOf(DeviceTool.SCHEDULE_REMINDER, DeviceTool.LIST_REMINDERS, DeviceTool.CANCEL_REMINDER, DeviceTool.MODIFY_REMINDER)
-        ),
-        ConnectorSpec(
-            id = LONG_TERM_MEMORY_ID, name = "Long-term memory", description = "Remember every past conversation.",
-            subtitle = "On your phone", category = ConnectorCategory.ESSENTIALS, kind = ConnectorKind.PHONE,
-            permissions = emptyList(), access = SpecialAccess.NONE, defaultOn = true,
-            tools = listOf(DeviceTool.SEARCH_CONVERSATION_HISTORY, DeviceTool.RECENT_CONVERSATION)
         ),
         ConnectorSpec(
             id = "apps_settings", name = "Apps & settings", description = "Open apps and settings, use the clipboard.",
@@ -215,13 +206,6 @@ object ConnectorRegistry {
             "Sets alarms and timers in your clock app, and lets you change or cancel alarms.",
             "Nothing to allow.",
             "Nothing leaves your phone."
-        ),
-        LONG_TERM_MEMORY_ID to ConnectorInfo(
-            "Keeps every conversation on your phone, so the assistant can look up what you said yesterday or last month " +
-                "and answer from it. It searches only when you refer to something from before.",
-            "A Gemini key. Each exchange is sent to Gemini once so it can be searched by meaning; without it, searching by exact words still works.",
-            "Conversations are stored only on your phone. When the assistant searches, the matching exchanges go to Gemini to answer you. " +
-                "Switching this off stops saving and searching."
         ),
         "reminders" to ConnectorInfo(
             "Reminds you at a time or after a while, once or every day or week. It rings and vibrates.",

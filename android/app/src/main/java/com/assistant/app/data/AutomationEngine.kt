@@ -238,7 +238,8 @@ object AutomationEngine {
         val tool = DeviceTool.fromFunctionName(toolName) ?: return
         val enabled = AppSettingsStore(app).settings.first().enabledDeviceTools
         // Reminders are stored as notifications, so the reminder tool's own switch is enough to show them.
-        val allowed = tool in enabled || (tool == DeviceTool.SHOW_NOTIFICATION && DeviceTool.SCHEDULE_REMINDER in enabled)
+        val allowed = tool in enabled || (tool == DeviceTool.SHOW_NOTIFICATION &&
+            (DeviceTool.SCHEDULE_REMINDER in enabled || DeviceTool.SET_ALARM in enabled || DeviceTool.SET_TIMER in enabled))
         val result = if (!allowed) {
             "status=disabled\nThis tool is switched off in Settings."
         } else {
