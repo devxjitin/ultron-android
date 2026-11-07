@@ -38,8 +38,6 @@ data class AssistantUiState(
     val voiceState: VoiceState = VoiceState.IDLE,
     /** User pressed Mute during a session: mic audio isn't sent, the session stays open. */
     val isMicMuted: Boolean = false,
-    /** Ids of added connectors whose sign-in stopped working; Connectors shows them with Reconnect. */
-    val connectorIssues: Set<String> = emptySet(),
     /** A newer build waiting on the AWS update server; shown in a dialog until installed or dismissed. */
     val updateInfo: com.assistant.app.network.UpdateInfo? = null,
     /** 0..1 while that build downloads; null otherwise. */

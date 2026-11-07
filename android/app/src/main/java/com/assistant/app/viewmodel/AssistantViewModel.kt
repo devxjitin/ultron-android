@@ -44,8 +44,6 @@ import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
 import com.assistant.app.data.memoriesForPrompt
 import com.assistant.app.network.AppUpdater
-import com.assistant.app.network.McpException
-import com.assistant.app.network.McpClient
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
 import com.assistant.app.data.validateFormattedDataset
@@ -797,22 +795,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 append("\nRelated older notes still saved: ").append(result.related.joinToString("; ")).append(". ")
                 append("If any of them is now outdated or contradicted, call save_memory again with the same fact and replaces set to that note.")
             }
-        }
-    }
-
-    /** Marks a connector as needing to be reconnected (or clears the mark) so Connectors can show "Reconnect". */
-    private fun setConnectorIssue(id: String, issue: Boolean) {
-        _uiState.update { state ->
-            val next = if (issue) state.connectorIssues + id else state.connectorIssues - id
-            if (next == state.connectorIssues) state else state.copy(connectorIssues = next)
-        }
-    }
-
-    /** Success clears the mark; a refused sign-in marks it. Network trouble proves nothing, so it changes nothing. */
-    private fun noteConnector(id: String, failure: Throwable?, badCodes: Set<Int> = setOf(401, 403)) {
-        when {
-            failure == null -> setConnectorIssue(id, false)
-            failure is McpException && failure.httpCode in badCodes -> setConnectorIssue(id, true)
         }
     }
 

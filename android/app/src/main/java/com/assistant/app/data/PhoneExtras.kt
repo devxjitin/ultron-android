@@ -29,21 +29,32 @@ class PhoneExtras(private val app: Context, private val start: (Intent) -> Unit)
         return runCatching { pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString() }.getOrDefault(packageName)
     }
 
-    fun replyToNotification(listener: AssistantNotificationListener, appName: String, message: String): String {
-        val match = listener.activeNotifications
-            .filter { appLabel(it.packageName).contains(appName, ignoreCase = true) }
-            .sortedByDescending { it.postTime }
-            .firstNotNullOfOrNull { sbn ->
-                sbn.notification.actions?.firstOrNull { action -> !action.remoteInputs.isNullOrEmpty() }?.let { sbn to it }
-            } ?: return "status=not_found\nNo notification from \"$appName\" has a reply box right now. No message was sent."
-        val (sbn, action) = match
+    fun replyToNotification(listener: AssistantNotificationListener, appName: String, contact: String, message: String): String {
+        val replyable = listener.activeNotifications
+            .filter { it.packageName != app.packageName }
+            .mapNotNull { sbn ->
+                val action = sbn.notification.actions?.firstOrNull { !it.remoteInputs.isNullOrEmpty() } ?: return@mapNotNull null
+                val extras = sbn.notification.extras
+                val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString().orEmpty()
+                val conversation = extras.getCharSequence(android.app.Notification.EXTRA_CONVERSATION_TITLE)?.toString().orEmpty()
+                Triple(ReplyCandidate(sbn.key, appLabel(sbn.packageName), conversation.ifBlank { title }, listOf(title, conversation).filter { it.isNotBlank() }, sbn.postTime), sbn, action)
+            }
+        val pick = pickReply(replyable.map { it.first }, appName, contact)
+        val chosen = when (pick) {
+            ReplyPick.TooShort -> return "status=invalid\nGive the full app name and the name of the person or group to reply to. No message was sent."
+            ReplyPick.None -> return "status=not_found\nNo notification from \"$appName\" with a reply box matches \"$contact\" right now. No message was sent."
+            is ReplyPick.Many -> return "status=ambiguous\nSeveral chats match \"$contact\": " + pick.chats.joinToString("; ") +
+                ". Ask the user which one, then call reply_to_notification again with that exact name. No message was sent."
+            is ReplyPick.One -> replyable.first { it.first.id == pick.candidate.id }
+        }
+        val (candidate, _, action) = chosen
         val input = action.remoteInputs.first()
         val results = Bundle().apply { putCharSequence(input.resultKey, message) }
         val intent = Intent()
         RemoteInput.addResultsToIntent(action.remoteInputs, intent, results)
         return try {
             action.actionIntent.send(app, 0, intent)
-            "status=ok\nReplied in ${appLabel(sbn.packageName)}: $message"
+            "status=ok\nReplied in ${candidate.app} to ${candidate.chat}: $message"
         } catch (e: PendingIntent.CanceledException) {
             "status=failed\nThat notification can no longer be replied to. No message was sent."
         }
@@ -119,4 +130,32 @@ class PhoneExtras(private val app: Context, private val start: (Intent) -> Unit)
         start(Intent.createChooser(send, "Share with"))
         return "status=ok\nThe share sheet is open. Nothing is sent until the user picks an app."
     }
+}
+
+/** A notification that has a quick-reply box: [chat] is what the reply is shown as going to, [names] is everything a person may call it. */
+internal data class ReplyCandidate(val id: String, val app: String, val chat: String, val names: List<String>, val postTime: Long)
+
+internal sealed interface ReplyPick {
+    data object TooShort : ReplyPick
+    data object None : ReplyPick
+    data class Many(val chats: List<String>) : ReplyPick
+    data class One(val candidate: ReplyCandidate) : ReplyPick
+}
+
+/**
+ * Chooses the one chat to answer. The app name must be at least 3 letters (an exact label wins over a partial one) and the
+ * contact at least 2, and a reply goes out only when exactly one chat fits; several chats are returned for the user to pick.
+ */
+internal fun pickReply(candidates: List<ReplyCandidate>, appName: String, contact: String): ReplyPick {
+    val app = appName.trim()
+    val who = contact.trim()
+    if (app.length < 3 || who.length < 2) return ReplyPick.TooShort
+    val ofApp = candidates.filter { it.app.equals(app, ignoreCase = true) }
+        .ifEmpty { candidates.filter { it.app.contains(app, ignoreCase = true) } }
+    val matching = ofApp.filter { c -> c.names.any { it.contains(who, ignoreCase = true) } }
+    if (matching.isEmpty()) return ReplyPick.None
+    val narrowed = matching.filter { c -> c.names.any { it.equals(who, ignoreCase = true) } }.ifEmpty { matching }
+    val chats = narrowed.groupBy { it.chat.lowercase() }
+    if (chats.size > 1) return ReplyPick.Many(chats.values.map { it.first().chat })
+    return ReplyPick.One(narrowed.maxBy { it.postTime })
 }

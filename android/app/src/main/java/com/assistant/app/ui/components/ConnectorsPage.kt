@@ -182,8 +182,6 @@ private val Catalog: List<Connector> = ConnectorRegistry.all.map { spec ->
 
 @Composable
 fun ConnectorsPage(
-    /** Ids of added connectors whose sign-in stopped working. */
-    issues: Set<String>,
     enabledTools: Set<DeviceTool>,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
@@ -218,13 +216,12 @@ fun ConnectorsPage(
     }
     fun connected(c: Connector): Boolean = c.id in connectedIds
 
-    /** An added connector that no longer works (sign-in rejected, or Android access taken away): shown with Reconnect instead of Connected. */
-    val reconnectIds = remember(connectedIds, issues, resumeTick) {
+    /** An added connector whose Android access was taken away: shown with Repair instead of Connected. */
+    val reconnectIds = remember(connectedIds, resumeTick) {
         Catalog.filter { c ->
             c.id in connectedIds && when (val kind = c.kind) {
                 is Kind.Local -> !accessGranted(kind)
                 is Kind.Online -> false
-                else -> c.id in issues
             }
         }.map { it.id }.toSet()
     }

@@ -3,6 +3,14 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.12.1 - 2026-11-07
+
+### Fixed
+- Replying to a chat notification now needs the name of the person or group. Ultron answers only that chat, says who the reply went to, and asks you when several chats fit instead of replying to the newest one.
+
+### Removed
+- The Reconnect mark for online connectors, which never showed up. Local connectors still show Repair when Android access is taken away.
+
 ## 1.12.0 - 2026-11-07
 
 ### Changed

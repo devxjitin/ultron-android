@@ -306,7 +306,7 @@ class DeviceToolRunner(
             }
             DeviceTool.REPLY_NOTIFICATION -> {
                 val listener = AssistantNotificationListener.instance ?: return listenerDenied()
-                extras.replyToNotification(listener, text("app") ?: return MISSING, text("message") ?: return MISSING)
+                extras.replyToNotification(listener, text("app") ?: return MISSING, text("contact") ?: return MISSING, text("message") ?: return MISSING)
             }
             DeviceTool.DISMISS_NOTIFICATION -> {
                 val listener = AssistantNotificationListener.instance ?: return listenerDenied()
