@@ -3,6 +3,14 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.12.2 - 2026-11-07
+
+### Fixed
+- Holding the power or home button while Ultron is closed now starts listening as soon as the app is open, instead of only opening it.
+- After a phone call during a conversation, Ultron plays through the speaker again instead of the earpiece.
+- Interrupting Ultron while it talks, or stopping a conversation at the same moment, can no longer crash the app.
+- The Stop and Mute buttons in the notification keep working after the app restarts itself (for example after saving Developer settings).
+
 ## 1.12.1 - 2026-11-07
 
 ### Fixed

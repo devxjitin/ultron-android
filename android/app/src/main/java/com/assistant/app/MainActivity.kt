@@ -46,7 +46,6 @@ import com.assistant.app.ui.theme.ThemePrefs
 import com.assistant.app.ui.theme.applyWindowColors
 import com.assistant.app.ui.theme.paletteFor
 import com.assistant.app.viewmodel.AssistantViewModel
-import com.assistant.app.data.AccessGate
 import com.assistant.app.ui.AccessCheckingScreen
 import com.assistant.app.ui.ActivationScreen
 import com.assistant.app.ui.LicenseSummary
@@ -165,7 +164,8 @@ class MainActivity : ComponentActivity() {
         val action = intent?.action ?: return
         if (action != Intent.ACTION_ASSIST && action != Intent.ACTION_VOICE_COMMAND) return
         intent.action = null // so a recreated activity does not start a second session
-        if (hasMicPermission() && AccessGate.unlocked) viewModel.onAssistInvoked()
+        // The view model holds the request until the key check is done and the app is on screen.
+        if (hasMicPermission()) viewModel.onAssistInvoked()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
