@@ -26,10 +26,12 @@ function seed() {
     { ...base, id: randomId(), hint: "ZC3N", plan: "monthly", durationDays: 30, createdAt: t - 70 * DAY, activatedAt: t - 68 * DAY,
       expiresAt: t - 38 * DAY, onDevice: true, name: "Neha Singh", email: "neha@example.com", phone: "" },
     { ...base, id: randomId(), hint: "4H8P", plan: "lifetime", durationDays: 0, createdAt: t - 12 * DAY, activatedAt: t - 11 * DAY,
-      expiresAt: 0, onDevice: true, name: "Jitin", email: "", phone: "", note: "Own phone" },
+      expiresAt: 0, onDevice: true, name: "Jitin Sengar", email: "jitin@example.com", phone: "+91 90000 00000", note: "Own phone" },
     { ...base, id: randomId(), hint: "M9XD", plan: "yearly", durationDays: 365, createdAt: t - 20 * DAY, activatedAt: 0,
-      expiresAt: 0, onDevice: false, status: "revoked", name: "Test buyer", email: "", phone: "", note: "Refunded" },
-  ].map((l) => ({ ...l, state: stateOf(l, t) }));
+      expiresAt: 0, onDevice: false, status: "revoked", name: "Test buyer", email: "test@example.com", phone: "+91 98000 11111", note: "Refunded" },
+    { ...base, id: randomId(), hint: "P5RT", plan: "monthly", durationDays: 30, createdAt: t - 33 * DAY, activatedAt: t - 28 * DAY,
+      expiresAt: t + 2 * DAY, onDevice: true, name: "Karan Joshi", email: "karan@example.com", phone: "+91 97000 22222" },
+  ].map((l) => ({ ...l, emailedAt: l.createdAt + 60 })).map((l) => ({ ...l, state: stateOf(l, t) }));
 }
 
 function stateOf(l, t = now()) {
@@ -53,19 +55,35 @@ export function createDemoApi() {
     },
     async create(fields) {
       await pause();
+      for (const f of ["name", "email", "phone", "plan"]) if (!String(fields[f] ?? "").trim()) throw new ApiError(400, `${f}_required`);
+      if (fields.durationDays == null) throw new ApiError(400, "durationDays_required");
       const keys = [];
       const licenses = [];
+      const send = fields.sendEmail !== false;
       for (let i = 0; i < (fields.count || 1); i++) {
         const key = randomKey();
         const row = { id: randomId(), hint: key.slice(-4), status: "active", plan: fields.plan || "yearly",
           durationDays: fields.durationDays ?? 365, expiresAt: 0, createdAt: now(), activatedAt: 0, movedAt: 0, onDevice: false,
-          name: fields.name || "", email: fields.email || "", phone: fields.phone || "", note: fields.note || "" };
+          name: fields.name || "", email: fields.email || "", phone: fields.phone || "", note: fields.note || "",
+          emailedAt: send ? now() : 0 };
         row.state = stateOf(row);
         rows.unshift(row);
         keys.push(key);
         licenses.push(row);
       }
-      return { keys, licenses };
+      return { keys, licenses, emailed: send };
+    },
+    async reissue(id) {
+      await pause();
+      const old = find(id);
+      old.status = "revoked";
+      old.state = stateOf(old);
+      const key = randomKey();
+      const row = { ...old, id: randomId(), hint: key.slice(-4), status: "active", expiresAt: 0, createdAt: now(), activatedAt: 0,
+        movedAt: 0, onDevice: false, emailedAt: now() };
+      row.state = stateOf(row);
+      rows.unshift(row);
+      return { keys: [key], licenses: [row], emailed: true };
     },
     async update(id, fields) {
       await pause();

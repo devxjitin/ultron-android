@@ -4,17 +4,24 @@ can use it; the app itself never calls these routes.
 Routes (behind the Ultron HTTP API; API Gateway already checked the Firebase ID token, this Lambda then checks that the
 token belongs to a verified admin email):
   GET   /v1/admin/licenses                      -> {"licenses": [...]} every key, newest first
-  POST  /v1/admin/licenses                      -> creates keys, answers {"keys": ["ULTR-..."], "licenses": [...]}; the
-                                                   full key is shown only in this answer, the table keeps just its SHA-256
+  POST  /v1/admin/licenses                      -> creates keys, answers {"keys": ["ULTR-..."], "licenses": [...],
+                                                   "emailed": true|false}; name, email, phone, plan and durationDays are
+                                                   required. The full key is shown only in this answer and in the email
+                                                   to the buyer ("sendEmail": false skips the email); the table keeps
+                                                   just its SHA-256
   PATCH /v1/admin/licenses/{id}                 -> edits name, email, phone, note, plan, status, durationDays, expiresAt
   POST  /v1/admin/licenses/{id}/allow-move      -> lets the key move to another phone right now (skips the one-day wait)
+  POST  /v1/admin/licenses/{id}/reissue         -> a key cannot be read back, so this revokes it, creates a new one with the
+                                                   same buyer and plan, and emails that one
 
 {id} is the key's SHA-256, the same value as "id" in the list. Items are the ones mcp/license reads and writes.
 
-Env vars: TABLE, ADMIN_EMAILS (comma separated; empty locks everyone out).
+Env vars: TABLE, ADMIN_EMAILS (comma separated; empty locks everyone out). For the key email: SENDER_EMAIL (a verified
+SES identity such as no-reply@devxjitin.dev), SUPPORT_EMAIL (where buyers can write) and DOWNLOAD_URL (the app download page).
 """
 import base64
 import hashlib
+import html
 import json
 import os
 import re
@@ -31,7 +38,19 @@ PHONE_RE = re.compile(r"^[0-9+()\-\s.]{3,30}$")
 # Text fields an admin can set, with their maximum length.
 TEXT_FIELDS = {"name": 80, "email": 120, "phone": 30, "note": 300, "plan": 40}
 
+# Buyer details every key must carry, so the owner of a key can always be found and contacted.
+REQUIRED_DETAILS = ("name", "email", "phone")
+
 _table = None
+_ses = None
+
+
+def _mail():
+    global _ses
+    if _ses is None:
+        import boto3  # Same reason as _db: the offline tests replace _ses.
+        _ses = boto3.client("ses")
+    return _ses
 
 
 def _db():
@@ -99,6 +118,7 @@ def _public(item, now):
         "email": str(item.get("email", "")),
         "phone": str(item.get("phone", "")),
         "note": str(item.get("note", "")),
+        "emailedAt": int(item.get("emailedAt", 0)),
     }
 
 
@@ -141,29 +161,8 @@ def list_licenses(event, now):
     return _resp(200, {"licenses": licenses})
 
 
-def create(event, now):
-    data = _json_body(event)
-    if data is None:
-        return _resp(400, {"error": "bad_json"})
-    fields = {}
-    for field in ("name", "email", "phone", "note"):
-        value, error = _clean_text(data, field)
-        if error:
-            return _resp(400, {"error": error})
-        if value:
-            fields[field] = value
-    plan, error = _clean_text({"plan": data.get("plan", "yearly")}, "plan")
-    if error:
-        return _resp(400, {"error": error})
-    days, error = _clean_int(data, "durationDays", MAX_DAYS)
-    if error:
-        return _resp(400, {"error": error})
-    count, error = _clean_int(data, "count", MAX_CREATE)
-    if error or count == 0:
-        return _resp(400, {"error": "bad_count"})
-    days = 365 if days is None else days
-    count = count or 1
-
+def _make_keys(count, fields, plan, days, now):
+    """Stores [count] new keys and returns (keys, public items). The keys are never stored, only their hashes."""
     keys, created = [], []
     for _ in range(count):
         key = new_key()
@@ -171,8 +170,137 @@ def create(event, now):
                 "createdAt": now, "hint": key[-4:], **fields}
         _db().put_item(Item=item, ConditionExpression="attribute_not_exists(keyHash)")
         keys.append(key)
-        created.append(_public(item, now))
-    return _resp(200, {"keys": keys, "licenses": created})
+        created.append(item)
+    return keys, created
+
+
+def _send_keys(keys, items):
+    """Emails [keys] to the buyer on [items][0]. Returns True when SES accepted it and records emailedAt."""
+    first = items[0]
+    try:
+        _mail().send_email(**_key_email(first.get("name", ""), first["email"], keys, first["plan"], first["durationDays"]))
+    except Exception:  # SES not set up, sender not verified, throttled: the admin still has the keys on screen.
+        return False
+    sent_at = int(time.time())
+    for item in items:
+        try:
+            _db().update_item(
+                Key={"keyHash": item["keyHash"]}, UpdateExpression="SET #e = :t",
+                ExpressionAttributeNames={"#e": "emailedAt"}, ExpressionAttributeValues={":t": sent_at},
+            )
+            item["emailedAt"] = sent_at
+        except Exception:  # The mail is out; a missing "sent" mark must not turn that into an error.
+            pass
+    return True
+
+
+def create(event, now):
+    data = _json_body(event)
+    if data is None:
+        return _resp(400, {"error": "bad_json"})
+    fields = {}
+    for field in REQUIRED_DETAILS:
+        value, error = _clean_text(data, field)
+        if error:
+            return _resp(400, {"error": error})
+        if not value:
+            return _resp(400, {"error": f"{field}_required"})
+        fields[field] = value
+    note, error = _clean_text(data, "note")
+    if error:
+        return _resp(400, {"error": error})
+    if note:
+        fields["note"] = note
+    plan, error = _clean_text({"plan": data.get("plan", "")}, "plan")
+    if error:
+        return _resp(400, {"error": error})
+    days, error = _clean_int(data, "durationDays", MAX_DAYS)
+    if error:
+        return _resp(400, {"error": error})
+    if days is None:
+        return _resp(400, {"error": "durationDays_required"})
+    count, error = _clean_int(data, "count", MAX_CREATE)
+    if error or count == 0:
+        return _resp(400, {"error": "bad_count"})
+    count = count or 1
+    send = data.get("sendEmail", True) is not False
+
+    keys, items = _make_keys(count, fields, plan, days, now)
+    emailed = _send_keys(keys, items) if send else False
+    return _resp(200, {"keys": keys, "licenses": [_public(i, now) for i in items], "emailed": emailed})
+
+
+def reissue(event, now, license_id):
+    """Replaces a key the buyer lost: the old one is revoked, a new one with the same details is created and emailed."""
+    old = _db().get_item(Key={"keyHash": license_id}).get("Item")
+    if old is None:
+        return _resp(404, {"error": "not_found"})
+    fields = {f: old[f] for f in (*REQUIRED_DETAILS, "note") if old.get(f)}
+    if not all(fields.get(f) for f in REQUIRED_DETAILS):
+        return _resp(400, {"error": "details_missing"})
+    keys, items = _make_keys(1, {**fields, "reissuedFrom": license_id}, str(old.get("plan", "")), int(old.get("durationDays", 0)), now)
+    # Only once the new key exists is the old one switched off, so a failure never leaves the buyer with nothing.
+    _apply(license_id, {"status": "revoked"}, now)
+    emailed = _send_keys(keys, items)
+    return _resp(200, {"keys": keys, "licenses": [_public(i, now) for i in items], "emailed": emailed})
+
+
+def _key_email(name, to, keys, plan, days):
+    """The SES arguments for the mail that carries the activation key(s) to the buyer."""
+    sender = os.environ["SENDER_EMAIL"]
+    support = os.environ.get("SUPPORT_EMAIL", "")
+    download = os.environ.get("DOWNLOAD_URL", "")
+    greeting = f"Hi {name}," if name else "Hi,"
+    plural = len(keys) > 1
+    validity = ("never expires" if days == 0 else f"is valid for {days} days from the day you first activate it")
+    steps = [
+        "Download and install the Ultron app" + (f" from {download}" if download else "") + ".",
+        "If your phone shows a Play Protect warning, choose More details, then Install anyway. Ultron asks for "
+        "accessibility and notification access so it can work your phone by voice, and Play Protect warns about that "
+        "for apps installed outside the Play Store.",
+        "Open Ultron and paste your activation key when asked.",
+        "Say hello.",
+    ]
+    text = "\n".join([
+        greeting, "",
+        f"Thank you for choosing Ultron. Here {'are your activation keys' if plural else 'is your activation key'}:", "",
+        *keys, "",
+        f"Plan: {plan.title()}. Each key works on one phone at a time and {validity}.", "",
+        "Getting started", *[f"{i}. {step}" for i, step in enumerate(steps, 1)], "",
+        "Keep this email safe: anyone who has the key can use it." + (f" Need help? Write to {support}." if support else ""),
+        "", "Ultron by StarkMind",
+    ])
+    esc = html.escape
+    key_rows = "".join(
+        f'<div style="font:600 20px/1.4 Consolas,Menlo,monospace;letter-spacing:1px;background:#f3f4f6;border-radius:10px;'
+        f'padding:14px 16px;margin:8px 0;text-align:center;color:#111827">{esc(k)}</div>' for k in keys
+    )
+    step_rows = "".join(f'<li style="margin:6px 0">{esc(step)}</li>' for step in steps)
+    button = (f'<p style="margin:20px 0"><a href="{esc(download)}" style="background:#c8102e;color:#ffffff;text-decoration:none;'
+              f'padding:12px 22px;border-radius:999px;font-weight:600;display:inline-block">Download Ultron</a></p>') if download else ""
+    help_line = f' Need help? Write to <a href="mailto:{esc(support)}" style="color:#c8102e">{esc(support)}</a>.' if support else ""
+    body_html = (
+        '<div style="background:#f6f6f7;padding:24px 12px;font:15px/1.6 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937">'
+        '<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;padding:28px 26px">'
+        '<div style="font:700 22px/1 Georgia,serif;color:#111827;margin-bottom:18px">Ultron</div>'
+        f'<p style="margin:0 0 12px">{esc(greeting)}</p>'
+        f'<p style="margin:0 0 6px">Thank you for choosing Ultron. Here {"are your activation keys" if plural else "is your activation key"}:</p>'
+        f'{key_rows}'
+        f'<p style="margin:12px 0;color:#4b5563">Plan: <b>{esc(plan.title())}</b>. Each key works on one phone at a time and {esc(validity)}.</p>'
+        f'{button}'
+        '<h3 style="margin:22px 0 6px;font-size:16px">Getting started</h3>'
+        f'<ol style="margin:0;padding-left:20px">{step_rows}</ol>'
+        f'<p style="margin:22px 0 0;color:#6b7280;font-size:13px">Keep this email safe: anyone who has the key can use it.{help_line}</p>'
+        '</div></div>'
+    )
+    message = {
+        "Subject": {"Data": "Your Ultron activation key" if not plural else "Your Ultron activation keys", "Charset": "UTF-8"},
+        "Body": {"Text": {"Data": text, "Charset": "UTF-8"}, "Html": {"Data": body_html, "Charset": "UTF-8"}},
+    }
+    params = {"Source": f"Ultron <{sender}>", "Destination": {"ToAddresses": [to]}, "Message": message}
+    if support:
+        params["ReplyToAddresses"] = [support]
+    return params
 
 
 def update(event, now, license_id):
@@ -185,6 +313,8 @@ def update(event, now, license_id):
         if error:
             return _resp(400, {"error": error})
         if value is not None:
+            if field in REQUIRED_DETAILS and not value:
+                return _resp(400, {"error": f"{field}_required"})
             changes[field] = value
     if "status" in data:
         if data["status"] not in ("active", "revoked"):
@@ -236,11 +366,13 @@ def lambda_handler(event, context):
             return list_licenses(event, now)
         if method == "POST":
             return create(event, now)
-    match = re.fullmatch(r"/v1/admin/licenses/([0-9a-f]{64})(/allow-move)?", path)
+    match = re.fullmatch(r"/v1/admin/licenses/([0-9a-f]{64})(/allow-move|/reissue)?", path)
     if match:
         license_id, suffix = match.groups()
         if method == "PATCH" and not suffix:
             return update(event, now, license_id)
-        if method == "POST" and suffix:
+        if method == "POST" and suffix == "/allow-move":
             return allow_move(event, now, license_id)
+        if method == "POST" and suffix == "/reissue":
+            return reissue(event, now, license_id)
     return _resp(404, {"error": "not found"})

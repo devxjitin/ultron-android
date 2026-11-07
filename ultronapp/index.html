@@ -4,71 +4,151 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="light dark">
   <title>Ultronapp</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8102e'/%3E%3Cpath d='M9 11h14v4a7 7 0 0 1-14 0z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="bar">
-    <div class="brand"><span class="mark" aria-hidden="true"></span>Ultronapp</div>
-    <div id="account" class="account" hidden>
-      <span id="account-email" class="muted"></span>
-      <button id="sign-out" class="btn ghost" type="button">Sign out</button>
+  <main id="signin" class="auth" hidden>
+    <div class="auth-card">
+      <div class="brand"><span class="mark" aria-hidden="true"></span>Ultronapp</div>
+      <h1>Sign in to manage Ultron</h1>
+      <p class="muted">Create activation keys, email them to buyers, and see who is on which plan. Use the Google account that is on the admin list.</p>
+      <button id="google" class="btn primary block" type="button">Continue with Google</button>
+      <p id="signin-error" class="error" role="alert" hidden></p>
     </div>
-  </header>
-
-  <main id="signin" class="signin" hidden>
-    <h1>Manage Ultron activation keys</h1>
-    <p class="muted">Create keys, see who bought them and which plan they are on. Sign in with the Google account that is on the admin list.</p>
-    <button id="google" class="btn primary" type="button">Sign in with Google</button>
-    <p id="signin-error" class="error" role="alert" hidden></p>
   </main>
 
-  <main id="dashboard" class="wrap" hidden>
-    <section class="stats" id="stats" aria-label="Summary"></section>
+  <div id="app" class="shell" hidden>
+    <aside class="side">
+      <div class="brand"><span class="mark" aria-hidden="true"></span>Ultronapp</div>
+      <nav class="nav" aria-label="Sections">
+        <button class="nav-item active" type="button" data-view="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4zm0 7h6v-5H4zm10 0h6v-9h-6zm0-16v5h6V4z"/></svg>Dashboard
+        </button>
+        <button class="nav-item" type="button" data-view="keys">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14a4 4 0 1 1 3.9-5H21v3h-2v2h-3v-2h-5.1A4 4 0 0 1 7 14zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>Keys
+        </button>
+      </nav>
+      <div class="side-foot">
+        <span id="account-email" class="muted"></span>
+        <button id="sign-out" class="btn ghost small" type="button">Sign out</button>
+      </div>
+    </aside>
 
-    <div class="toolbar">
-      <input id="search" type="search" placeholder="Search name, email, phone or last 4 of key" aria-label="Search keys">
-      <select id="filter" aria-label="Filter by state">
-        <option value="all">All keys</option>
-        <option value="active">Active</option>
-        <option value="unused">Not activated yet</option>
-        <option value="expired">Expired</option>
-        <option value="revoked">Revoked</option>
-      </select>
-      <button id="refresh" class="btn" type="button">Refresh</button>
-      <button id="new" class="btn primary" type="button">New key</button>
+    <div class="main">
+      <header class="top">
+        <h1 id="page-title">Dashboard</h1>
+        <div class="top-actions">
+          <button id="refresh" class="btn" type="button">Refresh</button>
+          <button id="new" class="btn primary" type="button">New key</button>
+        </div>
+      </header>
+
+      <p id="list-error" class="error banner" role="alert" hidden></p>
+
+      <section id="view-dashboard" class="view">
+        <div class="stats" id="stats" aria-label="Summary"></div>
+        <div class="grid two">
+          <div class="card">
+            <h2>Keys by state</h2>
+            <div id="state-bar" class="state-bar" aria-hidden="true"></div>
+            <ul id="state-legend" class="legend"></ul>
+          </div>
+          <div class="card">
+            <h2>Keys created, last 6 months</h2>
+            <div id="month-chart" class="months" role="img" aria-label="Keys created per month"></div>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <h2>Expiring in the next 30 days</h2>
+            <div id="expiring" class="mini-list"></div>
+          </div>
+          <div class="card">
+            <h2>Recently created</h2>
+            <div id="recent" class="mini-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-keys" class="view" hidden>
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="Search name, email, phone or last 4 of key" aria-label="Search keys">
+          <select id="filter" aria-label="Filter by state">
+            <option value="all">All states</option>
+            <option value="active">Active</option>
+            <option value="unused">Not activated yet</option>
+            <option value="expired">Expired</option>
+            <option value="revoked">Revoked</option>
+          </select>
+          <select id="sort" aria-label="Sort">
+            <option value="newest">Newest first</option>
+            <option value="expiring">Expiring soonest</option>
+            <option value="name">Name A to Z</option>
+          </select>
+          <button id="export" class="btn" type="button">Export CSV</button>
+        </div>
+        <div class="card flush">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Customer</th><th>Plan</th><th>State</th><th>Validity</th><th>Email</th></tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+          <div id="empty" class="empty" hidden></div>
+          <div class="pager">
+            <span id="count" class="muted"></span>
+            <span class="pager-buttons">
+              <button id="prev" class="btn small" type="button">Previous</button>
+              <button id="next" class="btn small" type="button">Next</button>
+            </span>
+          </div>
+        </div>
+      </section>
     </div>
-
-    <p id="list-error" class="error" role="alert" hidden></p>
-    <div id="list" class="list" aria-live="polite"></div>
-  </main>
+  </div>
 
   <dialog id="create-dialog">
-    <form id="create-form" method="dialog" class="form" novalidate>
-      <h2>New activation key</h2>
-      <label>Plan<input name="plan" value="yearly" maxlength="40" required list="plans"></label>
-      <datalist id="plans"><option value="monthly"><option value="yearly"><option value="lifetime"><option value="gift"></datalist>
-      <label>Validity in days <small>counted from first activation, 0 never expires</small>
-        <input name="durationDays" type="number" min="0" max="3650" value="365" inputmode="numeric" required></label>
-      <label>Customer name<input name="name" maxlength="80" autocomplete="off"></label>
-      <label>Email<input name="email" type="email" maxlength="120" autocomplete="off"></label>
-      <label>Phone<input name="phone" type="tel" maxlength="30" autocomplete="off"></label>
-      <label>Note <small>only you see this</small><input name="note" maxlength="300" autocomplete="off"></label>
-      <label>How many keys<input name="count" type="number" min="1" max="50" value="1" inputmode="numeric"></label>
+    <form id="create-form" class="form" novalidate>
+      <header class="dlg-head"><h2>New activation key</h2><p class="muted">The key is created and emailed to the customer. Fields marked * are required.</p></header>
+      <div class="fields">
+        <label class="field span2">Customer name *<input name="name" maxlength="80" autocomplete="off" required><small class="field-error" data-for="name"></small></label>
+        <label class="field">Email *<input name="email" type="email" maxlength="120" autocomplete="off" required><small class="field-error" data-for="email"></small></label>
+        <label class="field">Phone *<input name="phone" type="tel" maxlength="30" autocomplete="off" placeholder="+91 98765 43210" required><small class="field-error" data-for="phone"></small></label>
+        <label class="field">Plan *
+          <select name="plan" required>
+            <option value="monthly">Monthly</option>
+            <option value="yearly" selected>Yearly</option>
+            <option value="lifetime">Lifetime</option>
+            <option value="gift">Gift</option>
+          </select>
+          <small class="field-error" data-for="plan"></small>
+        </label>
+        <label class="field">Validity in days *<input name="durationDays" type="number" min="0" max="3650" value="365" inputmode="numeric" required>
+          <small class="hint">Counted from first activation. 0 never expires.</small><small class="field-error" data-for="durationDays"></small></label>
+        <label class="field span2">Note <span class="muted">(only you see this)</span><input name="note" maxlength="300" autocomplete="off"></label>
+        <label class="field">How many keys<input name="count" type="number" min="1" max="50" value="1" inputmode="numeric">
+          <small class="hint">All go to the same email.</small><small class="field-error" data-for="count"></small></label>
+        <label class="check span2"><input type="checkbox" name="sendEmail" checked> Email the key to the customer now</label>
+      </div>
       <p id="create-error" class="error" role="alert" hidden></p>
       <div class="actions">
         <button type="button" class="btn" data-close>Cancel</button>
-        <button type="submit" class="btn primary" id="create-submit">Create</button>
+        <button type="submit" class="btn primary" id="create-submit">Create and send</button>
       </div>
     </form>
   </dialog>
 
   <dialog id="created-dialog">
     <div class="form">
-      <h2 id="created-title">Key created</h2>
-      <p class="muted">This is the only time the full key is shown. Copy it and send it to the buyer now.</p>
+      <header class="dlg-head"><h2 id="created-title">Key created</h2></header>
+      <p id="created-status" class="notice"></p>
       <ul id="created-keys" class="keys"></ul>
+      <p class="muted small-text">This is the only time the full key is shown. It is stored only as a hash.</p>
       <div class="actions">
         <button type="button" class="btn" id="copy-keys">Copy</button>
         <button type="button" class="btn primary" data-close>Done</button>
@@ -77,22 +157,27 @@
   </dialog>
 
   <dialog id="detail-dialog">
-    <form id="detail-form" method="dialog" class="form" novalidate>
-      <h2 id="detail-title">Key</h2>
-      <p id="detail-facts" class="facts"></p>
-      <label>Customer name<input name="name" maxlength="80" autocomplete="off"></label>
-      <label>Email<input name="email" type="email" maxlength="120" autocomplete="off"></label>
-      <label>Phone<input name="phone" type="tel" maxlength="30" autocomplete="off"></label>
-      <label>Plan<input name="plan" maxlength="40" required list="plans"></label>
-      <label id="days-field">Validity in days <small>counted from first activation, 0 never expires</small>
-        <input name="durationDays" type="number" min="0" max="3650" inputmode="numeric"></label>
-      <label id="until-field">Valid until <small>leave empty for no end date</small>
-        <input name="validUntil" type="date"></label>
-      <label>Note <small>only you see this</small><input name="note" maxlength="300" autocomplete="off"></label>
+    <form id="detail-form" class="form" novalidate>
+      <header class="dlg-head">
+        <h2 id="detail-title">Key</h2>
+        <span id="detail-badge" class="badge"></span>
+      </header>
+      <ol id="timeline" class="timeline"></ol>
+      <div class="fields">
+        <label class="field span2">Customer name *<input name="name" maxlength="80" autocomplete="off" required><small class="field-error" data-for="name"></small></label>
+        <label class="field">Email *<input name="email" type="email" maxlength="120" autocomplete="off" required><small class="field-error" data-for="email"></small></label>
+        <label class="field">Phone *<input name="phone" type="tel" maxlength="30" autocomplete="off" required><small class="field-error" data-for="phone"></small></label>
+        <label class="field">Plan *<input name="plan" maxlength="40" required list="plans"><small class="field-error" data-for="plan"></small></label>
+        <datalist id="plans"><option value="monthly"><option value="yearly"><option value="lifetime"><option value="gift"></datalist>
+        <label class="field" id="days-field">Validity in days <input name="durationDays" type="number" min="0" max="3650" inputmode="numeric"></label>
+        <label class="field" id="until-field">Valid until <input name="validUntil" type="date"><small class="hint">Leave empty for no end date.</small></label>
+        <label class="field span2">Note <span class="muted">(only you see this)</span><input name="note" maxlength="300" autocomplete="off"></label>
+      </div>
       <p id="detail-error" class="error" role="alert" hidden></p>
       <div class="actions spread">
         <div class="actions">
           <button type="button" class="btn danger" id="toggle-status">Revoke</button>
+          <button type="button" class="btn" id="reissue">Issue new key and email</button>
           <button type="button" class="btn" id="allow-move" hidden>Allow move to a new phone</button>
         </div>
         <div class="actions">
@@ -101,6 +186,17 @@
         </div>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="confirm-dialog">
+    <div class="form">
+      <header class="dlg-head"><h2 id="confirm-title">Are you sure?</h2></header>
+      <p id="confirm-text"></p>
+      <div class="actions">
+        <button type="button" class="btn" id="confirm-no">Cancel</button>
+        <button type="button" class="btn primary" id="confirm-yes">Continue</button>
+      </div>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
