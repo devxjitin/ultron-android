@@ -6,9 +6,12 @@ import importlib.util
 import json
 import os
 import pathlib
+import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# On Lambda, appcheck.py sits next to lambda_function.py; the tests load the handler by path, so add that folder.
+sys.path.insert(0, str(ROOT / "feature-requests"))
 os.environ.update({"TABLE": "requests", "DEVELOPER_EMAIL": "dev@example.com", "SENDER_EMAIL": "noreply@example.com"})
 
 spec = importlib.util.spec_from_file_location("requests_lambda", ROOT / "feature-requests/lambda_function.py")
@@ -21,7 +24,8 @@ class FakeTable:
         self.items = {}
         self.counts = {}
 
-    def update_item(self, Key, **_):
+    def update_item(self, Key, **kwargs):
+        self.last_update = kwargs
         self.counts[Key["id"]] = self.counts.get(Key["id"], 0) + 1
         return {"Attributes": {"count": self.counts[Key["id"]]}}
 
@@ -72,6 +76,24 @@ class FeatureRequestTest(unittest.TestCase):
         self.assertEqual(["me@example.com"], mail["ReplyToAddresses"])
         self.assertIn("Connector request: Spotify", mail["Message"]["Subject"]["Data"])
         self.assertIn("play my gym playlist", mail["Message"]["Body"]["Text"]["Data"])
+
+    def test_the_daily_counter_expires_so_counters_do_not_pile_up(self):
+        self.call(GOOD)
+        update = fr._table.last_update
+        self.assertIn("expiresAt", update["UpdateExpression"])
+        expires = update["ExpressionAttributeValues"][":expires"]
+        self.assertGreater(expires, fr.time.time() + fr.COUNTER_TTL_SECONDS - 60)
+
+    def test_enforce_mode_refuses_a_request_without_an_app_check_token(self):
+        os.environ.update({"FIREBASE_PROJECT_NUMBER": "434457544612", "APP_CHECK_MODE": "enforce"})
+        try:
+            status, _ = self.call(GOOD)
+            self.assertEqual(401, status)
+            self.assertEqual({}, fr._table.items)
+            self.assertEqual({}, fr._table.counts)
+        finally:
+            os.environ.pop("FIREBASE_PROJECT_NUMBER")
+            os.environ.pop("APP_CHECK_MODE")
 
     def test_a_failed_email_still_keeps_the_request(self):
         fr._ses = FakeMail(fail=True)

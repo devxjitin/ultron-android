@@ -2,7 +2,7 @@
 
 An App Check token is an RS256 JWT signed by Google. This module fetches Google's public keys, verifies the signature
 (RSASSA-PKCS1-v1_5 with SHA-256), then the issuer, audience and expiry. A copy of this file sits next to every Lambda that
-uses it (mcp/web-extract, mcp/ultron-updates); mcp/tests keeps them identical.
+uses it (mcp/web-extract, mcp/ultron-updates, mcp/feature-requests); mcp/tests keeps them identical.
 
 Env vars:
   FIREBASE_PROJECT_NUMBER  the numeric project number (not the project id); blank turns the check off
@@ -21,7 +21,11 @@ JWKS_TTL_SECONDS = 3600
 # DER prefix of a SHA-256 DigestInfo, the fixed part of an RSASSA-PKCS1-v1_5 signature.
 SHA256_PREFIX = bytes.fromhex("3031300d060960864801650304020105000420")
 
-_keys = {"fetched": 0.0, "by_kid": {}}
+# Google's key server is asked again at most this often for a key id it does not know, so a stream of made-up ids cannot
+# make every request wait on it.
+MIN_REFETCH_SECONDS = 60
+
+_keys = {"fetched": 0.0, "tried": 0.0, "by_kid": {}}
 
 
 def _b64(data):
@@ -36,9 +40,14 @@ def _fetch_keys():
 
 
 def _key_for(kid):
-    stale = time.time() - _keys["fetched"] > JWKS_TTL_SECONDS
-    if stale or kid not in _keys["by_kid"]:
-        _fetch_keys()  # an unknown kid also refetches once, in case Google rotated its keys
+    now = time.time()
+    stale = now - _keys["fetched"] > JWKS_TTL_SECONDS
+    # An unknown kid also refetches, in case Google rotated its keys. Neither refetches within a minute of the last try,
+    # which counts even when it failed, so an unreachable key server is not asked again on every request.
+    wanted = stale or kid not in _keys["by_kid"]
+    if wanted and now - _keys.get("tried", 0.0) > MIN_REFETCH_SECONDS:
+        _keys["tried"] = now
+        _fetch_keys()
     return _keys["by_kid"].get(kid)
 
 

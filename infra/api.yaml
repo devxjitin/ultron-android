@@ -314,6 +314,10 @@ Resources:
       KeySchema:
         - AttributeName: id
           KeyType: HASH
+      # Only the daily-limit counters carry expiresAt; the requests themselves have none and are kept.
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
       SSESpecification:
         SSEEnabled: true
       Tags:
@@ -333,6 +337,8 @@ Resources:
           TABLE: !Ref RequestsTable
           DEVELOPER_EMAIL: !Ref DeveloperEmail
           SENDER_EMAIL: !Ref RequestSenderEmail
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
       Policies:
         - Statement:
             - Effect: Allow
