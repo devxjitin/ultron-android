@@ -20,14 +20,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/**
- * Thin client for the Gemini Live bidirectional-streaming WebSocket API.
- *
- * This talks to the Live endpoint directly from the tablet using an on-device API key.
- * That is the tradeoff we accepted for a fast, backend-free build: anyone who decompiles
- * the app can recover the key. Acceptable for an internal kiosk prototype; if this
- * ever ships beyond that, move this connection behind a small server-side proxy instead.
- */
 /** What the view model needs from a Live voice connection; [GeminiLiveClient] talks to Gemini with the user's key. */
 interface LiveClient {
     val latency: com.assistant.app.util.LatencySession
@@ -47,6 +39,13 @@ interface LiveClient {
     fun close()
 }
 
+/**
+ * Thin client for the Gemini Live bidirectional-streaming WebSocket API.
+ *
+ * It connects straight from the phone with the user's own Gemini key (entered in Developer settings and kept encrypted
+ * on the device), sent in a header rather than the web address. No key is built into the app and no server sits in
+ * between.
+ */
 class GeminiLiveClient(
     private val apiKey: String,
     private val model: String

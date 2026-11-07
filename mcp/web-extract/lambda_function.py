@@ -1,7 +1,8 @@
 """Stateless MCP server (streamable HTTP, JSON responses) that turns a web address into clean readable content,
 using the trafilatura library (https://pypi.org/project/trafilatura/).
 
-Runs on AWS Lambda behind a Function URL. Nothing is stored. URL shape: /<ACCESS_TOKEN>
+Runs on AWS Lambda behind the Ultron API (POST /v1/web/mcp). Nothing is stored. The older Function URL mode (no JWT_AUTH)
+still answers at /<ACCESS_TOKEN>.
 
 Tools:
   extract_page_content   main text of an article or page (Markdown or plain text) plus its metadata

@@ -287,7 +287,7 @@ class DeviceToolRunner(
                         "Do not stop: call look_at_screen (it reads the screen as a picture), " +
                         "or try press_back, scroll, wait_for_text, click_on_text with a likely label, or tap_position if the layout is known, " +
                         "or reach the same goal another way (the app's search, a different screen, another app or tool). " +
-                        "If nothing works, tell him which app it is and what you could not see, and offer what you can still do."
+                        "If nothing works, tell the user which app it is and what you could not see, and offer what you can still do."
                 } else "status=ok\nApp: ${appName ?: "unknown"}\n$body"
             }
             DeviceTool.LOOK_AT_SCREEN -> lookAtScreen(text("question"))

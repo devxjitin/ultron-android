@@ -8,8 +8,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Talks to the Ultron API on AWS. Every call carries the user's Firebase ID token, which API Gateway checks before any
- * Lambda runs. Without a base URL in the build, or without a signed-in user, callers fall back to the older secret-URL
- * servers until those are retired.
+ * Lambda runs. Without a base URL in the build, or without a signed-in user, callers send nothing and report that the
+ * service is not available.
  */
 object ApiClient {
     private const val TOKEN_WAIT_SECONDS = 10L

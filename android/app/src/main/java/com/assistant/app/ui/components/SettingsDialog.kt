@@ -118,7 +118,7 @@ fun SettingsPage(
     onDeleteKnowledgeDocument: (String) -> Unit,
     knowledgeStoreCorrupt: Boolean,
     onResetKnowledge: () -> Unit,
-    onUploadMarkdownFile: () -> Unit,
+    onUploadPdfFile: () -> Unit,
     onDismissKnowledgeDocumentError: () -> Unit,
     page: AppPage,
     onDismiss: () -> Unit,
@@ -345,7 +345,7 @@ fun SettingsPage(
                             modifier = Modifier.weight(1f).height(48.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, com.assistant.app.ui.theme.AssistantOutline),
-                            onClick = onUploadMarkdownFile,
+                            onClick = onUploadPdfFile,
                             enabled = !isSavingKnowledgeDocument && !knowledgeStoreCorrupt
                         ) {
                             Icon(Icons.Filled.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
