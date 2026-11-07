@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.10.2 - 2026-11-07
+
+### Changed
+- The request form was redesigned. Skill and connector now have their own full screens with their own wording, clear text boxes with a highlighted border while you type, a character count, an email check and a Send button that shows when it is sending. The cards on Help & support also react when you press them.
+
 ## 1.10.1 - 2026-11-07
 
 ### Changed
