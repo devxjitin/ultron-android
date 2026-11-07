@@ -183,10 +183,6 @@ object ConnectorRegistry {
 
     fun info(id: String): ConnectorInfo? = infos[id]
 
-    /** Connectors of one group, A to Z. */
-    fun inCategory(category: ConnectorCategory): List<ConnectorSpec> =
-        all.filter { it.category == category }.sortedBy { it.name.lowercase() }
-
     /** Ids switched on for a fresh install. */
     val defaultIds: List<String> get() = all.filter { it.defaultOn }.map { it.id }
 

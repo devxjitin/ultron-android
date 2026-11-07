@@ -40,28 +40,6 @@ object AutomationEngine {
 
     // ---------------------------------------------------------------- scheduled actions
 
-    fun schedule(
-        context: Context, toolName: String?, argsJson: String?, minutes: Int?, atTime: String?, repeatMinutes: Int?
-    ): String {
-        val tool = checkTool(toolName) ?: return NOT_AUTOMATABLE
-        val args = argsJson?.takeIf { it.isNotBlank() } ?: "{}"
-        if (runCatching { JSONObject(args) }.isFailure) return "status=invalid\nArguments must be a JSON object, for example {\"state\":\"on\"}."
-        val repeat = repeatMinutes ?: 0
-        if (repeat != 0 && repeat !in 15..10_080) return "status=invalid\nRepeat must be between 15 and 10080 minutes."
-        val now = System.currentTimeMillis()
-        val at = when {
-            minutes != null -> if (minutes in 1..10_080) now + minutes * 60_000L else return "status=invalid\nMinutes must be 1-10080."
-            atTime != null -> {
-                val time = runCatching { LocalTime.parse(atTime) }.getOrNull() ?: return "status=invalid\nUse at_time as HH:MM."
-                var target = java.time.LocalDate.now().atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                if (target <= now) target += 86_400_000L
-                target
-            }
-            else -> return "status=invalid\nGive either minutes or at_time."
-        }
-        return scheduleAt(context, tool, args, at, repeat)
-    }
-
     /** Saves and arms one action for an exact moment. [repeatMinutes] is 0 for a single run. */
     fun scheduleAt(context: Context, tool: DeviceTool, argsJson: String, atMillis: Long, repeatMinutes: Int): String {
         val store = AutomationStore(context)

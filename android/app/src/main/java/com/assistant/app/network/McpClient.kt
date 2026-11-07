@@ -1,6 +1,5 @@
 package com.assistant.app.network
 
-import com.assistant.app.data.McpToolSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -44,48 +43,6 @@ class McpClient(
     private var protocolVersion: String? = null
     private var initialized = false
     private var nextId = 1
-
-    suspend fun listTools(): List<McpToolSpec> = lock.withLock {
-        withContext(Dispatchers.IO) {
-            val watcher = cancelActiveCallOnCancellation()
-            try {
-                listToolsLocked()
-            } catch (e: McpException) {
-                throw e
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                throw McpException("Could not reach the server.")
-            } finally {
-                withContext(kotlinx.coroutines.NonCancellable) { watcher.cancelAndJoin() }
-            }
-        }
-    }
-
-    private fun listToolsLocked(): List<McpToolSpec> {
-        run {
-            ensureInitialized()
-            val tools = mutableListOf<McpToolSpec>()
-            var cursor: String? = null
-            repeat(MAX_PAGES) {
-                val params = JSONObject().apply { cursor?.let { put("cursor", it) } }
-                val result = request("tools/list", params)
-                val array = result.optJSONArray("tools") ?: JSONArray()
-                for (i in 0 until array.length()) {
-                    val tool = array.getJSONObject(i)
-                    tools += McpToolSpec(
-                        name = tool.getString("name"),
-                        description = tool.optString("description"),
-                        schema = (tool.optJSONObject("inputSchema") ?: JSONObject()).toString(),
-                        readOnly = tool.optJSONObject("annotations")?.optBoolean("readOnlyHint", false) ?: false
-                    )
-                }
-                cursor = result.optString("nextCursor").takeIf { it.isNotEmpty() }
-                if (cursor == null) return tools
-            }
-            return tools
-        }
-    }
 
     /** Runs one tool and returns its text output; throws [McpException] on protocol errors. */
     suspend fun callTool(name: String, arguments: JSONObject): Result<String> = lock.withLock {
@@ -196,7 +153,6 @@ class McpClient(
 
     private companion object {
         const val PROTOCOL_VERSION = "2025-03-26"
-        const val MAX_PAGES = 5
     }
 }
 

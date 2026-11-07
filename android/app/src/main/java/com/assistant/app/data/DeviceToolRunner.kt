@@ -321,9 +321,7 @@ class DeviceToolRunner(
             DeviceTool.OPEN_URL -> extras.openUrl(text("url") ?: return MISSING)
             DeviceTool.SHARE_TEXT -> extras.shareText(text("text") ?: return MISSING)
             DeviceTool.POWER_MENU -> globalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, "Power menu")
-            DeviceTool.SPLIT_SCREEN ->
-                if (Build.VERSION.SDK_INT < 24) "status=unavailable\nThis needs Android 7 or newer."
-                else globalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, "Split screen")
+            DeviceTool.SPLIT_SCREEN -> globalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, "Split screen")
             DeviceTool.SWIPE -> {
                 val service = AssistantAccessibilityService.instance ?: return accessibilityDenied()
                 val x1 = number("from_x") ?: return MISSING

@@ -57,10 +57,6 @@ class ConnectorsTest {
         assertTrue(ConnectorCategory.PHONE_CONTROL.advanced)
     }
 
-    @Test fun everyCategoryHasConnectors() {
-        ConnectorCategory.entries.forEach { assertTrue("$it is empty", ConnectorRegistry.inCategory(it).isNotEmpty()) }
-    }
-
     private companion object {
         const val TOOL_CAP = 110
     }

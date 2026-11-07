@@ -91,16 +91,6 @@ class ConversationHistoryStore(store: BoxStore) {
     /** Deletes one exchange. Returns false when it was already gone. */
     fun delete(id: Long): Boolean = box.remove(id)
 
-    /** Deletes every exchange whose time is inside the range (both ends inclusive). Returns how many were removed. */
-    fun deleteRange(fromMillis: Long, toMillis: Long): Int {
-        val query = box.query(ConversationTurnEntity_.timestampMillis.between(fromMillis, toMillis)).build()
-        return try {
-            query.remove().toInt()
-        } finally {
-            query.close()
-        }
-    }
-
     /** Deletes everything. */
     fun clearAll() = box.removeAll()
 

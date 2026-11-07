@@ -43,11 +43,6 @@ class ChangelogTest {
         assertEquals(listOf("Something changed"), second.sections[0].items)
     }
 
-    @Test fun `notes are one labelled line per point`() {
-        val notes = Changelog.notesFor(Changelog.parse(text)[0])
-        assertEquals("Added: New thing\nAdded: Another thing\nFixed: A bug", notes)
-    }
-
     @Test fun `text without a version heading gives no entries`() {
         assertTrue(Changelog.parse("# Changelog\n\n### Added\n- x").isEmpty())
     }

@@ -649,19 +649,6 @@ internal fun assistantTextFieldColors() = TextFieldDefaults.colors(
     unfocusedTrailingIconColor = AssistantTextMuted
 )
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        color = com.assistant.app.ui.theme.AssistantTextPrimary,
-        style = androidx.compose.material3.MaterialTheme.typography.labelLarge.copy(
-            fontSize = 15.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
-        )
-    )
-    Spacer(Modifier.height(8.dp))
-}
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

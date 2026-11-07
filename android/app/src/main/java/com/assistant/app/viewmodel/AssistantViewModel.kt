@@ -102,7 +102,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val SEARCH_RETRY_LIMIT = 1
         private const val SEARCH_RETRY_DELAY_MS = 500L
         private const val MAX_SEARCH_QUERY_CHARS = 500
-        private const val MAX_MCP_RESULT_CHARS = 6_000
         /** How often the app asks the AWS update server for a newer build on its own, also while it stays open. */
         private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60_000L
         private const val MAX_PENDING_ANNOUNCEMENTS = 5

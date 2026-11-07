@@ -58,8 +58,4 @@ object Changelog {
         closeVersion()
         return entries
     }
-
-    /** The notes of one version as plain text, the form the update server and the update card use. */
-    fun notesFor(entry: ChangelogEntry): String =
-        entry.sections.joinToString("\n") { section -> section.items.joinToString("\n") { "${section.title}: $it" } }
 }
