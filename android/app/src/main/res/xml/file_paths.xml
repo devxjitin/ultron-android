@@ -2,4 +2,6 @@
 <paths>
     <!-- Downloaded app updates, handed to Android's installer. -->
     <cache-path name="updates" path="updates/" />
+    <!-- Files on the phone that the assistant opens or shows for the user (All files connector). -->
+    <external-path name="storage" path="." />
 </paths>

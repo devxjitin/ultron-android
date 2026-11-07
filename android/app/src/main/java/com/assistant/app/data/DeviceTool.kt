@@ -232,6 +232,15 @@ enum class DeviceTool(
         )
     ),
 
+    LIST_FOLDER(
+        "list_folder", "Browse a folder", "Look inside a folder on the phone.",
+        "Lists what is inside a folder of the phone's storage: sub-folders and files, each file with a number for open_file or show_image. " +
+            "Give a path such as Download or Documents/Bills, or only part of a folder name. Leave the path empty for the top level. Needs All files access.",
+        listOf(
+            ToolParam("path", ToolParamType.STRING, "Folder path or part of its name. Empty for the top level.", required = false),
+            ToolParam("limit", ToolParamType.INTEGER, "How many files to list, 1-60. Default 30.", required = false)
+        )
+    ),
     SHOW_IMAGE(
         "show_image", "Show a picture", "Show a picture on the screen.",
         "Shows a picture over the home screen. By default it looks in the pictures the user added to Ultron, by what they said about it " +

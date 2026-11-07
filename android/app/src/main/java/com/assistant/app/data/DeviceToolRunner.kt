@@ -185,6 +185,7 @@ class DeviceToolRunner(
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
             DeviceTool.SEARCH_FILES -> searchFiles(text("query"), text("kind"), (number("limit") ?: 5).coerceIn(1, 10))
             DeviceTool.OPEN_FILE -> openFile(number("number"), text("name"))
+            DeviceTool.LIST_FOLDER -> listFolder(text("path"), (number("limit") ?: 30).coerceIn(1, 60))
             DeviceTool.SHOW_IMAGE -> showPicture(text("query"), number("file_number"), text("action"))
             DeviceTool.SEARCH_CONTACT -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
@@ -1155,10 +1156,15 @@ class DeviceToolRunner(
         return "status=ok\nSent $command."
     }
 
-    private class FoundFile(val uri: android.net.Uri, val mime: String, val name: String, val description: String)
+    /** A file the assistant can open. The address and description are built only when asked for, because a search may scan tens of thousands. */
+    private class FoundFile(makeUri: () -> android.net.Uri, val mime: String, val name: String, makeDescription: () -> String) {
+        val uri: android.net.Uri by lazy(makeUri)
+        val description: String by lazy(makeDescription)
+    }
 
     /** Asks for whatever media access is missing; null when the files can be read. */
     private fun fileAccessMissing(): String? {
+        if (AccessChecks.allFiles(app)) return null
         fun allowed(permission: String) = ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED
         if (Build.VERSION.SDK_INT < 33) return missingPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
         val media = listOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO)
@@ -1170,6 +1176,7 @@ class DeviceToolRunner(
 
     /** Everything the phone lists for [kind], newest first, as ranked-search candidates paired with their details. */
     private fun allFiles(kind: String?): List<Pair<FileCandidate, FoundFile>> {
+        if (AccessChecks.allFiles(app)) return walkFiles(kind)
         val files = MediaStore.Files.getContentUri("external")
         val type = MediaStore.Files.FileColumns.MEDIA_TYPE
         val mimeColumn = MediaStore.Files.FileColumns.MIME_TYPE
@@ -1206,11 +1213,89 @@ class DeviceToolRunner(
                 val searchable = if (title.isNotBlank() && !name.contains(title, ignoreCase = true)) "$name $title" else name
                 found.add(
                     FileCandidate(searchable, folder, seconds * 1000, id) to
-                        FoundFile(ContentUris.withAppendedId(files, id), mime, name, "$name ($mime, $size, $date$place)")
+                        FoundFile({ ContentUris.withAppendedId(files, id) }, mime, name) { "$name ($mime, $size, $date$place)" }
                 )
             }
         }
         return found
+    }
+
+    private fun mimeOf(file: java.io.File): String =
+        android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+
+    private fun describe(file: java.io.File, mime: String, folder: String): String {
+        val date = java.time.Instant.ofEpochMilli(file.lastModified()).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+        val size = android.text.format.Formatter.formatShortFileSize(app, file.length())
+        return "${file.name} ($mime, $size, $date${if (folder.isBlank()) "" else ", in $folder"})"
+    }
+
+    private fun foundFile(file: java.io.File, mime: String, folder: String) = FoundFile(
+        { androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.updates", file) }, mime, file.name
+    ) { describe(file, mime, folder) }
+
+    /** With All files access: every file in the phone's storage, found by walking the folders. */
+    private fun walkFiles(kind: String?): List<Pair<FileCandidate, FoundFile>> {
+        val root = Environment.getExternalStorageDirectory()
+        val found = ArrayList<Pair<FileCandidate, FoundFile>>()
+        StorageWalk.walk(root, MAX_WALK_FILES).forEachIndexed { index, file ->
+            val mime = mimeOf(file)
+            val wanted = when (kind) {
+                "image" -> mime.startsWith("image/")
+                "video" -> mime.startsWith("video/")
+                "audio" -> mime.startsWith("audio/")
+                "document" -> mime.startsWith("text/") || mime.startsWith("application/")
+                else -> true
+            }
+            if (!wanted) return@forEachIndexed
+            val folder = file.parentFile?.relativeTo(root)?.path?.replace('\\', '/').orEmpty()
+            found.add(FileCandidate(file.name, folder, file.lastModified(), index.toLong()) to foundFile(file, mime, folder))
+        }
+        return found
+    }
+
+    private fun listFolder(path: String?, limit: Int): String {
+        if (!AccessChecks.allFiles(app)) {
+            return "status=unavailable\nAll files access is off. Ask the user to turn on the All files connector and allow it on the screen that opens."
+        }
+        val root = Environment.getExternalStorageDirectory()
+        var dir = StorageWalk.resolve(root, path) ?: return "status=invalid\nThat folder is outside the phone's storage."
+        var note = ""
+        if (!dir.isDirectory) {
+            val folders = StorageWalk.folders(root, 30_000)
+            val candidates = folders.mapIndexed { i, f ->
+                FileCandidate(f.name, f.parentFile?.relativeTo(root)?.path.orEmpty(), f.lastModified(), i.toLong())
+            }
+            val request = FileSearch.Request(FileSearch.tokens(path.orEmpty()), null, null)
+            val best = FileSearch.rank(candidates, request, hasExtension = false).firstOrNull()
+            if (best == null) {
+                val top = root.listFiles().orEmpty().filter { it.isDirectory && !it.name.startsWith(".") }.map { it.name }.sorted()
+                return "status=not_found\nNo folder matches \"$path\". Folders at the top level: ${top.joinToString(", ")}"
+            }
+            dir = folders[best.file.key.toInt()]
+            note = "No folder had exactly that name, so this is the closest one.\n"
+        }
+        val children = (dir.listFiles() ?: return "status=unavailable\nAndroid does not let the app read that folder.")
+            .filter { !it.name.startsWith(".") }
+        val subFolders = children.filter { it.isDirectory }.sortedBy { it.name.lowercase() }
+        val files = children.filter { it.isFile }.sortedByDescending { it.lastModified() }
+        val relative = dir.relativeTo(root).path.replace('\\', '/')
+        val shown = files.take(limit)
+        lastFiles = shown.map { foundFile(it, mimeOf(it), relative) }
+        return buildString {
+            append("status=ok\n").append(note)
+            append("Folder: ").append(relative.ifEmpty { "(top level)" }).append(" - ")
+                .append(subFolders.size).append(" folders, ").append(files.size).append(" files\n")
+            if (subFolders.isNotEmpty()) {
+                append("Folders: ").append(subFolders.take(40).joinToString(", ") { it.name })
+                if (subFolders.size > 40) append(" and ${subFolders.size - 40} more")
+                append("\n")
+            }
+            shown.forEachIndexed { i, f -> append("${i + 1}. ").append(describe(f, mimeOf(f), "")).append("\n") }
+            if (files.size > shown.size) append("${files.size - shown.size} more files not listed.\n")
+            append("To go into a folder, call list_folder with its path, for example ")
+                .append(if (relative.isEmpty()) "Download" else "$relative/<name>").append(". open_file or show_image with a number opens a file.")
+        }
     }
 
     private class FileResult(val files: List<FoundFile>, val exact: Boolean, val ambiguous: Boolean, val nearest: List<FoundFile>)
@@ -1326,6 +1411,7 @@ class DeviceToolRunner(
         /** The latest search_files list, so open_file can take a number from it. */
         @Volatile var lastFiles: List<FoundFile> = emptyList()
         const val MAX_FILES_SCANNED = 6000
+        const val MAX_WALK_FILES = 60_000
         /** The assistant's voice plays in communication mode, so it follows the call volume. */
         const val VOLUME_STREAM = AudioManager.STREAM_VOICE_CALL
         val VOLUME_NAMES = listOf("assistant", "media", "ring", "alarm", "notification")
@@ -1337,7 +1423,7 @@ class DeviceToolRunner(
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
             DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING,
-            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.SHOW_IMAGE
+            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.SHOW_IMAGE, DeviceTool.LIST_FOLDER
         )
         const val MISSING ="status=invalid\nA required value was missing."
     }

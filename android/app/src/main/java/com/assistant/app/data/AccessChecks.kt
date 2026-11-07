@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Environment
 import android.os.Process
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
@@ -34,6 +35,11 @@ object AccessChecks {
             AccessState.ENABLED_NOT_CONNECTED
         } else AccessState.OFF
     }
+
+    /** Every file on the phone: All files access from Android 11, the storage permission before that. */
+    fun allFiles(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
+        else ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
     /** Usage access. Some phones report MODE_DEFAULT even when it is on, so the permission itself is the tie-breaker. */
     fun usageAccess(context: Context): Boolean {

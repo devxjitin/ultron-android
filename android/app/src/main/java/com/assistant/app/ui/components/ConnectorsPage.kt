@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Forum
@@ -163,6 +164,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "apps_settings" to Icons.Outlined.Apps,
     "files" to Icons.Outlined.Folder,
     "images" to Icons.Outlined.Image,
+    "all_files" to Icons.Outlined.FolderOpen,
     "navigation" to Icons.Outlined.Explore,
     "screen" to Icons.Outlined.TouchApp
 )
@@ -239,10 +241,13 @@ fun ConnectorsPage(
                         Access.NOTIFICATION_ACCESS -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
                         Access.ACCESSIBILITY -> Settings.ACTION_ACCESSIBILITY_SETTINGS
                         Access.USAGE_ACCESS -> Settings.ACTION_USAGE_ACCESS_SETTINGS
+                        Access.ALL_FILES -> if (Build.VERSION.SDK_INT >= 30) Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION else null
                         Access.NONE -> null
                     }
                     if (settingsAction != null) {
-                        context.startActivity(Intent(settingsAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        val intent = Intent(settingsAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        if (kind.access == Access.ALL_FILES) intent.data = android.net.Uri.parse("package:" + context.packageName)
+                        context.startActivity(intent)
                     } else {
                         val missing = kind.permissions.filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
                         if (missing.isNotEmpty()) onRequestPermissions(missing)
@@ -377,6 +382,7 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
     Access.NOTIFICATION_ACCESS -> AccessChecks.notificationListener(context) != AccessState.OFF
     Access.ACCESSIBILITY -> AccessChecks.accessibility(context) != AccessState.OFF
     Access.USAGE_ACCESS -> AccessChecks.usageAccess(context)
+    Access.ALL_FILES -> AccessChecks.allFiles(context)
     // Approximate location is enough: either of the two location permissions counts. Every other one is required.
     Access.NONE -> {
         val locations = setOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)

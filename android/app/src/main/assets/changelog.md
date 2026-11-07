@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.10.0 - 2026-11-07
+
+### Added
+- A new All files connector. Once you allow All files access, Ultron can look inside any folder on your phone, and file search covers every folder and every type of file, not only photos, videos and music. It can open what it finds.
+
 ## 1.9.2 - 2026-11-07
 
 ### Changed
