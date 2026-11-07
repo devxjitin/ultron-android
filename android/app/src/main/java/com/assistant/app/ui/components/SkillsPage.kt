@@ -107,14 +107,14 @@ fun SkillsPage(
         val categories = skills.map { it.category }.distinct().sortedWith(compareBy({ it == OWN_SKILLS_CATEGORY }, { it }))
         Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                    .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentAlt)))
-                    .clickable { adding = true }.padding(14.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(50))
+                    .background(com.assistant.app.ui.theme.AssistantButtonFill)
+                    .clickable { adding = true }.padding(vertical = 14.dp, horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Add, contentDescription = null, tint = com.assistant.app.ui.theme.AssistantOnButtonFill, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.size(8.dp))
-                Text("Add a skill", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Add a skill", color = com.assistant.app.ui.theme.AssistantOnButtonFill, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(14.dp))
             CategoryChips(categories, categoryFilter, { categoryFilter = it })

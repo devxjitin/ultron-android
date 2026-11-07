@@ -106,12 +106,12 @@ fun MemoryPage(
             )
             Spacer(Modifier.size(10.dp))
             Box(
-                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Brush.linearGradient(listOf(AssistantAccentFill, AssistantAccentAlt)))
+                Modifier.size(52.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (draft.isNotBlank()) com.assistant.app.ui.theme.AssistantButtonFill else com.assistant.app.ui.theme.AssistantSurfaceElevated)
                     .clickable(enabled = draft.isNotBlank()) { onAdd(draft); draft = "" },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add memory", tint = Color.White)
+                Icon(Icons.Filled.Add, contentDescription = "Add memory", tint = if (draft.isNotBlank()) com.assistant.app.ui.theme.AssistantOnButtonFill else com.assistant.app.ui.theme.AssistantTextMuted)
             }
         }
 

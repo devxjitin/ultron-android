@@ -133,13 +133,13 @@ fun ImagesPage(
         Spacer(Modifier.height(14.dp))
         Button(
             onClick = onPick,
-            colors = ButtonDefaults.buttonColors(containerColor = AssistantAccent),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            colors = ButtonDefaults.buttonColors(containerColor = com.assistant.app.ui.theme.AssistantButtonFill, contentColor = com.assistant.app.ui.theme.AssistantOnButtonFill),
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
             Icon(Icons.Outlined.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(8.dp))
-            Text("Add a picture")
+            Text("Add a picture", fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(8.dp))
         if (images.isEmpty()) {
