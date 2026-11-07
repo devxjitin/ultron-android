@@ -11,11 +11,15 @@ import org.json.JSONObject
 /** Function declarations in the shape Gemini expects, used by the Live voice session. */
 object ToolDeclarations {
 
+    /** Slow tools are non-blocking: the model keeps talking while they run instead of going silent. */
+    fun isNonBlocking(name: String): Boolean = name in DeviceTool.NON_BLOCKING_NAMES
+
     /** A device tool. */
     fun device(tool: DeviceTool): JSONObject {
         val declaration = JSONObject()
             .put("name", tool.functionName)
             .put("description", tool.description)
+        if (isNonBlocking(tool.functionName)) declaration.put("behavior", "NON_BLOCKING")
         if (tool.params.isEmpty()) return declaration
         val properties = JSONObject()
         tool.params.forEach { param ->
@@ -33,6 +37,7 @@ object ToolDeclarations {
     /** Search over the user's saved knowledge documents (RAG). */
     fun knowledgeSearch(): JSONObject = JSONObject()
         .put("name", "search_knowledge_base")
+        .put("behavior", "NON_BLOCKING")
         .put(
             "description",
             "Searches the documents the user saved in this app. Call this only " +

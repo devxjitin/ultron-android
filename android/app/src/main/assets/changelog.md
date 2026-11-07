@@ -3,6 +3,17 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.12.0 - 2026-11-07
+
+### Changed
+- Slow requests (web search, web pages, weather, YouTube, screen pictures, document search) no longer leave Ultron silent. It says a short "checking", keeps listening, and gives the answer once you stop speaking instead of cutting in.
+- Earlier turns are now sent in the form Gemini 3.8 Live expects, so follow-ups keep working after a fresh connection.
+
+## 1.11.1 - 2026-11-07
+
+### Fixed
+- Button text was hard to read on the Images, Knowledge, Skills, Memory and Connectors pages after the new look. Those buttons now use the same main button colours as the rest of the app, in both the dark and the light theme.
+
 ## 1.11.0 - 2026-11-07
 
 ### Changed

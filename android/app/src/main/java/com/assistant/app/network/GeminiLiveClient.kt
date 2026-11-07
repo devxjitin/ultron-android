@@ -296,6 +296,8 @@ class GeminiLiveClient(
             .put("contextWindowCompression", JSONObject().put("slidingWindow", JSONObject()))
             // Makes the server send resumption handles; a reconnect passes the latest one back.
             .put("sessionResumption", JSONObject().apply { if (resumeHandle != null) put("handle", resumeHandle) })
+            // Gemini 3.8 only accepts seeded history (sendHistory) when this is set.
+            .put("historyConfig", JSONObject().put("initialHistoryInClientContent", true))
 
         return JSONObject().put("setup", setup)
     }
@@ -333,11 +335,18 @@ class GeminiLiveClient(
                 JSONObject()
                     .put("id", it.id)
                     .put("name", it.name)
-                    .put("response", JSONObject().put("result", it.resultText))
+                    .put("response", responseFor(it))
             )
         }
         val message = JSONObject().put("toolResponse", JSONObject().put("functionResponses", functionResponses))
         return webSocket?.send(message.toString()) == true
+    }
+
+    /** A non-blocking tool's result waits until the user stops speaking (WHEN_IDLE) instead of cutting in. */
+    private fun responseFor(result: ToolResult): JSONObject {
+        val response = JSONObject().put("result", result.resultText)
+        if (ToolDeclarations.isNonBlocking(result.name)) response.put("scheduling", "WHEN_IDLE")
+        return response
     }
 
     override fun close() {

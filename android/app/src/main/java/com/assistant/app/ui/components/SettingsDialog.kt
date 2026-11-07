@@ -338,7 +338,7 @@ fun SettingsPage(
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Add document", color = androidx.compose.ui.graphics.Color.White, maxLines = 1, softWrap = false)
+                            Text("Add document", maxLines = 1, softWrap = false)
                         }
                         androidx.compose.material3.OutlinedButton(
                             shape = AppButtonShape,

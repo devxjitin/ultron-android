@@ -688,6 +688,13 @@ enum class DeviceTool(
 
         /** Recalling past conversations is a feature of the assistant itself, always on and not part of any connector. */
         val ASSISTANT_OWN = setOf(SEARCH_CONVERSATION_HISTORY, RECENT_CONVERSATION)
+
+        /** Function names of tools that take seconds (network, screenshot upload). They are declared non-blocking, so the
+         *  model keeps talking while they run, and their results wait until the user stops speaking. */
+        val NON_BLOCKING_NAMES: Set<String> = setOf(
+            WEB_SEARCH, FETCH_WEBPAGE, GET_WEATHER, YOUTUBE_SEARCH, YOUTUBE_INFO, YOUTUBE_TRANSCRIPT,
+            YOUTUBE_CHANNEL, YOUTUBE_DOWNLOAD_OPTIONS, DOWNLOAD_YOUTUBE, LOOK_AT_SCREEN
+        ).map { it.functionName }.toSet() + "search_knowledge_base"
     }
 }
 

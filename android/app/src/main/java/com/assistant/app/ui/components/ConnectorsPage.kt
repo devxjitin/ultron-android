@@ -535,7 +535,7 @@ private fun Pill(text: String, filled: Boolean, enabled: Boolean = true, check: 
     Row(
         Modifier.height(38.dp).clip(shape)
             .then(
-                if (filled) Modifier.background(Brush.horizontalGradient(listOf(AssistantAccentFill, AssistantAccentAlt)), shape)
+                if (filled) Modifier.background(com.assistant.app.ui.theme.AssistantButtonFill, shape)
                 else Modifier.border(BorderStroke(1.dp, AssistantOutline), shape)
             )
             .clickable(enabled = enabled, onClick = onClick).padding(horizontal = if (check) 12.dp else 18.dp),
@@ -548,7 +548,7 @@ private fun Pill(text: String, filled: Boolean, enabled: Boolean = true, check: 
         Text(
             text,
             color = when {
-                filled -> Color.White
+                filled -> com.assistant.app.ui.theme.AssistantOnButtonFill
                 enabled -> AssistantTextSecondary
                 else -> AssistantTextMuted
             },
