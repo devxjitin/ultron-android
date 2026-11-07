@@ -80,7 +80,7 @@ enum class NavTab(val label: String, val icon: ImageVector) {
 /** Height of the slim bar at the top of every page; pages reserve this much space under it. */
 val AppTopBarHeight = 56.dp
 
-private val RowHeight = 52.dp
+private val RowHeight = 42.dp
 
 @Composable
 fun AppDrawerContent(
@@ -93,7 +93,7 @@ fun AppDrawerContent(
     Column(modifier.statusBarsPadding().navigationBarsPadding()) {
         DrawerHeader(assistantName, onClose)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(4.dp))
             NavTab.entries.filter { it != NavTab.SETTINGS }.forEach { tab ->
                 // Plain captions group the working pages, the numbers and the app info.
                 when (tab) {
@@ -117,7 +117,7 @@ private fun NavSection(title: String) {
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.2.sp,
-        modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp)
     )
 }
 
@@ -131,7 +131,7 @@ private fun NavRow(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(tab.icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = if (selected) AssistantAccent else AssistantTextSecondary)
-        Spacer(Modifier.size(22.dp))
+        Spacer(Modifier.size(18.dp))
         Text(
             tab.label,
             color = if (selected) AssistantAccent else AssistantTextPrimary,
