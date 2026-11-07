@@ -42,7 +42,7 @@ search_files, open_file. Finds images, videos, audio and documents. The words ne
 show_image. Puts a picture over the screen: one of the pictures added on the Images page (found by name or by what is in it), or a photo found with search_files (pass its number as file_number). action close hides it again. Add pictures from the Images page in the menu; the Pictures connector must be on.
 
 ## Requests
-On the Skills and Connectors pages, the card at the bottom ("Need something that is not here?") opens a form to ask the developer for a new skill or connector.
+The Help & support page in the menu has a form to ask the developer for a new skill or connector.
 
 ## Phone navigation (accessibility service)
 press_back, go_to_home_screen, open_recent_apps, switch_to_previous_app, open_notification_shade, open_quick_settings, scroll_screen, lock_screen, take_screenshot, open_power_menu, toggle_split_screen.

@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.9.1 - 2026-11-07
+
+### Changed
+- The form to ask the developer for a skill or connector now lives on a new Help & support page in the menu.
+
 ## 1.9.0 - 2026-11-07
 
 ### Added
