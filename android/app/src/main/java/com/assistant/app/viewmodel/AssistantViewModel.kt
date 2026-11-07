@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import org.json.JSONObject
+import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -21,7 +22,9 @@ import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationHistoryIndexer
 import com.assistant.app.data.ConversationHistoryTools
+import com.assistant.app.data.AddImageResult
 import com.assistant.app.data.ConversationHistoryStore
+import com.assistant.app.data.ImageLibrary
 import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.UsageDay
@@ -96,6 +99,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
         val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
+        const val MAX_PICKED_IMAGE_BYTES = 25 * 1024 * 1024
         /** One quick retry for transient knowledge-search failures; keeps worst case well under the 15 s model watchdog. */
         private const val SEARCH_RETRY_LIMIT = 1
         private const val SEARCH_RETRY_DELAY_MS = 500L
@@ -104,7 +108,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How often the app asks the AWS update server for a newer build on its own, also while it stays open. */
         private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60_000L
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
-        /** Past exchanges shown on the Memory page at first, and added by each "Show older". */
+        /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
         private const val TOOL_LABEL_LINGER_MS = 0L
         private const val TOOL_LABEL_MAX_MS = 25_000L
@@ -574,7 +578,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  because the page covers the status line and Stop control and the mic must not keep streaming behind it. */
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
-        if (page == AppPage.STORAGE || page == AppPage.MEMORY) refreshPastConversations()
+        if (page == AppPage.STORAGE || page == AppPage.HISTORY) refreshPastConversations()
+        if (page == AppPage.STORAGE || page == AppPage.IMAGES) refreshImages()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
@@ -588,6 +593,94 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onMemoryTapped() = openPage(AppPage.MEMORY)
+
+    fun onHistoryTapped() = openPage(AppPage.HISTORY)
+
+    fun onImagesTapped() = openPage(AppPage.IMAGES)
+
+    private val imageLibrary by lazy { ImageLibrary.forApp(application) }
+
+    private fun refreshImages() {
+        viewModelScope.launch {
+            val (images, bytes) = withContext(Dispatchers.IO) { imageLibrary.list() to imageLibrary.totalBytes() }
+            _uiState.update { it.copy(images = images, imageBytes = bytes) }
+        }
+    }
+
+    /** A picture came back from the picker; the Images page asks for its title before it is saved. */
+    fun onImagePicked(uri: Uri?) {
+        if (uri != null) _uiState.update { it.copy(pendingImageUri = uri.toString()) }
+    }
+
+    fun onCancelPendingImage() = _uiState.update { it.copy(pendingImageUri = null) }
+
+    fun onSaveImage(title: String, description: String) {
+        val uri = _uiState.value.pendingImageUri?.let(Uri::parse) ?: return
+        if (_uiState.value.isSavingImage) return
+        _uiState.update { it.copy(isSavingImage = true) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes == null || bytes.size > MAX_PICKED_IMAGE_BYTES) null else imageLibrary.add(bytes, title, description)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            _uiState.update { it.copy(isSavingImage = false, pendingImageUri = if (result is AddImageResult.Added) null else it.pendingImageUri) }
+            when (result) {
+                is AddImageResult.Added -> { showToast("Picture added"); refreshImages() }
+                is AddImageResult.Duplicate -> showToast("That picture is already saved as \"${result.existing.title}\"", AppNotificationType.WARNING)
+                AddImageResult.LibraryFull -> showToast("You can keep up to ${ImageLibrary.MAX_IMAGES} pictures", AppNotificationType.WARNING)
+                AddImageResult.NotAnImage -> showToast("That file is not a picture", AppNotificationType.ERROR)
+                null -> showToast("Could not read that picture", AppNotificationType.ERROR)
+            }
+        }
+    }
+
+    fun onUpdateImage(id: Long, title: String, description: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { imageLibrary.update(id, title, description) }
+            refreshImages()
+        }
+    }
+
+    fun onDeleteImage(id: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { imageLibrary.delete(id) }
+            showToast("Picture deleted")
+            refreshImages()
+        }
+    }
+
+    fun onClearImages() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { imageLibrary.clearAll() }
+            showToast("Pictures cleared")
+            refreshImages()
+        }
+    }
+
+    fun onDismissShownImage() = _uiState.update { it.copy(shownImage = null) }
+
+    /** Sends a skill or connector request to the developer. [onDone] gets null when sent, else a message for the user. */
+    fun onSendFeatureRequest(type: String, name: String, details: String, examples: String, email: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch {
+            val error = withContext(Dispatchers.IO) {
+                try {
+                    com.assistant.app.network.FeatureRequestClient()
+                        .send(type, name, details, examples, email, com.assistant.app.BuildConfig.VERSION_NAME)
+                    null
+                } catch (e: com.assistant.app.network.FeatureRequestException) {
+                    e.message ?: "Could not send it."
+                } catch (e: Exception) {
+                    "Could not send it right now. Please try again later."
+                }
+            }
+            if (error == null) showToast("Request sent. Thank you!")
+            onDone(error)
+        }
+    }
 
     fun onMemoryEnabledToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Memory on" else "Memory off") {
@@ -629,7 +722,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var pastConversationLimit = PAST_CONVERSATION_PAGE
 
-    /** Reloads the saved past exchanges (newest [pastConversationLimit]) and their totals for the Memory and Storage pages. */
+    /** Reloads the saved past exchanges (newest [pastConversationLimit]) and their totals for the History and Storage pages. */
     private fun refreshPastConversations() {
         viewModelScope.launch {
             try {
@@ -654,10 +747,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         refreshPastConversations()
     }
 
-    fun onDeletePastConversation(id: Long) = changePastConversations("Deleted") { conversationHistoryStore.delete(id) }
-
-    fun onDeletePastDay(fromMillis: Long, toMillis: Long) =
-        changePastConversations("Day deleted") { conversationHistoryStore.deleteRange(fromMillis, toMillis) }
+    fun onDeletePastSession(ids: List<Long>) =
+        changePastConversations("Session deleted") { ids.forEach { conversationHistoryStore.delete(it) } }
 
     fun onClearPastConversations() = changePastConversations("Past conversations cleared") { conversationHistoryStore.clearAll() }
 
@@ -1048,12 +1139,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         },
         describeScreen = { jpeg, prompt ->
             auxTextClient(resolveApiKey(), UsageStore.PURPOSE_SCREEN).describeImage(jpeg, prompt)
+        },
+        showImage = { uri, title ->
+            _uiState.update { state ->
+                state.copy(shownImage = uri?.let { ShownImage(it.toString(), title, (state.shownImage?.id ?: 0) + 1) })
+            }
         }
     )
 
     /** Runs a device tool and returns the text handed back to the voice model. */
     private suspend fun runDeviceTool(tool: DeviceTool, args: JSONObject): String {
-        if (tool !in _uiState.value.settings.enabledDeviceTools) {
+        if (tool !in _uiState.value.settings.enabledDeviceTools && tool !in DeviceTool.ASSISTANT_OWN) {
             return "status=disabled\nThe user has turned this tool off. Tell them it is switched off in Settings."
         }
         if (tool == DeviceTool.SEARCH_CONVERSATION_HISTORY || tool == DeviceTool.RECENT_CONVERSATION) {
@@ -1062,16 +1158,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
     }
 
-    /** True while the Long-term memory connector is on: past talk is searched on demand instead of preloaded. */
-    private fun longTermMemoryOn(settings: AssistantSettings): Boolean =
-        DeviceTool.SEARCH_CONVERSATION_HISTORY in settings.enabledDeviceTools
-
-    /**
-     * Earlier turns replayed into a new Live session. With long-term memory on nothing is replayed, because the model
-     * looks things up when needed; with it off the last few turns are still replayed, as before.
-     */
-    private fun sessionStartHistory(settings: AssistantSettings, history: List<ConversationTurn>) =
-        if (longTermMemoryOn(settings)) emptyList() else KnowledgeBaseProvider.liveHistoryTurns(history)
+    /** The last few exchanges are replayed into every new Live session; anything older is looked up with the history tools. */
+    private fun sessionStartHistory(history: List<ConversationTurn>) = KnowledgeBaseProvider.liveHistoryTurns(history)
 
     private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {
         ConversationHistoryTools(
@@ -1438,11 +1526,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 settings.assistantName,
                 AssistantOptions.voiceGender(settings.voiceName),
                 if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                ownerName = settings.ownerName,
-                longTermMemory = longTermMemoryOn(settings)
+                ownerName = settings.ownerName
             )
             connectLiveSession(
-                apiKey, systemInstruction, settings, sessionStartHistory(settings, history),
+                apiKey, systemInstruction, settings, sessionStartHistory(history),
                 resumeHandle = if (isAutoReconnect) sessionResumptionHandle else null
             )
         }
@@ -1928,9 +2015,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 } catch (e: Exception) {
                     Log.e("AssistantError", "Failed to save conversation turn", e)
                 }
-                // Long-term memory: keep this exchange for good and make it searchable in the background.
+                // Past conversations: keep this exchange for good and make it searchable in the background.
                 try {
-                    if (!longTermMemoryOn(_uiState.value.settings)) return@launch
                     withContext(Dispatchers.IO) {
                         val id = conversationHistoryStore.append(sessionId, userText, assistantText, System.currentTimeMillis())
                         Log.i("AssistantMemory", "saved=${id != null} total=${conversationHistoryStore.count()}")
@@ -2030,14 +2116,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     settings.assistantName,
                     AssistantOptions.voiceGender(settings.voiceName),
                     if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                    ownerName = settings.ownerName,
-                    longTermMemory = longTermMemoryOn(settings)
+                    ownerName = settings.ownerName
                 )
 
                 if (generation != prewarmGeneration) return@launch
                 if (!isForeground || warmClient != null || _uiState.value.voiceState != VoiceState.IDLE) return@launch
                 connectLiveSession(
-                    apiKey, systemInstruction, settings, sessionStartHistory(settings, history), isWarm = true
+                    apiKey, systemInstruction, settings, sessionStartHistory(history), isWarm = true
                 )
             } finally {
                 // A newer prewarm may already own the flag; only the current generation resets it.

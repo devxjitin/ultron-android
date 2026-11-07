@@ -44,3 +44,15 @@ data class ConversationTurnEntity(
     @HnswIndex(dimensions = 768, distanceType = VectorDistanceType.COSINE)
     var embedding: FloatArray? = null
 )
+
+/** A picture the user added for the assistant to show. The JPEG itself is a file; this row holds what search needs. */
+@Entity
+data class ImageEntity(
+    @Id var id: Long = 0,
+    var title: String = "",
+    var description: String = "",
+    @Index var sha256: String = "",
+    var fileName: String = "",
+    var sizeBytes: Long = 0,
+    @Index var createdAtMillis: Long = 0
+)

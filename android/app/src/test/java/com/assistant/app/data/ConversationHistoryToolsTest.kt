@@ -86,41 +86,21 @@ class ConversationHistoryToolsTest {
         assertTrue(run(store, DeviceTool.TIME, "{}").startsWith("status=unknown_tool"))
     }
 
-    @Test fun `both tools sit in the Long-term memory connector and its results count as untrusted`() {
-        val tools = ConnectorRegistry.get(LONG_TERM_MEMORY_ID).tools
-        assertEquals(setOf(DeviceTool.SEARCH_CONVERSATION_HISTORY, DeviceTool.RECENT_CONVERSATION), tools.toSet())
-        tools.forEach { assertTrue(it in UntrustedContent.TOOLS) }
+    @Test fun `both tools are the assistant's own, outside every connector, and their results count as untrusted`() {
+        assertEquals(setOf(DeviceTool.SEARCH_CONVERSATION_HISTORY, DeviceTool.RECENT_CONVERSATION), DeviceTool.ASSISTANT_OWN)
+        assertTrue(PhoneConnectors.all.none { c -> c.tools.any { it in DeviceTool.ASSISTANT_OWN } })
+        DeviceTool.ASSISTANT_OWN.forEach { assertTrue(it in UntrustedContent.TOOLS) }
     }
 
-    @Test fun `the connector is on for fresh and existing installs until the user chooses`() {
-        val tools = ConnectorRegistry.get(LONG_TERM_MEMORY_ID).tools
-        assertTrue(tools.all { it in effectiveDeviceTools(null) })
-        // An install that chose connectors before this one existed.
-        assertTrue(tools.all { it in effectiveDeviceTools(setOf("set_alarm=1")) })
-        // Switched off by the user: both tools saved as "=0".
-        val off = tools.map { "${it.functionName}=0" }.toSet() + "set_alarm=1"
-        assertTrue(tools.none { it in effectiveDeviceTools(off) })
-        // Switched on again later.
-        val back = tools.map { "${it.functionName}=1" }.toSet()
-        assertTrue(tools.all { it in effectiveDeviceTools(back) })
-    }
-
-    @Test fun `the tools are declared to the model only while the connector is on`() {
-        val tools = ConnectorRegistry.get(LONG_TERM_MEMORY_ID).tools
-        fun names(settings: AssistantSettings) = liveFunctionDeclarations(settings).let { array ->
+    @Test fun `the tools are always declared to the model, whatever connectors are on`() {
+        val declared = liveFunctionDeclarations(AssistantSettings(enabledDeviceTools = emptySet())).let { array ->
             (0 until array.length()).map { array.getJSONObject(it).getString("name") }
         }
-        val on = names(AssistantSettings(enabledDeviceTools = tools.toSet()))
-        assertTrue(on.containsAll(listOf("search_conversation_history", "recent_conversation")))
-        val off = names(AssistantSettings(enabledDeviceTools = emptySet()))
-        assertFalse("search_conversation_history" in off)
+        assertTrue(declared.containsAll(listOf("search_conversation_history", "recent_conversation")))
     }
 
-    @Test fun `the prompt tells the model to look things up only while the connector is on`() {
-        fun prompt(on: Boolean) = KnowledgeBaseProvider.buildSystemInstruction(
-            "Persona", "English", "Ultron", longTermMemory = on
-        )
-        assertTrue(prompt(true).contains("search_conversation_history"))
-        assertFalse(prompt(false).contains("search_conversation_history"))
+    @Test fun `the prompt always tells the model to look up earlier talk first`() {
+        val prompt = KnowledgeBaseProvider.buildSystemInstruction("Persona", "English", "Ultron")
+        assertTrue(prompt.contains("ALWAYS call search_conversation_history first"))
     }
 }

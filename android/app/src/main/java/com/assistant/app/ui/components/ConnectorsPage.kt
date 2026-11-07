@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Language
@@ -149,7 +150,6 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "device_controls" to Icons.Outlined.Tune,
     "alarms" to Icons.Outlined.Alarm,
     "reminders" to Icons.Outlined.Schedule,
-    com.assistant.app.data.LONG_TERM_MEMORY_ID to Icons.Outlined.History,
     "calendar" to Icons.Outlined.CalendarMonth,
     "contacts" to Icons.Outlined.Contacts,
     "notifications" to Icons.Outlined.Notifications,
@@ -162,6 +162,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "youtube_downloads" to Icons.Outlined.Download,
     "apps_settings" to Icons.Outlined.Apps,
     "files" to Icons.Outlined.Folder,
+    "images" to Icons.Outlined.Image,
     "navigation" to Icons.Outlined.Explore,
     "screen" to Icons.Outlined.TouchApp
 )
@@ -185,7 +186,8 @@ fun ConnectorsPage(
     enabledTools: Set<DeviceTool>,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRequest: () -> Unit = {}
 ) {
     val context = LocalContext.current
     // Android permission and special-access state changes outside the app, so re-read it on resume.
@@ -335,11 +337,15 @@ fun ConnectorsPage(
                 val inGroup = shown.filter { it.category == category }
                 if (inGroup.isNotEmpty() && (categoryFilter == null || categoryFilter == category.title)) {
                     SectionHeading(category.title)
-                    Text(category.summary, color = if (category.advanced) AssistantError else AssistantTextMuted,
-                        fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+                    // Only the risky group keeps its line, because it is a safety warning; the rest are self-explanatory.
+                    if (category.advanced) {
+                        Text(category.summary, color = AssistantError,
+                            fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+                    }
                     inGroup.forEach { Card(it) }
                 }
             }
+            RequestCard(onRequest)
             Spacer(Modifier.height(24.dp))
         }
     }

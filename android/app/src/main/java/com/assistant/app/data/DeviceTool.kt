@@ -212,10 +212,11 @@ enum class DeviceTool(
 
     SEARCH_FILES(
         "search_files", "Search files", "Find images, videos, audio and documents by name.",
-        "Searches the files on the phone by name and lists the newest matches, each with a number. Leave the query empty to list the newest files of a kind. " +
-            "Call open_file with a number to show one.",
+        "Searches the files on the phone and lists the best matches, each with a number. The user rarely knows the exact name, so pass the words they said as they said them: " +
+            "partial names, typos, a folder name and dates like yesterday or last week all work. Leave the query empty to list the newest files of a kind. " +
+            "When one result is clearly the one asked for, call open_file with its number at once.",
         listOf(
-            ToolParam("query", ToolParamType.STRING, "Words in the file name or title. Leave out to list the newest.", required = false),
+            ToolParam("query", ToolParamType.STRING, "What the user said about the file: any words of its name, its folder, or a date. Leave out to list the newest.", required = false),
             ToolParam("kind", ToolParamType.STRING, "What to look for: image, video, audio, document or any. Default any.", required = false,
                 choices = listOf("image", "video", "audio", "document", "any")),
             ToolParam("limit", ToolParamType.INTEGER, "How many matches to list, 1-10. Default 5.", required = false)
@@ -231,6 +232,18 @@ enum class DeviceTool(
         )
     ),
 
+    SHOW_IMAGE(
+        "show_image", "Show a picture", "Show a picture on the screen.",
+        "Shows a picture over the home screen. By default it looks in the pictures the user added to Ultron, by what they said about it " +
+            "(a name, a person, a place, a thing in it). To show a photo found with search_files, pass its number as file_number. " +
+            "Use action close to hide the picture again. Use it whenever the user asks to see, show or look at a picture.",
+        listOf(
+            ToolParam("query", ToolParamType.STRING, "What the user said about the picture, as they said it.", required = false),
+            ToolParam("file_number", ToolParamType.INTEGER, "Number from the latest search_files list, to show that photo instead.", required = false),
+            ToolParam("action", ToolParamType.STRING, "show (default) or close.", required = false, choices = listOf("show", "close"))
+        )
+    ),
+
     OPEN_APP_SETTINGS(
         "open_app_settings", "App settings page", "Open an app's info page (permissions, storage, uninstall).",
         "Opens the system info page of an installed app, where the user can manage its permissions or uninstall it.",
@@ -238,32 +251,37 @@ enum class DeviceTool(
     ),
 
     SET_ALARM(
-        "set_alarm", "Set alarm", "Set an alarm in the clock app.",
-        "Sets an alarm for a given time of day in 24-hour format.",
+        "set_alarm", "Set alarm", "Set an alarm that rings with sound.",
+        "Sets an alarm for a time of day in 24-hour format. It is the assistant's own alarm: it rings with sound until dismissed, " +
+            "and you can list, change and cancel it. Add repeat daily or weekly for an alarm that keeps ringing. " +
+            "Setting the same time again replaces the old alarm. Act immediately, then say it is set.",
         listOf(
             ToolParam("hour", ToolParamType.INTEGER, "Hour 0-23."),
             ToolParam("minute", ToolParamType.INTEGER, "Minute 0-59."),
-            ToolParam("label", ToolParamType.STRING, "Optional alarm name.", required = false)
+            ToolParam("label", ToolParamType.STRING, "Optional alarm name.", required = false),
+            ToolParam("repeat", ToolParamType.STRING, "daily or weekly. Leave out for a single alarm.", required = false)
         )
     ),
     LIST_ALARMS(
-        "list_alarms", "List alarms", "See the alarms set through the assistant.",
-        "Lists the alarms that were set with set_alarm. Alarms made by hand in the clock app are not included."
+        "list_alarms", "List alarms", "See the alarms that are set.",
+        "Lists every alarm still waiting to ring, with its time and name. An alarm that already rang or was cancelled is not listed."
     ),
     CANCEL_ALARM(
-        "cancel_alarm", "Cancel alarm", "Switch off an alarm in the clock app.",
-        "Switches off (dismisses) a clock alarm without opening any app: give hour and minute for a time, a label for a named alarm, " +
-            "or neither for the next alarm. Use this whenever the user asks to cancel, delete or turn off an alarm; " +
-            "never open the Clock app for it. Android cannot confirm the result, so say it was asked to cancel it.",
+        "cancel_alarm", "Cancel alarm", "Cancel an alarm.",
+        "Cancels an alarm for real, without opening any app: give hour and minute for a time, a label for a named alarm, " +
+            "or neither for the next alarm. Use this whenever the user asks to cancel, delete or turn off an alarm; never open the Clock app. " +
+            "The result says which alarm was removed, or lists the alarms that exist when none matched; tell the user exactly that.",
         listOf(
             ToolParam("hour", ToolParamType.INTEGER, "Hour 0-23 of the alarm to cancel.", required = false),
             ToolParam("minute", ToolParamType.INTEGER, "Minute 0-59 of the alarm to cancel. Default 0.", required = false),
-            ToolParam("label", ToolParamType.STRING, "Name of the alarm to cancel, when no time is given.", required = false)
+            ToolParam("label", ToolParamType.STRING, "Name of the alarm to cancel, when no time is given.", required = false),
+            ToolParam("id", ToolParamType.INTEGER, "Alarm number, if known.", required = false)
         )
     ),
     MODIFY_ALARM(
         "modify_alarm", "Change an alarm", "Move an alarm to a new time.",
-        "Changes an alarm: cancels the one at hour:minute and sets it again at new_hour:new_minute. Call list_alarms first if the time is not known.",
+        "Moves the alarm at hour:minute to new_hour:new_minute, keeping its name and repeat unless a new label is given. " +
+            "Call list_alarms first if the time is not known.",
         listOf(
             ToolParam("hour", ToolParamType.INTEGER, "Current hour 0-23 of the alarm."),
             ToolParam("minute", ToolParamType.INTEGER, "Current minute 0-59 of the alarm."),
@@ -273,11 +291,25 @@ enum class DeviceTool(
         )
     ),
     SET_TIMER(
-        "set_timer", "Set timer", "Start a countdown timer.",
-        "Starts a countdown timer for the given number of seconds.",
+        "set_timer", "Set timer", "Start a countdown timer that rings with sound.",
+        "Starts a countdown timer for the given number of seconds (up to 24 hours). It rings with sound until dismissed. " +
+            "Several timers can run at once; give each a label when the user names it.",
         listOf(
             ToolParam("seconds", ToolParamType.INTEGER, "Timer length in seconds."),
             ToolParam("label", ToolParamType.STRING, "Optional timer name.", required = false)
+        )
+    ),
+    LIST_TIMERS(
+        "list_timers", "List timers", "See the running timers.",
+        "Lists every running timer with the time left. Use it for questions like how much time is left."
+    ),
+    CANCEL_TIMER(
+        "cancel_timer", "Cancel timer", "Stop a running timer.",
+        "Cancels a running timer for real. Give its label or number; with neither, the one ringing soonest is cancelled. " +
+            "Use this whenever the user asks to stop, cancel or delete a timer.",
+        listOf(
+            ToolParam("label", ToolParamType.STRING, "Name of the timer to cancel.", required = false),
+            ToolParam("id", ToolParamType.INTEGER, "Timer number, if known.", required = false)
         )
     ),
 
@@ -644,6 +676,9 @@ enum class DeviceTool(
 
     companion object {
         fun fromFunctionName(name: String): DeviceTool? = entries.firstOrNull { it.functionName == name }
+
+        /** Recalling past conversations is a feature of the assistant itself, always on and not part of any connector. */
+        val ASSISTANT_OWN = setOf(SEARCH_CONVERSATION_HISTORY, RECENT_CONVERSATION)
     }
 }
 

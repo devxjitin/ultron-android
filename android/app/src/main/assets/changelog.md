@@ -3,6 +3,29 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.9.0 - 2026-11-07
+
+### Added
+- Ultron can show you pictures. Add pictures on the new Images page with a name and a few words about what is in them, then say "show me the picture of ...". It can also show a photo it found on your phone. Tap, press back or the close button to hide it, or ask Ultron to close it.
+- A new card at the bottom of Skills and Connectors lets you ask the developer for a skill or connector you need. It is sent from inside the app.
+- A new History page in the menu keeps every chat session in one place. Each session shows when it happened and what you first asked. Tap one to read the whole chat, search across all of them, or delete a session.
+- Storage now shows one card each for Memory, Past conversations, Knowledge documents, Cache and Usage, with an icon, size, a bar for its share of the space and its own Clear button.
+- Knowledge documents open as neatly formatted text. Tap Edit to change the raw text.
+- Ultron now runs its own alarms and timers. They ring with sound, and you can ask it to list, change or cancel them, including timers, without the Clock app opening.
+- Alarms can repeat every day or week.
+
+### Fixed
+- "Cancel my alarm" no longer just opens the Clock app. The alarm is removed, and Ultron tells you which one.
+- An alarm you already turned off or that already rang is no longer reported as still set.
+- Ultron now looks up earlier conversations whenever you ask about them, and remembers the last few exchanges from the start of every chat.
+
+### Changed
+- Searching your files is much more forgiving. You can say part of a name, make a small typo, name the folder or say yesterday or last week, and Ultron still finds it, opens it, or asks which one you mean.
+- Ultron now starts the job as soon as you ask, and tells you when it is done, instead of announcing what it is about to do first.
+- The Memory page now shows only what Ultron remembers about you. Past conversations moved to History.
+- Connector groups no longer have a line of text under their name, except the warning on Phone control.
+- Long-term memory is no longer a connector. Remembering past conversations is part of Ultron itself and is always on. You can still clear it from Storage.
+
 ## 1.8.1 - 2026-11-06
 
 ### Fixed

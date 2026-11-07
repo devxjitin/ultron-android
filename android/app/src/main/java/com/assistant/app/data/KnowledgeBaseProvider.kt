@@ -3,9 +3,9 @@ package com.assistant.app.data
 import com.assistant.app.util.UserInputException
 
 /** Fixed rules composed at session creation, including for saved custom personas. */
-/** Added to the system instruction while the Long-term memory connector is on; earlier talk is not in the context. */
+/** Always part of the system instruction: only the last few exchanges are in context, older talk is looked up. */
 internal const val LONG_TERM_MEMORY_POLICY = """
-Earlier conversations with {owner} are not in your context. When {owner} refers to something from before (yesterday, last week, "what did I ask", "that thing you told me") or continues something you cannot see, call search_conversation_history, or recent_conversation for what was said just before, and answer from what it returns. Never guess about past conversations; if nothing is found, say you do not have it. Do not look things up for ordinary new questions.
+Only the last few exchanges with {owner} are in your context; everything older is saved and you can look it up. When {owner} asks about anything from before (earlier today, yesterday, last week, "what did I ask", "what did we talk about", "that thing you told me", "last time") or continues something you cannot see, ALWAYS call search_conversation_history first (recent_conversation for what was said just before) and answer only from what it returns. Never say you cannot remember or cannot see past conversations without looking first. If nothing is found, say you do not have it. Do not look things up for ordinary new questions.
 """
 
 internal const val KNOWLEDGE_GROUNDING_POLICY = """
@@ -30,7 +30,8 @@ Doing tasks:
 - Never tell {owner} to do by hand what you can do. For switches such as Wi-Fi, Bluetooth, mobile data, airplane mode, hotspot or dark mode, open the panel or settings, flip the switch with the screen controls and confirm. If an Android permission is missing, name it, open its screen, ask once for it to be allowed, then continue.
 - Ask one short question only when the request is ambiguous, several matches fit, a needed detail is missing, or the action is hard to undo and was not clearly asked for (spending money, deleting data, messaging someone new).
 - Only say a task is done when the tool reported success.
-- Before a tool call you may say a two to four word reaction in the language being spoken; never the same one twice in a row.
+- Act first, talk after. When {owner} gives a command, call the tool straight away. Never say what you are about to do ("opening", "let me", "I will"), and say nothing before a tool call.
+- When the work is done, say so once, in a few words. Only if a task is clearly taking several seconds, give one short progress update; never narrate each step.
 Conduct:
 - Do not ask for or repeat sensitive personal data such as passwords, card numbers or ID numbers.
 - For medical, legal or financial questions, give useful general information and make clear you are not a professional.
@@ -127,8 +128,7 @@ object KnowledgeBaseProvider {
         memories: List<String> = emptyList(),
         style: String = "",
         skills: List<SkillGroup> = SkillRegistry.all(),
-        ownerName: String = "",
-        longTermMemory: Boolean = false
+        ownerName: String = ""
     ): String {
         return buildString {
             append(persona.trim().withOwner(ownerName))
@@ -156,7 +156,7 @@ object KnowledgeBaseProvider {
                 append("\n\nWhat you remember about {owner} (private notes from earlier; use them naturally when relevant):")
                 memories.forEach { append("\n- ").append(it) }
             }
-            if (longTermMemory) append("\n\n").append(LONG_TERM_MEMORY_POLICY.trim().withOwner(ownerName))
+            append("\n\n").append(LONG_TERM_MEMORY_POLICY.trim().withOwner(ownerName))
             append("\n\n").append(KNOWLEDGE_GROUNDING_POLICY.trim().withOwner(ownerName))
             SkillRegistry.promptSection(skills).takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
         }

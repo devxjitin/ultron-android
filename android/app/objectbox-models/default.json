@@ -132,10 +132,58 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "4:1582263376936992940",
+      "lastPropertyId": "7:3218243952282553075",
+      "name": "ImageEntity",
+      "properties": [
+        {
+          "id": "1:3022431042937024467",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8266354005094017825",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:1735478894603528549",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "4:8329754943454964540",
+          "name": "sha256",
+          "indexId": "5:7627460966462337240",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:1230054608586929279",
+          "name": "fileName",
+          "type": 9
+        },
+        {
+          "id": "6:6874745081232356316",
+          "name": "sizeBytes",
+          "type": 6
+        },
+        {
+          "id": "7:3218243952282553075",
+          "name": "createdAtMillis",
+          "indexId": "6:8724451632840463734",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "3:654644292979236900",
-  "lastIndexId": "4:2283004326873324807",
+  "lastEntityId": "4:1582263376936992940",
+  "lastIndexId": "6:8724451632840463734",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
