@@ -56,7 +56,15 @@ Parameters:
   RequestSenderEmail:
     Type: String
     Default: ""
-    Description: An Amazon SES verified email address or domain identity that the request emails are sent from.
+    Description: An Amazon SES verified email address or domain identity that the request emails and the activation key emails are sent from, for example no-reply@devxjitin.dev. While SES is in sandbox it only delivers to verified addresses, so ask AWS for production access.
+  SupportEmail:
+    Type: String
+    Default: ""
+    Description: Where buyers can write; shown in the activation key email and used as its reply-to address.
+  DownloadUrl:
+    Type: String
+    Default: ""
+    Description: Page or file where buyers download the app; linked from the activation key email. Blank leaves the link out.
 
 Conditions:
   HasDomain: !And
@@ -263,11 +271,17 @@ Resources:
         Variables:
           TABLE: !Ref LicensesTable
           ADMIN_EMAILS: !Ref AdminEmails
+          SENDER_EMAIL: !Ref RequestSenderEmail
+          SUPPORT_EMAIL: !Ref SupportEmail
+          DOWNLOAD_URL: !Ref DownloadUrl
       Policies:
         - Statement:
             - Effect: Allow
-              Action: [dynamodb:Scan, dynamodb:PutItem, dynamodb:UpdateItem]
+              Action: [dynamodb:Scan, dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
               Resource: !GetAtt LicensesTable.Arn
+            - Effect: Allow
+              Action: [ses:SendEmail]
+              Resource: "*"
       Events:
         List:
           Type: HttpApi
@@ -292,6 +306,12 @@ Resources:
           Properties:
             ApiId: !Ref UltronApi
             Path: /v1/admin/licenses/{id}/allow-move
+            Method: POST
+        Reissue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/admin/licenses/{id}/reissue
             Method: POST
 
   LicenseAdminLogs:

@@ -68,8 +68,11 @@ import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.HistoryPage
+import com.assistant.app.ui.components.FeatureRequest
 import com.assistant.app.ui.components.FeatureRequestPage
 import com.assistant.app.ui.components.HelpPage
+import com.assistant.app.ui.components.ProfilePage
+import com.assistant.app.ui.components.SchedulePage
 import com.assistant.app.ui.components.ImageOverlay
 import com.assistant.app.ui.components.ImagesPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
@@ -116,6 +119,12 @@ fun AssistantScreen(
     onSettingsTapped: () -> Unit,
     onDeveloperTapped: () -> Unit = {},
     onAboutTapped: () -> Unit = {},
+    onProfileTapped: () -> Unit = {},
+    onScheduleTapped: () -> Unit = {},
+    /** Re-checks the activation key with the server, from the Profile page. */
+    onRefreshLicense: () -> Unit = {},
+    /** Opens the website store to renew; null when this build has no store link. */
+    onRenewLicense: (() -> Unit)? = null,
     onKnowledgeTapped: () -> Unit = {},
     onHomeTapped: () -> Unit = {},
     onConnectorsTapped: () -> Unit = {},
@@ -148,7 +157,7 @@ fun AssistantScreen(
     onDeleteImage: (Long) -> Unit = {},
     onClearImages: () -> Unit = {},
     onDismissShownImage: () -> Unit = {},
-    onSendFeatureRequest: (String, String, String, String, String, (String?) -> Unit) -> Unit = { _, _, _, _, _, _ -> },
+    onSendFeatureRequest: (FeatureRequest, (String?) -> Unit) -> Unit = { _, _ -> },
     onDeletePastSession: (List<Long>) -> Unit = {},
     onClearPastConversations: () -> Unit = {},
     onShowOlderConversations: () -> Unit = {},
@@ -164,6 +173,7 @@ fun AssistantScreen(
     onBargeInToggled: (Boolean) -> Unit,
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
+    onPersonalitySelected: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, String, String, Int) -> Unit,
     onAddKnowledgeDocument: (String, String) -> Unit,
     onUpdateKnowledgeDocument: (String, String, String) -> Unit,
@@ -238,6 +248,8 @@ fun AssistantScreen(
                         NavTab.SETTINGS -> guardedNav(onSettingsTapped)
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
                         NavTab.ABOUT -> guardedNav(onAboutTapped)
+                        NavTab.PROFILE -> guardedNav(onProfileTapped)
+                        NavTab.SCHEDULE -> guardedNav(onScheduleTapped)
                     }
                 },
                 modifier = drawerModifier.windowInsetsPadding(WindowInsets.displayCutout)
@@ -330,6 +342,21 @@ fun AssistantScreen(
                 )
             }
 
+            if (tab == NavTab.PROFILE) {
+                ProfilePage(
+                    license = license,
+                    ownerName = uiState.settings.ownerName,
+                    onRefresh = onRefreshLicense,
+                    onRenew = onRenewLicense,
+                    onRemoveKey = onRemoveLicense,
+                    modifier = Modifier.padding(top = topReserve)
+                )
+            }
+
+            if (tab == NavTab.SCHEDULE) {
+                SchedulePage(modifier = Modifier.padding(top = topReserve))
+            }
+
             if (tab == NavTab.HELP) {
                 HelpPage(onRequest = openRequest, modifier = Modifier.padding(top = topReserve))
             }
@@ -414,6 +441,7 @@ fun AssistantScreen(
                     onBargeInToggled = onBargeInToggled,
                     onAnnounceNotificationsToggled = onAnnounceNotificationsToggled,
                     onOwnerNameChanged = onOwnerNameChanged,
+                    onPersonalitySelected = onPersonalitySelected,
                     onClearApiKey = onClearApiKey,
                     onClearEmbeddingApiKey = onClearEmbeddingApiKey,
                     onSaveDeveloperChanges = onSaveDeveloperChanges,
@@ -433,8 +461,6 @@ fun AssistantScreen(
                     onUploadPdfFile = onUploadPdfFile,
                     onDismissKnowledgeDocumentError = onDismissKnowledgeDocumentError,
                     onDismiss = onDismissSettings,
-                    license = license,
-                    onRemoveLicense = onRemoveLicense,
                     onDirtyChanged = { settingsDirty = it },
                     pendingNavigation = pendingNav,
                     onPendingNavigationHandled = { pendingNav = null }
@@ -485,7 +511,7 @@ fun AssistantScreen(
                 onSend = { form ->
                     requestSending = true
                     requestError = null
-                    onSendFeatureRequest(form.type, form.name, form.details, form.examples, form.email) { error ->
+                    onSendFeatureRequest(form) { error ->
                         requestSending = false
                         if (error == null) requestType = null else requestError = error
                     }

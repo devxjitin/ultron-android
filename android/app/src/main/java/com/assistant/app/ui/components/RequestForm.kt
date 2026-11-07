@@ -31,6 +31,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,8 +74,10 @@ import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-/** What the request form sends. [type] is "skill" or "connector". */
-data class FeatureRequest(val type: String, val name: String, val details: String, val examples: String, val email: String)
+/** What the request form sends. [type] is "skill", "connector" or "bug"; [device] is filled only for a bug report. */
+data class FeatureRequest(
+    val type: String, val name: String, val details: String, val examples: String, val email: String, val device: String = ""
+)
 
 private const val MAX_NAME = 80
 private const val MAX_DETAILS = 1300
@@ -90,7 +96,9 @@ private class FormText(
     val nameHint: String,
     val detailsLabel: String,
     val detailsHint: String,
-    val examplesHint: String
+    val examplesHint: String,
+    val examplesLabel: String = "What would you say to it?",
+    val sendLabel: String = "Send request"
 )
 
 private val SkillText = FormText(
@@ -111,8 +119,19 @@ private val ConnectorText = FormText(
     examplesHint = "For example: play my liked songs on Spotify"
 )
 
+private val BugText = FormText(
+    icon = Icons.Outlined.BugReport,
+    title = "Report a bug",
+    intro = "Tell the developer what went wrong. Clear steps make a bug much quicker to fix.",
+    nameLabel = "What went wrong?", nameHint = "For example: The mic stops after two replies",
+    detailsLabel = "What happened?", detailsHint = "What you did, what Ultron did, and whether it happens every time.",
+    examplesHint = "For example: it should keep listening until I stop",
+    examplesLabel = "What did you expect?",
+    sendLabel = "Send report"
+)
+
 /**
- * A full screen form to ask the developer for a skill or a connector. Each kind has its own screen with its own wording.
+ * A full screen form to ask the developer for a skill or a connector, or to report a bug. Each kind has its own wording.
  * [onSend] starts sending; the caller keeps [sending] and [error] up to date and closes the form with [onBack] when it worked.
  */
 @Composable
@@ -124,7 +143,14 @@ fun FeatureRequestPage(
     onBack: () -> Unit
 ) {
     val isConnector = type == "connector"
-    val text = if (isConnector) ConnectorText else SkillText
+    val isBug = type == "bug"
+    val text = when {
+        isBug -> BugText
+        isConnector -> ConnectorText
+        else -> SkillText
+    }
+    // On by default: the phone model and Android version make most bugs much easier to reproduce.
+    var includeDevice by remember(type) { mutableStateOf(true) }
     var name by remember(type) { mutableStateOf("") }
     var details by remember(type) { mutableStateOf("") }
     var link by remember(type) { mutableStateOf("") }
@@ -171,7 +197,7 @@ fun FeatureRequestPage(
                 )
                 FormField(
                     value = examples, onChange = { examples = it.take(MAX_EXAMPLES) }, max = MAX_EXAMPLES,
-                    label = "What would you say to it?", hint = "Optional. ${text.examplesHint}",
+                    label = text.examplesLabel, hint = "Optional. ${text.examplesHint}",
                     required = false, minLines = 2, maxLines = 5, capitalization = KeyboardCapitalization.Sentences
                 )
                 FormField(
@@ -180,13 +206,30 @@ fun FeatureRequestPage(
                     required = false, keyboardType = KeyboardType.Email, last = true,
                     problem = "That email does not look right".takeIf { !emailOk }
                 )
+                if (isBug) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { includeDevice = !includeDevice }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = includeDevice, onCheckedChange = { includeDevice = it },
+                            colors = CheckboxDefaults.colors(checkedColor = AssistantAccent)
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text("Include phone details", color = AssistantTextPrimary, fontSize = 14.sp)
+                            Text(deviceSummary(), color = AssistantTextMuted, fontSize = 12.sp)
+                        }
+                    }
+                }
                 if (error != null) ErrorBox(error)
                 Spacer(Modifier.height(2.dp))
             }
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                SendButton(sending = sending, enabled = ready) {
+                SendButton(sending = sending, enabled = ready, label = text.sendLabel) {
                     val extra = link.trim().takeIf { isConnector && it.isNotEmpty() }?.let { "\n\nWebsite or app: $it" }.orEmpty()
-                    onSend(FeatureRequest(type, name.trim(), details.trim() + extra, examples.trim(), email.trim()))
+                    val device = if (isBug && includeDevice) deviceSummary() else ""
+                    onSend(FeatureRequest(type, name.trim(), details.trim() + extra, examples.trim(), email.trim(), device))
                 }
             }
         }
@@ -284,7 +327,7 @@ private fun ErrorBox(message: String) {
 
 /** A wide button that shrinks a little while it is pressed and shows a spinner while the request is going out. */
 @Composable
-private fun SendButton(sending: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun SendButton(sending: Boolean, enabled: Boolean, label: String, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && enabled) 0.97f else 1f, label = "sendScale")
@@ -303,7 +346,7 @@ private fun SendButton(sending: Boolean, enabled: Boolean, onClick: () -> Unit) 
             Spacer(Modifier.size(10.dp))
             Text("Sending", fontSize = 15.sp, fontWeight = FontWeight.Medium)
         } else {
-            Text("Send request", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

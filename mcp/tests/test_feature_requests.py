@@ -125,5 +125,24 @@ class FeatureRequestTest(unittest.TestCase):
         self.assertEqual(401, fr.lambda_handler(event(GOOD, uid=""), None)["statusCode"])
 
 
+    def test_a_bug_report_carries_its_own_wording_and_the_device(self):
+        status, body = self.call({
+            "type": "bug", "name": "Mic stops", "details": "The mic stops after two replies.",
+            "examples": "It should keep listening", "device": "Pixel 9, Android 16 (API 36)", "appVersion": "1.13.0",
+        })
+        self.assertEqual(200, status)
+        self.assertEqual("bug", fr._table.items[body["id"]]["type"])
+        mail = fr._ses.sent[0]
+        self.assertEqual("[Ultron] Bug: Mic stops", mail["Message"]["Subject"]["Data"])
+        text = mail["Message"]["Body"]["Text"]["Data"]
+        self.assertIn("What happened:", text)
+        self.assertIn("What they expected:", text)
+        self.assertIn("Device: Pixel 9, Android 16 (API 36)", text)
+
+    def test_requests_without_a_device_leave_it_out(self):
+        status, _ = self.call(GOOD)
+        self.assertEqual(200, status)
+        self.assertNotIn("Device:", fr._ses.sent[0]["Message"]["Body"]["Text"]["Data"])
+
 if __name__ == "__main__":
     unittest.main()

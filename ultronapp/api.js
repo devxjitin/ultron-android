@@ -31,6 +31,8 @@ export function createApi(baseUrl, getToken) {
     create: (fields) => call("POST", "/v1/admin/licenses", fields),
     update: (id, fields) => call("PATCH", `/v1/admin/licenses/${id}`, fields).then((d) => d.license),
     allowMove: (id) => call("POST", `/v1/admin/licenses/${id}/allow-move`).then((d) => d.license),
+    // A key can't be read back, so a lost one is replaced: the old key is revoked and a new one is created and emailed.
+    reissue: (id) => call("POST", `/v1/admin/licenses/${id}/reissue`),
   };
 }
 
@@ -43,10 +45,16 @@ const MESSAGES = {
   email_too_long: "Email is too long.",
   phone_too_long: "Phone is too long.",
   note_too_long: "Note is too long (300 characters at most).",
-  plan_required: "Plan can't be empty.",
+  name_required: "Enter the customer's name.",
+  email_required: "Enter the customer's email. The key is sent there.",
+  phone_required: "Enter the customer's phone number.",
+  plan_required: "Choose a plan.",
+  durationDays_required: "Enter how many days the key is valid (0 for never expires).",
+  details_missing: "This key has no name, email or phone, so a new one can't be emailed. Fill them in first.",
   plan_too_long: "Plan name is too long.",
   bad_durationDays: "Validity must be a whole number of days, 0 to 3650.",
   bad_count: "How many keys: 1 to 50.",
+  bad_amount: "Amount must be a whole number of rupees, 0 to 10,00,000.",
   not_found: "That key no longer exists. Refresh the list.",
 };
 

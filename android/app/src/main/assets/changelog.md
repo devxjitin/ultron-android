@@ -3,6 +3,30 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.15.0 - 2026-11-07
+
+### Added
+- New Schedule page in the menu. Tell Ultron what to do and when, in your own words, for example "Send Sonia 'Hello' on WhatsApp" at 9 pm. It can run once, every day, on weekdays or every week, and you can pause, edit, delete or run each one now.
+- You can also schedule by voice: "kal subah 7 baje mujhe weather batana".
+- After each run you get a notification saying what Ultron did, and the Schedule page shows the last result.
+- If a task needs to open an app while the phone is locked, you get an "Unlock to run" notification. Unlock and tap it, and Ultron does it then.
+
+## 1.14.0 - 2026-11-07
+
+### Added
+- Choose Ultron's personality in Settings: Destructive (the original cold, menacing Ultron), Friendly, Professional or Funny. Each card shows a sample line.
+- You can also switch by voice, for example "be friendly" or "go back to destructive". The new style starts with the next reply.
+
+## 1.13.0 - 2026-11-07
+
+### Added
+- New Profile page in the menu: your name, email and phone, your activation key and plan, how many days are left, and this phone's details. The activation details moved here from Settings.
+- Help & support can now email the developer at devxjitin@gmail.com, with your app version and phone filled in.
+- Report a bug from Help & support. You can include your phone model and Android version so the problem is easier to fix.
+
+### Changed
+- About now shows only what changed in the newest version.
+
 ## 1.12.4 - 2026-11-07
 
 ### Changed

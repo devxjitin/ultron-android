@@ -39,6 +39,10 @@ import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.PhoneConnectors
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
+import com.assistant.app.data.Personalities
+import com.assistant.app.data.SET_PERSONALITY_TOOL
+import com.assistant.app.data.SCHEDULE_PROMPT_TOOL
+import com.assistant.app.data.ScheduledPrompts
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
@@ -558,6 +562,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onAboutTapped() = openPage(AppPage.ABOUT)
 
+    fun onProfileTapped() = openPage(AppPage.PROFILE)
+
+    fun onScheduleTapped() = openPage(AppPage.SCHEDULE)
+
     fun onKnowledgeTapped() = openPage(AppPage.KNOWLEDGE)
 
     fun onUsageTapped() = openPage(AppPage.USAGE)
@@ -678,13 +686,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onDismissShownImage() = _uiState.update { it.copy(shownImage = null) }
 
-    /** Sends a skill or connector request to the developer. [onDone] gets null when sent, else a message for the user. */
-    fun onSendFeatureRequest(type: String, name: String, details: String, examples: String, email: String, onDone: (String?) -> Unit) {
+    /** Sends a skill or connector request or a bug report to the developer. [onDone] gets null when sent, else a message for the user. */
+    fun onSendFeatureRequest(form: com.assistant.app.ui.components.FeatureRequest, onDone: (String?) -> Unit) {
         viewModelScope.launch {
             val error = withContext(Dispatchers.IO) {
                 try {
                     com.assistant.app.network.FeatureRequestClient()
-                        .send(type, name, details, examples, email, com.assistant.app.BuildConfig.VERSION_NAME)
+                        .send(form.type, form.name, form.details, form.examples, form.email,
+                            com.assistant.app.BuildConfig.VERSION_NAME, form.device)
                     null
                 } catch (e: com.assistant.app.network.FeatureRequestException) {
                     e.message ?: "Could not send it."
@@ -692,7 +701,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     "Could not send it right now. Please try again later."
                 }
             }
-            if (error == null) showToast("Request sent. Thank you!")
+            if (error == null) showToast(if (form.type == "bug") "Bug report sent. Thank you!" else "Request sent. Thank you!")
             onDone(error)
         }
     }
@@ -829,6 +838,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         functionName == MEMORY_SAVE_TOOL -> "Saving to memory"
         functionName == MEMORY_FORGET_TOOL -> "Forgetting a memory"
         functionName == USE_SKILL_TOOL -> "Loading a skill"
+        functionName == SET_PERSONALITY_TOOL -> "Changing personality"
+        functionName == SCHEDULE_PROMPT_TOOL -> "Scheduling a task"
         else -> DeviceTool.fromFunctionName(functionName)?.label ?: functionName.replace('_', ' ')
     }
 
@@ -1097,6 +1108,27 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             settingsStore.setVoice(voiceName)
             invalidateWarmSessionAndReprewarm()
         }
+    }
+
+    fun onPersonalitySelected(id: String) {
+        launchPersist(settingsAppliedMessage("Personality: ${Personalities.byId(id).label}")) {
+            settingsStore.setPersonality(id)
+            invalidateWarmSessionAndReprewarm()
+        }
+    }
+
+    /** set_personality, called by the voice model. The running session switches style at once through the reply. */
+    private suspend fun runPersonalityTool(args: JSONObject): String {
+        val id = args.optString("personality")
+        if (!Personalities.isKnown(id)) {
+            return "status=invalid\nChoose one of: ${Personalities.all.joinToString { it.id }}."
+        }
+        val personality = Personalities.byId(id)
+        settingsStore.setPersonality(personality.id)
+        invalidateWarmSessionAndReprewarm()
+        return "status=ok\nPersonality is now ${personality.label}. From your next reply on, speak this way: " +
+            "${personality.styleNote}. This replaces your earlier character description; every other rule stays. " +
+            "Confirm the change in one short line in the new style."
     }
 
     fun onLanguageSelected(code: String) {
@@ -1711,6 +1743,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             runDeviceTool(deviceTool, call.args)
                         } else if (call.name == MEMORY_SAVE_TOOL || call.name == MEMORY_FORGET_TOOL) {
                             runToolSafely(call.name) { runMemoryTool(call.name, call.args) }
+                        } else if (call.name == SCHEDULE_PROMPT_TOOL) {
+                            runToolSafely(call.name) {
+                                withContext(Dispatchers.IO) { ScheduledPrompts.saveFromVoice(getApplication(), call.args) }
+                            }
+                        } else if (call.name == SET_PERSONALITY_TOOL) {
+                            runToolSafely(call.name) { runPersonalityTool(call.args) }
                         } else if (call.name == USE_SKILL_TOOL) {
                             SkillRegistry.use(call.args.optString("skill"), call.args.optString("task"))
                         } else if (call.name != "search_knowledge_base") {
