@@ -179,8 +179,6 @@ dependencies {
     debugImplementation("com.google.firebase:firebase-appcheck-debug")
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-analytics")
-    // Function-call arguments and results are kotlinx JSON objects in the Firebase SDK's types.
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

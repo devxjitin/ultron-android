@@ -47,24 +47,6 @@ class GeminiTextClient(
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    /** Tries [PRIMARY_MODEL] first, [FALLBACK_MODEL] only if that call fails. Throws the
-     *  primary call's exception if both fail. */
-    suspend fun generateText(prompt: String): String {
-        try {
-            return generateWithModel(prompt, PRIMARY_MODEL)
-        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-            throw cancelled
-        } catch (primaryError: Exception) {
-            return try {
-                generateWithModel(prompt, FALLBACK_MODEL)
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                throw primaryError
-            }
-        }
-    }
-
     /** Uses Gemini's native PDF understanding so the formatter sees visual layout, tables, and
      * images in addition to selectable text. */
     suspend fun formatKnowledgePdf(pdfBytes: ByteArray, retrievalChunkLimit: Int): String {
@@ -131,18 +113,6 @@ class GeminiTextClient(
 
     private fun contentsFor(prompt: String): JSONArray = JSONArray().put(
         JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))
-    )
-
-    private suspend fun generateWithModel(
-        prompt: String,
-        model: String,
-        maxOutputTokens: Int? = null,
-        rejectTruncatedOutput: Boolean = false
-    ): String = generateWithContents(
-        contents = contentsFor(prompt),
-        model = model,
-        maxOutputTokens = maxOutputTokens,
-        rejectTruncatedOutput = rejectTruncatedOutput
     )
 
     private suspend fun generateWithContents(
