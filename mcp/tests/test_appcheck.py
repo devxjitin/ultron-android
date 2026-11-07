@@ -56,7 +56,7 @@ class VerifyTests(unittest.TestCase):
             appcheck._keys["by_kid"] = {"k1": {"kty": "RSA", "kid": "k1", "n": int_b64(N), "e": int_b64(E)}}
             appcheck._keys["fetched"] = time.time()
         appcheck._fetch_keys = fake_fetch
-        appcheck._keys.update(fetched=0.0, by_kid={})
+        appcheck._keys.update(fetched=0.0, tried=0.0, by_kid={})
 
     def test_valid_token_passes(self):
         self.assertIsNone(appcheck.verify(token(), PROJECT))
@@ -65,6 +65,27 @@ class VerifyTests(unittest.TestCase):
         appcheck.verify(token(), PROJECT)
         appcheck.verify(token(), PROJECT)
         self.assertEqual(1, self.fetches)
+
+    def test_unknown_key_ids_do_not_refetch_more_than_once_a_minute(self):
+        appcheck.verify(token(), PROJECT)
+        for _ in range(3):
+            self.assertEqual("unknown signing key", appcheck.verify(token(kid="made-up"), PROJECT))
+        self.assertEqual(1, self.fetches)  # the first call fetched; the made-up ids found a recent try and did not
+        appcheck._keys["tried"] -= appcheck.MIN_REFETCH_SECONDS + 1
+        self.assertEqual("unknown signing key", appcheck.verify(token(kid="made-up"), PROJECT))
+        self.assertEqual(2, self.fetches)
+
+    def test_a_failed_fetch_is_not_retried_on_every_request(self):
+        calls = []
+
+        def failing_fetch():
+            calls.append(1)
+            raise OSError("key server unreachable")
+        appcheck._fetch_keys = failing_fetch
+        self.assertEqual("unreadable token (OSError)", appcheck.verify(token(), PROJECT))
+        for _ in range(2):
+            self.assertEqual("unknown signing key", appcheck.verify(token(), PROJECT))
+        self.assertEqual(1, len(calls))
 
     def test_tampered_signature_is_rejected(self):
         self.assertEqual("bad signature", appcheck.verify(token(tamper=True), PROJECT))
@@ -134,7 +155,9 @@ class CheckTests(unittest.TestCase):
             appcheck.os.environ.pop("JWT_AUTH", None)
 
     def test_lambda_copies_are_identical(self):
-        self.assertEqual((ROOT / "web-extract/appcheck.py").read_bytes(), (ROOT / "ultron-updates/appcheck.py").read_bytes())
+        original = (ROOT / "web-extract/appcheck.py").read_bytes()
+        for folder in ("ultron-updates", "feature-requests"):
+            self.assertEqual(original, (ROOT / folder / "appcheck.py").read_bytes(), folder)
 
 
 if __name__ == "__main__":

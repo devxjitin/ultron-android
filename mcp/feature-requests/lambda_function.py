@@ -9,9 +9,11 @@ kept and the answer says "emailed": false, so nothing the user wrote is lost.
 
 Items in the table (key "id" S):
   a request:   id (uuid), type, name, details, examples, email, appVersion, uid, createdAt (epoch seconds)
-  a counter:   id "limit#<uid>#<yyyymmdd>", count N  (how many requests that user sent that day)
+  a counter:   id "limit#<uid>#<yyyymmdd>", count N, expiresAt N  (how many requests that user sent that day; DynamoDB's
+               time-to-live setting on expiresAt deletes it a couple of days later, so counters do not pile up)
 
-Env vars: TABLE, DEVELOPER_EMAIL (who gets the mail), SENDER_EMAIL (a verified SES identity).
+Env vars: TABLE, DEVELOPER_EMAIL (who gets the mail), SENDER_EMAIL (a verified SES identity), FIREBASE_PROJECT_NUMBER and
+APP_CHECK_MODE (see appcheck.py: only the genuine app may send requests, so scripts with a free anonymous account cannot).
 """
 import base64
 import json
@@ -20,7 +22,11 @@ import re
 import time
 import uuid
 
+import appcheck
+
 DAILY_LIMIT = 5
+# Counters are deleted by DynamoDB TTL once their day is long over.
+COUNTER_TTL_SECONDS = 2 * 86_400
 TYPES = {"skill": "Skill", "connector": "Connector"}
 LIMITS = {"name": 80, "details": 1500, "examples": 600, "email": 120, "appVersion": 20}
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -87,9 +93,9 @@ def _within_daily_limit(uid, now):
     day = time.strftime("%Y%m%d", time.gmtime(now))
     count = _db().update_item(
         Key={"id": f"limit#{uid}#{day}"},
-        UpdateExpression="ADD #c :one",
+        UpdateExpression="ADD #c :one SET expiresAt = :expires",
         ExpressionAttributeNames={"#c": "count"},
-        ExpressionAttributeValues={":one": 1},
+        ExpressionAttributeValues={":one": 1, ":expires": now + COUNTER_TTL_SECONDS},
         ReturnValues="UPDATED_NEW",
     )["Attributes"]["count"]
     return int(count) <= DAILY_LIMIT
@@ -155,4 +161,7 @@ def lambda_handler(event, context):
         return _resp(404, {"error": "not found"})
     if not _uid(event):
         return _resp(401, {"error": "sign in required"})
+    refused = appcheck.check(event)
+    if refused:
+        return refused
     return handler(event)
