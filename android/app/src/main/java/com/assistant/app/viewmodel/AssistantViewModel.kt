@@ -104,7 +104,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How often the app asks the AWS update server for a newer build on its own, also while it stays open. */
         private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60_000L
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
-        /** Past exchanges shown on the Memory page at first, and added by each "Show older". */
+        /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
         private const val TOOL_LABEL_LINGER_MS = 0L
         private const val TOOL_LABEL_MAX_MS = 25_000L
@@ -574,7 +574,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  because the page covers the status line and Stop control and the mic must not keep streaming behind it. */
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
-        if (page == AppPage.STORAGE || page == AppPage.MEMORY) refreshPastConversations()
+        if (page == AppPage.STORAGE || page == AppPage.HISTORY) refreshPastConversations()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
@@ -588,6 +588,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onMemoryTapped() = openPage(AppPage.MEMORY)
+
+    fun onHistoryTapped() = openPage(AppPage.HISTORY)
 
     fun onMemoryEnabledToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Memory on" else "Memory off") {
@@ -629,7 +631,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var pastConversationLimit = PAST_CONVERSATION_PAGE
 
-    /** Reloads the saved past exchanges (newest [pastConversationLimit]) and their totals for the Memory and Storage pages. */
+    /** Reloads the saved past exchanges (newest [pastConversationLimit]) and their totals for the History and Storage pages. */
     private fun refreshPastConversations() {
         viewModelScope.launch {
             try {
@@ -654,10 +656,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         refreshPastConversations()
     }
 
-    fun onDeletePastConversation(id: Long) = changePastConversations("Deleted") { conversationHistoryStore.delete(id) }
-
-    fun onDeletePastDay(fromMillis: Long, toMillis: Long) =
-        changePastConversations("Day deleted") { conversationHistoryStore.deleteRange(fromMillis, toMillis) }
+    fun onDeletePastSession(ids: List<Long>) =
+        changePastConversations("Session deleted") { ids.forEach { conversationHistoryStore.delete(it) } }
 
     fun onClearPastConversations() = changePastConversations("Past conversations cleared") { conversationHistoryStore.clearAll() }
 

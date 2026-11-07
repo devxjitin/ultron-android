@@ -67,6 +67,7 @@ import com.assistant.app.data.SkillRegistry
 import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
+import com.assistant.app.ui.components.HistoryPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
 import com.assistant.app.ui.components.AppDrawerContent
 import com.assistant.app.ui.theme.ThemeMode
@@ -133,8 +134,8 @@ fun AssistantScreen(
     onDeleteMemory: (String) -> Unit = {},
     onClearMemory: () -> Unit = {},
     onRestoreMemory: (String) -> Unit = {},
-    onDeletePastConversation: (Long) -> Unit = {},
-    onDeletePastDay: (Long, Long) -> Unit = { _, _ -> },
+    onHistoryTapped: () -> Unit = {},
+    onDeletePastSession: (List<Long>) -> Unit = {},
     onClearPastConversations: () -> Unit = {},
     onShowOlderConversations: () -> Unit = {},
     onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
@@ -212,6 +213,7 @@ fun AssistantScreen(
                         NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
+                        NavTab.HISTORY -> guardedNav(onHistoryTapped)
                         NavTab.SETTINGS -> guardedNav(onSettingsTapped)
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
                         NavTab.ABOUT -> guardedNav(onAboutTapped)
@@ -292,13 +294,18 @@ fun AssistantScreen(
                     onClearAll = onClearMemory,
                     modifier = Modifier.padding(top = topReserve),
                     removedByAssistant = uiState.removedMemories,
-                    onRestore = onRestoreMemory,
-                    pastConversations = uiState.pastConversations,
-                    pastTotal = uiState.pastConversationCount,
-                    onDeletePast = onDeletePastConversation,
-                    onDeletePastDay = onDeletePastDay,
-                    onClearPast = onClearPastConversations,
-                    onShowOlder = onShowOlderConversations
+                    onRestore = onRestoreMemory
+                )
+            }
+
+            if (tab == NavTab.HISTORY) {
+                HistoryPage(
+                    turns = uiState.pastConversations,
+                    total = uiState.pastConversationCount,
+                    onDeleteSession = onDeletePastSession,
+                    onClearAll = onClearPastConversations,
+                    onShowOlder = onShowOlderConversations,
+                    modifier = Modifier.padding(top = topReserve)
                 )
             }
 
@@ -331,6 +338,8 @@ fun AssistantScreen(
                         modifier = pageModifier,
                         pastConversationCount = uiState.pastConversationCount,
                         pastConversationBytes = uiState.pastConversationBytes,
+                        memoryBytes = uiState.memories.sumOf { it.text.length.toLong() },
+                        knowledgeBytes = uiState.knowledgeDocuments.sumOf { it.text.length.toLong() },
                         onClearPastConversations = onClearPastConversations
                     )
                     NavTab.ABOUT -> AboutPage(

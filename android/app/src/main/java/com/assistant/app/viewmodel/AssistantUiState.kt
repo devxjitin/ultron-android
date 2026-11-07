@@ -6,7 +6,7 @@ import com.assistant.app.data.RagDocument
 import com.assistant.app.data.StoredTurn
 
 /** The page on screen. Exactly one is shown at a time; HOME is the voice screen. */
-enum class AppPage { HOME, KNOWLEDGE, MEMORY, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
+enum class AppPage { HOME, KNOWLEDGE, MEMORY, HISTORY, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DEVELOPER, ABOUT }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }

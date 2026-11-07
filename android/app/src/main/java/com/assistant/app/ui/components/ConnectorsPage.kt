@@ -334,8 +334,11 @@ fun ConnectorsPage(
                 val inGroup = shown.filter { it.category == category }
                 if (inGroup.isNotEmpty() && (categoryFilter == null || categoryFilter == category.title)) {
                     SectionHeading(category.title)
-                    Text(category.summary, color = if (category.advanced) AssistantError else AssistantTextMuted,
-                        fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+                    // Only the risky group keeps its line, because it is a safety warning; the rest are self-explanatory.
+                    if (category.advanced) {
+                        Text(category.summary, color = AssistantError,
+                            fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+                    }
                     inGroup.forEach { Card(it) }
                 }
             }

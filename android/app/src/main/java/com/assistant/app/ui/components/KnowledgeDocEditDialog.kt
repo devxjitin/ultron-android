@@ -2,6 +2,7 @@ package com.assistant.app.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,7 +31,10 @@ import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantSurfaceElevated
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-/** Add/edit form for a single knowledge document. [existing] null means "new document". */
+/**
+ * Add/edit form for a single knowledge document. [existing] null means "new document".
+ * An existing document opens as a read-only preview of its chunks, rendered as Markdown; Edit switches to the raw text.
+ */
 @Composable
 fun KnowledgeDocEditDialog(
     existing: RagDocument?,
@@ -45,6 +49,7 @@ fun KnowledgeDocEditDialog(
     val originalBlocks = remember(existing?.id) { existing?.let { splitKnowledgeBlocks(it.text) }.orEmpty() }
     val blocks = remember(existing?.id) { mutableStateListOf<String>().apply { addAll(originalBlocks) } }
     val chunkMode = existing != null
+    var viewing by remember { mutableStateOf(existing != null) }
     val changedCount = if (chunkMode) blocks.count { it.trim() !in originalBlocks } else 0
     val savedText = if (chunkMode) joinKnowledgeBlocks(blocks) else text
 
@@ -67,11 +72,27 @@ fun KnowledgeDocEditDialog(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
         containerColor = AssistantSurfaceElevated,
         tonalElevation = 6.dp,
-        title = { Text(if (existing == null) "Add document" else "Edit document") },
+        title = { Text(if (existing == null) "Add document" else if (viewing) title.ifBlank { "Document" } else "Edit document") },
         text = {
             androidx.compose.foundation.layout.Column(
                 modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())
             ) {
+                if (viewing) {
+                    Text(
+                        text = "${blocks.size} ${if (blocks.size == 1) "chunk" else "chunks"}",
+                        color = AssistantTextSecondary,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+                    )
+                    blocks.forEachIndexed { index, block ->
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Chunk ${index + 1}", color = AssistantAccent,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                        )
+                        MarkdownText(block, Modifier.padding(top = 2.dp))
+                    }
+                    return@Column
+                }
                 // Frozen while isSaving so typing here can never be silently discarded by the
                 // submitted snapshot's save completing and auto-closing the dialog underneath it.
                 OutlinedTextField(
@@ -126,7 +147,9 @@ fun KnowledgeDocEditDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            if (viewing) {
+                TextButton(onClick = { viewing = false }) { Text("Edit", color = AssistantAccent) }
+            } else TextButton(
                 onClick = { onSave(title, savedText) },
                 enabled = !isSaving && title.isNotBlank() && savedText.isNotBlank()
             ) {
@@ -135,7 +158,7 @@ fun KnowledgeDocEditDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isSaving) {
-                Text("Cancel", color = AssistantTextSecondary)
+                Text(if (viewing) "Close" else "Cancel", color = AssistantTextSecondary)
             }
         }
     )

@@ -6,6 +6,9 @@ notes and the About page all read it from here. A date after the version is opti
 ## 1.9.0 - 2026-11-07
 
 ### Added
+- A new History page in the menu keeps every chat session in one place. Each session shows when it happened and what you first asked. Tap one to read the whole chat, search across all of them, or delete a session.
+- Storage now shows one card each for Memory, Past conversations, Knowledge documents, Cache and Usage, with an icon, size, a bar for its share of the space and its own Clear button.
+- Knowledge documents open as neatly formatted text. Tap Edit to change the raw text.
 - Ultron now runs its own alarms and timers. They ring with sound, and you can ask it to list, change or cancel them, including timers, without the Clock app opening.
 - Alarms can repeat every day or week.
 
@@ -15,6 +18,8 @@ notes and the About page all read it from here. A date after the version is opti
 - Ultron now looks up earlier conversations whenever you ask about them, and remembers the last few exchanges from the start of every chat.
 
 ### Changed
+- The Memory page now shows only what Ultron remembers about you. Past conversations moved to History.
+- Connector groups no longer have a line of text under their name, except the warning on Phone control.
 - Long-term memory is no longer a connector. Remembering past conversations is part of Ultron itself and is always on. You can still clear it from Storage.
 
 ## 1.8.1 - 2026-11-06
