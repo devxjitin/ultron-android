@@ -85,7 +85,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /** Ideas shown in the editor; a tap puts one in the box. */
 private val EXAMPLES = listOf(
@@ -256,6 +255,8 @@ private fun ScheduleEditor(item: ScheduledPrompt, onClose: () -> Unit, onSaved: 
     var repeat by remember(item.id) { mutableStateOf(if (isNew) PromptRepeat.ONCE else item.repeat) }
     var error by remember(item.id) { mutableStateOf<String?>(null) }
     val is24h = DateFormat.is24HourFormat(context)
+    // Compose's own current locale, so the formats follow a language change while the form is open.
+    val locale = androidx.compose.ui.text.intl.Locale.current.platformLocale
 
     // A full-screen dialog, so the form covers the top bar and the menu of the page behind it.
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -305,14 +306,14 @@ private fun ScheduleEditor(item: ScheduledPrompt, onClose: () -> Unit, onSaved: 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PickerButton(
                         Icons.Outlined.Schedule,
-                        time.format(DateTimeFormatter.ofPattern(if (is24h) "HH:mm" else "h:mm a", Locale.getDefault())),
+                        time.format(DateTimeFormatter.ofPattern(if (is24h) "HH:mm" else "h:mm a", locale)),
                         Modifier.weight(1f)
                     ) {
                         TimePickerDialog(context, { _, h, m -> time = LocalTime.of(h, m); error = null }, time.hour, time.minute, is24h).show()
                     }
                     PickerButton(
                         Icons.Outlined.CalendarMonth,
-                        date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())),
+                        date.format(DateTimeFormatter.ofPattern("EEE d MMM", locale)),
                         Modifier.weight(1f)
                     ) {
                         DatePickerDialog(context, { _, y, m, d -> date = LocalDate.of(y, m + 1, d); error = null },
