@@ -24,46 +24,20 @@ private val InterVariable = FontFamily(
     Font(R.font.inter_variable, weight = FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(700)))
 )
 
+/** The serif used for page titles and the menu heading (the phone's own serif, so nothing is bundled). */
+val AssistantSerif: FontFamily = FontFamily.Serif
+
 /** Built per palette: the text colours are read when this runs, so a switch between light and dark must build it again. */
 fun assistantTypography() = Typography(
-    displayLarge = TextStyle(
-        fontFamily = InterVariable,
-        fontWeight = FontWeight.Bold,
-        fontSize = 40.sp,
-        color = AssistantTextPrimary
-    ),
-    headlineMedium = TextStyle(
-        fontFamily = InterVariable,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        color = AssistantTextPrimary
-    ),
-    // AlertDialog titles (Settings, confirmation dialogs) use this style by default --
-    // without it they'd silently fall back to Material3's default Roboto instead of Inter.
-    headlineSmall = TextStyle(
-        fontFamily = InterVariable,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        color = AssistantTextPrimary
-    ),
-    bodyLarge = TextStyle(
-        fontFamily = InterVariable,
-        fontWeight = FontWeight.Normal,
-        fontSize = 18.sp,
-        lineHeight = 26.sp,
-        color = AssistantTextPrimary
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = InterVariable,
-        fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
-        lineHeight = 22.sp,
-        color = AssistantTextSecondary
-    ),
-    labelLarge = TextStyle(
-        fontFamily = InterVariable,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        color = AssistantTextSecondary
-    )
+    displayLarge = TextStyle(fontFamily = AssistantSerif, fontWeight = FontWeight.Normal, fontSize = 34.sp, color = AssistantTextPrimary),
+    headlineMedium = TextStyle(fontFamily = AssistantSerif, fontWeight = FontWeight.Normal, fontSize = 22.sp, color = AssistantTextPrimary),
+    // AlertDialog titles (Settings, confirmation dialogs) use this style by default.
+    headlineSmall = TextStyle(fontFamily = AssistantSerif, fontWeight = FontWeight.Normal, fontSize = 19.sp, color = AssistantTextPrimary),
+    titleLarge = TextStyle(fontFamily = AssistantSerif, fontWeight = FontWeight.Normal, fontSize = 19.sp, color = AssistantTextPrimary),
+    titleMedium = TextStyle(fontFamily = InterVariable, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = AssistantTextPrimary),
+    titleSmall = TextStyle(fontFamily = InterVariable, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = AssistantTextPrimary),
+    bodyLarge = TextStyle(fontFamily = InterVariable, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp, color = AssistantTextPrimary),
+    bodyMedium = TextStyle(fontFamily = InterVariable, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp, color = AssistantTextSecondary),
+    bodySmall = TextStyle(fontFamily = InterVariable, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 17.sp, color = AssistantTextSecondary),
+    labelLarge = TextStyle(fontFamily = InterVariable, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = AssistantTextSecondary)
 )

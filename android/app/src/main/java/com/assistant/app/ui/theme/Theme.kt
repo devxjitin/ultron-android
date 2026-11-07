@@ -85,16 +85,16 @@ private fun colorSchemeFor(p: AssistantPalette) =
         )
     }
 
-/** Every button: a slight corner, about 12% of the button height, instead of a full pill. */
-val AppButtonShape = RoundedCornerShape(6.dp)
+/** Every button is a full pill. */
+val AppButtonShape = RoundedCornerShape(50)
 
 // Softer, rounder corners everywhere: text fields, buttons, menus and dialogs all read these.
 private val AssistantShapes = Shapes(
     extraSmall = RoundedCornerShape(12.dp),
     small = RoundedCornerShape(14.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(24.dp)
 )
 
 /** Paints the window behind Compose and the system bars to match the page, so no edge flashes the other theme. */

@@ -49,22 +49,21 @@ fun PageColumn(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
     }
 }
 
-/** A white rounded card with a soft border, the container used for each group on a page. */
+/** A flat rounded card, a shade off the page, the container used for each group on a page. */
 @Composable
 fun PageCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(16.dp)
     Column(
-        modifier.fillMaxWidth().clip(shape).background(AssistantSurface)
-            .border(BorderStroke(1.dp, AssistantOutline), shape).padding(16.dp),
+        modifier.fillMaxWidth().clip(shape).background(AssistantSurface).padding(16.dp),
         content = content
     )
 }
 
-/** Small upper-case caption above a card. */
+/** Plain grey caption above a card. */
 @Composable
 fun PageLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text.uppercase(), color = AssistantTextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp,
+        text, color = AssistantTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
         modifier = modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp)
     )
 }
@@ -116,14 +115,14 @@ fun CategoryChips(categories: List<String>, selected: String?, onSelect: (String
                 label = { Text(category ?: "All", fontSize = 13.sp) },
                 shape = RoundedCornerShape(50),
                 colors = FilterChipDefaults.filterChipColors(
-                    containerColor = AssistantFieldBackground,
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     labelColor = AssistantTextSecondary,
                     selectedContainerColor = AssistantSelectedBg,
-                    selectedLabelColor = AssistantAccent
+                    selectedLabelColor = AssistantTextPrimary
                 ),
                 border = FilterChipDefaults.filterChipBorder(
                     enabled = true, selected = on,
-                    borderColor = AssistantOutline, selectedBorderColor = AssistantAccent
+                    borderColor = AssistantOutline, selectedBorderColor = AssistantTextMuted
                 )
             )
         }
@@ -145,14 +144,14 @@ fun ChoiceChips(options: List<Pair<String, String>>, selectedId: String, onSelec
                 label = { Text(label, fontSize = 13.sp) },
                 shape = RoundedCornerShape(50),
                 colors = FilterChipDefaults.filterChipColors(
-                    containerColor = AssistantFieldBackground,
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     labelColor = AssistantTextSecondary,
                     selectedContainerColor = AssistantSelectedBg,
-                    selectedLabelColor = AssistantAccent
+                    selectedLabelColor = AssistantTextPrimary
                 ),
                 border = FilterChipDefaults.filterChipBorder(
                     enabled = true, selected = on,
-                    borderColor = AssistantOutline, selectedBorderColor = AssistantAccent
+                    borderColor = AssistantOutline, selectedBorderColor = AssistantTextMuted
                 )
             )
         }

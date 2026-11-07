@@ -30,18 +30,21 @@ class AssistantPalette(
     val errorFill: Color,
     val textPrimary: Color,
     val textSecondary: Color,
-    val textMuted: Color
+    val textMuted: Color,
+    /** Fill and text colour of the main button: light on a dark page, dark on a light page. */
+    val buttonFill: Color,
+    val onButtonFill: Color
 )
 
-// Light: Ultron crimson on a cold steel-grey page, near-black text.
+// Light: a warm paper page, flat soft-grey cards and near-black text. Ultron crimson is kept only for small accents.
 val LightPalette = AssistantPalette(
     dark = false,
-    background = Color(0xFFEEF1F4),
-    surface = Color(0xFFFFFFFF),
-    surfaceElevated = Color(0xFFE4E8ED),
-    outline = Color(0xFFCDD4DC),
-    fieldBackground = Color(0xFFE8ECF0),
-    selectedBg = Color(0xFFF9E1E3),
+    background = Color(0xFFFAF9F5),
+    surface = Color(0xFFF0EEE6),
+    surfaceElevated = Color(0xFFE8E5DB),
+    outline = Color(0xFFE0DDD2),
+    fieldBackground = Color(0xFFFFFFFF),
+    selectedBg = Color(0xFFEDEBE2),
     primary = Color(0xFF9B1B24),
     accent = Color(0xFFB3202A),
     accentFill = Color(0xFFB3202A),
@@ -49,20 +52,22 @@ val LightPalette = AssistantPalette(
     amber = Color(0xFF92400E),
     error = Color(0xFFA8350A),
     errorFill = Color(0xFFA8350A),
-    textPrimary = Color(0xFF12151A),
-    textSecondary = Color(0xFF444C58),
-    textMuted = Color(0xFF5F6876)
+    textPrimary = Color(0xFF1F1E1D),
+    textSecondary = Color(0xFF5A5852),
+    textMuted = Color(0xFF6E6B64),
+    buttonFill = Color(0xFF1F1E1D),
+    onButtonFill = Color(0xFFFAF9F5)
 )
 
-// Dark: the same crimson on a gunmetal page, soft off-white text.
+// Dark: a near-black warm page, flat dark-grey cards and soft off-white text.
 val DarkPalette = AssistantPalette(
     dark = true,
-    background = Color(0xFF0C0E12),
-    surface = Color(0xFF14171D),
-    surfaceElevated = Color(0xFF1C2028),
-    outline = Color(0xFF2B313B),
-    fieldBackground = Color(0xFF171B22),
-    selectedBg = Color(0xFF2C1519),
+    background = Color(0xFF131313),
+    surface = Color(0xFF1F1F1F),
+    surfaceElevated = Color(0xFF292929),
+    outline = Color(0xFF2F2F2F),
+    fieldBackground = Color(0xFF1B1B1B),
+    selectedBg = Color(0xFF262626),
     primary = Color(0xFFC4232C),
     accent = Color(0xFFFF5A4D),
     accentFill = Color(0xFFC4232C),
@@ -70,9 +75,11 @@ val DarkPalette = AssistantPalette(
     amber = Color(0xFFE8B931),
     error = Color(0xFFFF9A3D),
     errorFill = Color(0xFFC2410C),
-    textPrimary = Color(0xFFECEFF3),
-    textSecondary = Color(0xFFB4BCC8),
-    textMuted = Color(0xFF8A93A1)
+    textPrimary = Color(0xFFEDEDEA),
+    textSecondary = Color(0xFFA9A7A1),
+    textMuted = Color(0xFF8A8882),
+    buttonFill = Color(0xFFF2F1EC),
+    onButtonFill = Color(0xFF131313)
 )
 
 /** The palette in use. A snapshot state, so every screen that read a colour redraws when the theme changes. */
@@ -101,3 +108,7 @@ val AssistantErrorFill: Color get() = ActivePalette.current.errorFill
 val AssistantTextPrimary: Color get() = ActivePalette.current.textPrimary
 val AssistantTextSecondary: Color get() = ActivePalette.current.textSecondary
 val AssistantTextMuted: Color get() = ActivePalette.current.textMuted
+
+/** The main button: filled light on a dark page and dark on a light page, with matching text. */
+val AssistantButtonFill: Color get() = ActivePalette.current.buttonFill
+val AssistantOnButtonFill: Color get() = ActivePalette.current.onButtonFill

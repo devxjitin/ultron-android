@@ -112,7 +112,7 @@ fun AboutPage(
                 Button(
                     shape = AppButtonShape,
                     onClick = onUpdateNow, modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AssistantAccentFill, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = com.assistant.app.ui.theme.AssistantButtonFill, contentColor = com.assistant.app.ui.theme.AssistantOnButtonFill)
                 ) { Text("Update now") }
             } else {
                 OutlinedButton(

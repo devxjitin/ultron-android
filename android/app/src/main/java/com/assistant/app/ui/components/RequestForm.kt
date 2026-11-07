@@ -143,7 +143,7 @@ fun FeatureRequestPage(
                 IconButton(onClick = onBack, enabled = !sending) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = AssistantTextPrimary)
                 }
-                Text(text.title, color = AssistantTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(text.title, color = AssistantTextPrimary, fontSize = 18.sp, fontFamily = com.assistant.app.ui.theme.AssistantSerif)
             }
             Column(
                 Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -196,12 +196,11 @@ fun FeatureRequestPage(
 @Composable
 private fun Intro(text: FormText) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(AssistantSurface)
-            .border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp)).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AssistantSurface).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(AssistantAccent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(text.icon, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(24.dp))
+        Box(Modifier.size(40.dp).clip(CircleShape).background(com.assistant.app.ui.theme.AssistantSurfaceElevated), contentAlignment = Alignment.Center) {
+            Icon(text.icon, contentDescription = null, tint = AssistantTextPrimary, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.size(14.dp))
         Text(text.intro, color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
@@ -233,7 +232,7 @@ private fun FormField(
     val border by animateColorAsState(
         when {
             showProblem -> AssistantError
-            focused -> AssistantAccent
+            focused -> AssistantTextMuted
             else -> AssistantOutline
         },
         label = "fieldBorder"
@@ -242,9 +241,9 @@ private fun FormField(
         focusedContainerColor = AssistantFieldBackground, unfocusedContainerColor = AssistantFieldBackground,
         errorContainerColor = AssistantFieldBackground,
         focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, errorIndicatorColor = Color.Transparent,
-        cursorColor = AssistantAccent, errorCursorColor = AssistantError,
+        cursorColor = AssistantTextPrimary, errorCursorColor = AssistantError,
         focusedTextColor = AssistantTextPrimary, unfocusedTextColor = AssistantTextPrimary, errorTextColor = AssistantTextPrimary,
-        focusedLabelColor = AssistantAccent, unfocusedLabelColor = AssistantTextSecondary, errorLabelColor = AssistantError,
+        focusedLabelColor = AssistantTextSecondary, unfocusedLabelColor = AssistantTextSecondary, errorLabelColor = AssistantError,
         focusedPlaceholderColor = AssistantTextMuted, unfocusedPlaceholderColor = AssistantTextMuted
     )
     Column {
@@ -258,8 +257,8 @@ private fun FormField(
                 capitalization = capitalization, keyboardType = keyboardType,
                 imeAction = if (last) ImeAction.Done else if (maxLines > 1) ImeAction.Default else ImeAction.Next
             ),
-            shape = RoundedCornerShape(16.dp), colors = colors,
-            modifier = Modifier.fillMaxWidth().border(BorderStroke(if (focused) 2.dp else 1.dp, border), RoundedCornerShape(16.dp))
+            shape = RoundedCornerShape(14.dp), colors = colors,
+            modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, border), RoundedCornerShape(14.dp))
                 .onFocusChanged {
                     if (it.isFocused) hadFocus = true else if (hadFocus) touched = true
                 }
@@ -291,20 +290,20 @@ private fun SendButton(sending: Boolean, enabled: Boolean, onClick: () -> Unit) 
     val scale by animateFloatAsState(if (pressed && enabled) 0.97f else 1f, label = "sendScale")
     Button(
         onClick = { if (!sending) onClick() }, enabled = enabled || sending, interactionSource = source,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(
-            containerColor = AssistantAccentFill, contentColor = Color.White,
-            disabledContainerColor = if (sending) AssistantAccentFill else AssistantFieldBackground,
-            disabledContentColor = if (sending) Color.White else AssistantTextMuted
+            containerColor = com.assistant.app.ui.theme.AssistantButtonFill, contentColor = com.assistant.app.ui.theme.AssistantOnButtonFill,
+            disabledContainerColor = if (sending) com.assistant.app.ui.theme.AssistantButtonFill else com.assistant.app.ui.theme.AssistantSurfaceElevated,
+            disabledContentColor = if (sending) com.assistant.app.ui.theme.AssistantOnButtonFill else AssistantTextMuted
         ),
-        modifier = Modifier.fillMaxWidth().height(52.dp).scale(scale)
+        modifier = Modifier.fillMaxWidth().height(50.dp).scale(scale)
     ) {
         if (sending) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            CircularProgressIndicator(color = com.assistant.app.ui.theme.AssistantOnButtonFill, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(10.dp))
-            Text("Sending", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text("Sending", fontSize = 15.sp, fontWeight = FontWeight.Medium)
         } else {
-            Text("Send request", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text("Send request", fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
