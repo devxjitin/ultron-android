@@ -68,7 +68,7 @@ import com.assistant.app.ui.components.UsagePage
 import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.HistoryPage
-import com.assistant.app.ui.components.FeatureRequestDialog
+import com.assistant.app.ui.components.FeatureRequestPage
 import com.assistant.app.ui.components.HelpPage
 import com.assistant.app.ui.components.ImageOverlay
 import com.assistant.app.ui.components.ImagesPage
@@ -189,7 +189,7 @@ fun AssistantScreen(
         if (uiState.page in SETTINGS_PAGES) lastSettingsPage[0] = uiState.page
         // Space the pages leave free at the top for the slim top bar.
         val topReserve = AppTopBarHeight
-        // The request form is shared by Skills and Connectors, which both open it.
+        // The request form (one screen for a skill, one for a connector) opens from the Help & support page.
         var requestType by remember { mutableStateOf<String?>(null) }
         var requestSending by remember { mutableStateOf(false) }
         var requestError by remember { mutableStateOf<String?>(null) }
@@ -465,21 +465,6 @@ fun AssistantScreen(
             )
         }
 
-        requestType?.let { initial ->
-            FeatureRequestDialog(
-                initialType = initial, sending = requestSending, error = requestError,
-                onSend = { form ->
-                    requestSending = true
-                    requestError = null
-                    onSendFeatureRequest(form.type, form.name, form.details, form.examples, form.email) { error ->
-                        requestSending = false
-                        if (error == null) requestType = null else requestError = error
-                    }
-                },
-                onDismiss = { requestType = null }
-            )
-        }
-
         uiState.shownImage?.let { shown ->
             androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, onDismissShownImage) }
         }
@@ -494,6 +479,21 @@ fun AssistantScreen(
             isDarkTheme = isDarkTheme,
             modifier = Modifier.align(Alignment.TopCenter)
         )
+
+        requestType?.let { kind ->
+            FeatureRequestPage(
+                type = kind, sending = requestSending, error = requestError,
+                onSend = { form ->
+                    requestSending = true
+                    requestError = null
+                    onSendFeatureRequest(form.type, form.name, form.details, form.examples, form.email) { error ->
+                        requestSending = false
+                        if (error == null) requestType = null else requestError = error
+                    }
+                },
+                onBack = { requestType = null }
+            )
+        }
 
         uiState.updateInfo?.let { update ->
             val progress = uiState.updateDownloadProgress
