@@ -10,6 +10,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         AutomationEngine.rescheduleAll(context)
+        com.assistant.app.data.ScheduledPrompts.rescheduleAll(context)
         if (AutomationEngine.hasRules(context)) runCatching { AppForegroundService.start(context) }
     }
 }

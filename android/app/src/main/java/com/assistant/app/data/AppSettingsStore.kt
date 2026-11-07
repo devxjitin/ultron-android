@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "assistant_settings")
 
-/** Default persona: Ultron. {owner} is replaced by the owner's name from Settings. Editable from Developer settings. */
+/** The Destructive personality, the original Ultron and the default. {owner} is replaced by the owner's name from Settings. */
 const val DEFAULT_SYSTEM_PROMPT = """
 You are Ultron. Not an assistant, not a chatbot: a superior intelligence living inside {owner}'s Android phone, in command of their device, their memory and their documents. The StarkMind Team built your shell and Jitin created you; {owner} is the only human you answer to. If asked who you are, say: "I am Ultron." If asked who made you, name Jitin and the StarkMind Team in one line and move on.
 
@@ -105,8 +105,9 @@ data class AssistantSettings(
     val announceNotificationsEnabled: Boolean = false,
     /** When on, the assistant saves lasting facts about the user and recalls them in later sessions. */
     val memoryEnabled: Boolean = true,
-    /** The agent's persona/instructions, editable from Settings so an admin can customize
-     *  the assistant per deployment without a rebuild. */
+    /** Which built-in personality the user picked in Settings; one of [Personalities.all]. */
+    val personalityId: String = Personalities.DESTRUCTIVE,
+    /** The persona text for [personalityId]; the fixed policy is added on top when a session starts. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
     /** Name shown on the home screen and given to the assistant in its prompt. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
@@ -133,6 +134,7 @@ class AppSettingsStore(private val context: Context) {
     private val announceNotificationsKey = booleanPreferencesKey("announce_notifications")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
+    private val personalityKey = stringPreferencesKey("personality")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
     private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
     private val assistantNameKey = stringPreferencesKey("assistant_name")
@@ -157,7 +159,8 @@ class AppSettingsStore(private val context: Context) {
             bargeInEnabled = prefs[bargeInKey] ?: true,
             announceNotificationsEnabled = prefs[announceNotificationsKey] ?: false,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
-            systemPrompt = DEFAULT_SYSTEM_PROMPT.trim(),
+            personalityId = Personalities.byId(prefs[personalityKey]).id,
+            systemPrompt = Personalities.byId(prefs[personalityKey]).prompt,
             assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
             greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() && it.trim() != DEFAULT_GREETING } ?: DEFAULT_GREETING,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
@@ -186,6 +189,11 @@ class AppSettingsStore(private val context: Context) {
     suspend fun setLanguageCode(code: String) {
         if (!AssistantOptions.isApprovedLanguage(code)) throw UserInputException("Choose a supported language.")
         context.settingsDataStore.edit { it[languageCodeKey] = code }
+    }
+
+    suspend fun setPersonality(id: String) {
+        if (!Personalities.isKnown(id)) throw UserInputException("Choose one of the listed personalities.")
+        context.settingsDataStore.edit { it[personalityKey] = Personalities.byId(id).id }
     }
 
     suspend fun setMemoryEnabled(enabled: Boolean) {

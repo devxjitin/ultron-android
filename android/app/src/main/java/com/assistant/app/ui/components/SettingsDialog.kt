@@ -102,6 +102,7 @@ fun SettingsPage(
     onBargeInToggled: (Boolean) -> Unit,
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
+    onPersonalitySelected: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, String, String, Int) -> Unit,
     knowledgeDocuments: List<RagDocument>,
     isSavingKnowledgeDocument: Boolean,
@@ -130,8 +131,6 @@ fun SettingsPage(
     onPendingNavigationHandled: () -> Unit = {},
     /** True while a Developer Save is running; Save is disabled so it can't be submitted twice. */
     isSavingDeveloper: Boolean = false,
-    license: com.assistant.app.ui.LicenseSummary? = null,
-    onRemoveLicense: () -> Unit = {},
 ) {
     var keyInput by remember(currentApiKey) { mutableStateOf(currentApiKey) }
     var keyVisible by remember { mutableStateOf(false) }
@@ -198,7 +197,7 @@ fun SettingsPage(
             when (activeBranch) {
                 0 -> GeneralSettingsContent(
                     settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
-                    onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, license, onRemoveLicense
+                    onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected
                 )
                 1 -> Column {
                     PageLabel("Identity", Modifier.padding(top = 0.dp))
@@ -661,38 +660,16 @@ private fun GeneralSettingsContent(
     onBargeInToggled: (Boolean) -> Unit,
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit,
-    license: com.assistant.app.ui.LicenseSummary?,
-    onRemoveLicense: () -> Unit
+    onPersonalitySelected: (String) -> Unit
 ) {
-    var confirmingRemoveLicense by remember { mutableStateOf(false) }
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
         MicSensitivity.MEDIUM to "Best for normal rooms",
         MicSensitivity.HIGH to "Picks up quiet voices"
     )
     Column {
-        if (license != null) {
-            PageLabel("Activation", Modifier.padding(top = 0.dp))
-            PageCard {
-                Text(license.maskedKey, color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 15.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
-                license.detailRows.forEach { (label, value) -> PageRow(label, value) }
-                TextButton(onClick = { confirmingRemoveLicense = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                    Text("Remove key from this phone", color = AssistantError)
-                }
-            }
-            if (confirmingRemoveLicense) {
-                AlertDialog(
-                    onDismissRequest = { confirmingRemoveLicense = false },
-                    title = { Text("Remove activation key?") },
-                    text = { Text("Ultron locks on this phone until a key is entered again. The key itself stays valid.") },
-                    confirmButton = {
-                        TextButton(onClick = { confirmingRemoveLicense = false; onRemoveLicense() }) { Text("Remove", color = AssistantError) }
-                    },
-                    dismissButton = { TextButton(onClick = { confirmingRemoveLicense = false }) { Text("Cancel") } }
-                )
-            }
-        }
+        SettingsHeading("Personality")
+        PersonalityPicker(selectedId = settings.personalityId, onSelect = onPersonalitySelected)
         SettingsHeading("Model")
         SettingsDropdown(
             value = AssistantOptions.liveModels.firstOrNull { it.id == settings.liveModel }?.label ?: settings.liveModel,

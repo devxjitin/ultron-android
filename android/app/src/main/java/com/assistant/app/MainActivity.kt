@@ -61,6 +61,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Inline base64 PDF requests must stay well under Gemini's ~20 MB request limit. */
         const val MAX_PDF_BYTES = 10 * 1024 * 1024
+        /** Id of a scheduled prompt to run now, set by its "unlock to run" notification. */
+        const val EXTRA_RUN_SCHEDULE = "run_schedule"
     }
 
     private class PdfTooLargeException : IOException("PDF exceeds 10 MB")
@@ -157,6 +159,28 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAssistIntent(intent)
+        handleScheduleIntent(intent)
+    }
+
+    /**
+     * The "unlock to run" notification of a scheduled task opens the app. The activity can show over the lock screen,
+     * so it first asks Android to unlock, and starts the task only once the phone is unlocked.
+     */
+    private fun handleScheduleIntent(intent: Intent?) {
+        val id = intent?.getIntExtra(EXTRA_RUN_SCHEDULE, -1) ?: return
+        if (id < 0) return
+        intent.removeExtra(EXTRA_RUN_SCHEDULE) // so a recreated activity does not run it twice
+        ScheduledPromptService.clearUnlockNotice(this, id)
+        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        if (keyguard?.isKeyguardLocked != true) {
+            ScheduledPromptService.start(this, id, advance = false)
+            return
+        }
+        keyguard.requestDismissKeyguard(this, object : android.app.KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() {
+                ScheduledPromptService.start(this@MainActivity, id, advance = false)
+            }
+        })
     }
 
     /** Starts talking when Ultron is opened as the phone's default assistant (hold home or power). */
@@ -183,6 +207,7 @@ class MainActivity : ComponentActivity() {
         // Only saved automation rules keep the service (and its notification) up; a voice session starts it itself.
         if (com.assistant.app.data.AutomationEngine.hasRules(this)) AppForegroundService.start(this)
         handleAssistIntent(intent)
+        handleScheduleIntent(intent)
 
         setContent {
             var micGranted by remember { mutableStateOf(hasMicPermission()) }
@@ -371,8 +396,8 @@ class MainActivity : ComponentActivity() {
                         onDeleteImage = { viewModel.onDeleteImage(it) },
                         onClearImages = { viewModel.onClearImages() },
                         onDismissShownImage = { viewModel.onDismissShownImage() },
-                        onSendFeatureRequest = { type, name, details, examples, email, done ->
-                            viewModel.onSendFeatureRequest(type, name, details, examples, email, done)
+                        onSendFeatureRequest = { form, done ->
+                            viewModel.onSendFeatureRequest(form, done)
                         },
                         onDeletePastSession = { viewModel.onDeletePastSession(it) },
                         onClearPastConversations = { viewModel.onClearPastConversations() },
@@ -391,6 +416,10 @@ class MainActivity : ComponentActivity() {
                         onSettingsTapped = { viewModel.onSettingsTapped() },
                         onDeveloperTapped = { viewModel.onDeveloperTapped() },
                         onAboutTapped = { viewModel.onAboutTapped() },
+                        onProfileTapped = { viewModel.onProfileTapped() },
+                        onScheduleTapped = { viewModel.onScheduleTapped() },
+                        onRefreshLicense = { access.refresh(quiet = true) },
+                        onRenewLicense = if (BuildConfig.STORE_URL.isNotBlank()) ::openStore else null,
                         onDismissSettings = { viewModel.onDismissSettings() },
                         onClearApiKey = { viewModel.onClearApiKey() },
                         onClearEmbeddingApiKey = { viewModel.onClearEmbeddingApiKey() },
@@ -400,6 +429,7 @@ class MainActivity : ComponentActivity() {
                         onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
                         onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
                         onAnnounceNotificationsToggled = { enabled -> viewModel.onAnnounceNotificationsToggled(enabled) },
+                        onPersonalitySelected = { id -> viewModel.onPersonalitySelected(id) },
                         onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
                         onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, retrievalLimit ->
                             viewModel.onSaveDeveloperChanges(

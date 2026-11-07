@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/** Sends a skill or connector request to the Ultron API (mcp/feature-requests), which emails the developer. Blocks. */
+/** Sends a skill or connector request or a bug report to the Ultron API (mcp/feature-requests), which emails the developer. Blocks. */
 class FeatureRequestClient {
     private val http = HttpClients.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -15,12 +15,13 @@ class FeatureRequestClient {
         .build()
 
     /** Throws [FeatureRequestException] with a message fit to show the user when it could not be sent. */
-    fun send(type: String, name: String, details: String, examples: String, email: String, appVersion: String) {
+    fun send(type: String, name: String, details: String, examples: String, email: String, appVersion: String, device: String = "") {
         if (!ApiClient.isConfigured) throw FeatureRequestException("Sending is not set up in this build.")
         val auth = ApiClient.authHeader() ?: throw FeatureRequestException("Could not sign in. Check the internet and try again.")
         val body = JSONObject()
             .put("type", type).put("name", name).put("details", details)
             .put("examples", examples).put("email", email).put("appVersion", appVersion)
+            .apply { if (device.isNotBlank()) put("device", device) }
         val request = Request.Builder()
             .url(ApiClient.url("/v1/requests"))
             .header("Authorization", auth)
@@ -43,7 +44,8 @@ class FeatureRequestClient {
         return when {
             code == 429 -> "You have sent a few requests today already. Please try again tomorrow."
             error == "bad_email" -> "That email address does not look right."
-            error == "bad_name" || error == "bad_details" -> "Please add a name and a few words about what you need."
+            error == "bad_name" || error == "bad_details" -> "Please add a title and a few words of detail."
+            error == "bad_type" -> "Bug reports need a server update. Please email the developer for now."
             else -> "Could not send it right now. Please try again later."
         }
     }

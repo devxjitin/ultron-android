@@ -1,5 +1,17 @@
 package com.assistant.app.ui.components
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.widget.Toast
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.ui.platform.LocalContext
+import com.assistant.app.BuildConfig
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -44,11 +56,33 @@ import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-/** Help and support: ask the developer for a skill or a connector. [onRequest] gets "skill" or "connector". */
+/** Where support emails go, from the Contact card and the About page. */
+const val DEVELOPER_EMAIL = "devxjitin@gmail.com"
+
+/** "Pixel 9, Android 16 (API 36)": the phone details a bug report and a support email carry. */
+fun deviceSummary(): String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}, " +
+    "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+
+/**
+ * Help and support: email the developer, report a bug, or ask for a skill or a connector.
+ * [onRequest] gets "bug", "skill" or "connector" and opens that form.
+ */
 @Composable
 fun HelpPage(onRequest: (String) -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     PageColumn(modifier) {
-        PageLabel("Ask the developer")
+        PageLabel("Get help")
+        HelpAction(
+            Icons.Outlined.Email, "Email the developer",
+            "Write to $DEVELOPER_EMAIL. Your app version and phone are filled in for you."
+        ) { emailDeveloper(context) }
+        Spacer(Modifier.height(12.dp))
+        HelpAction(
+            Icons.Outlined.BugReport, "Report a bug",
+            "Something broke or works the wrong way? Tell the developer what happened."
+        ) { onRequest("bug") }
+        Spacer(Modifier.height(24.dp))
+        PageLabel("Request a feature")
         Text(
             "Need something Ultron cannot do yet? Tell the developer what you need. It is sent from inside the app, and you can add your email to get a reply.",
             color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 21.sp, modifier = Modifier.padding(horizontal = 4.dp)
@@ -90,5 +124,22 @@ private fun HelpAction(icon: ImageVector, title: String, text: String, onClick: 
         }
         Spacer(Modifier.size(8.dp))
         Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = AssistantTextMuted)
+    }
+}
+
+/** Opens the phone's email app with a support email to the developer; copies the address when there is no email app. */
+private fun emailDeveloper(context: Context) {
+    val subject = "Ultron support (v${BuildConfig.VERSION_NAME})"
+    val body = "\n\n\n---\nApp version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\nPhone: ${deviceSummary()}"
+    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(DEVELOPER_EMAIL))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+    try {
+        context.startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Email", DEVELOPER_EMAIL))
+        Toast.makeText(context, "No email app found. Address copied: $DEVELOPER_EMAIL", Toast.LENGTH_LONG).show()
     }
 }

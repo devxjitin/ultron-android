@@ -1,14 +1,14 @@
-"""Skill and connector requests sent from inside the Ultron app, emailed to the developer.
+"""Skill and connector requests and bug reports sent from inside the Ultron app, emailed to the developer.
 
 Route (behind the Ultron HTTP API; the Firebase ID token was already checked by API Gateway):
-  POST /v1/requests  {"type": "skill"|"connector", "name", "details", "examples"?, "email"?, "appVersion"?}
+  POST /v1/requests  {"type": "skill"|"connector"|"bug", "name", "details", "examples"?, "email"?, "appVersion"?, "device"?}
   -> 200 {"id", "emailed"}; 400 {"error"} for a bad form; 429 {"error": "too_many"} after DAILY_LIMIT requests a day.
 
 Every request is stored first (DynamoDB), then emailed with Amazon SES. If the email cannot be sent the request is still
 kept and the answer says "emailed": false, so nothing the user wrote is lost.
 
 Items in the table (key "id" S):
-  a request:   id (uuid), type, name, details, examples, email, appVersion, uid, createdAt (epoch seconds)
+  a request:   id (uuid), type, name, details, examples, email, appVersion, device, uid, createdAt (epoch seconds)
   a counter:   id "limit#<uid>#<yyyymmdd>", count N, expiresAt N  (how many requests that user sent that day; DynamoDB's
                time-to-live setting on expiresAt deletes it a couple of days later, so counters do not pile up)
 
@@ -27,8 +27,9 @@ import appcheck
 DAILY_LIMIT = 5
 # Counters are deleted by DynamoDB TTL once their day is long over.
 COUNTER_TTL_SECONDS = 2 * 86_400
-TYPES = {"skill": "Skill", "connector": "Connector"}
-LIMITS = {"name": 80, "details": 1500, "examples": 600, "email": 120, "appVersion": 20}
+TYPES = {"skill": "Skill", "connector": "Connector", "bug": "Bug"}
+# device is the phone model and Android version a bug report carries, only when the user left that option on.
+LIMITS = {"name": 80, "details": 1500, "examples": 600, "email": 120, "appVersion": 20, "device": 200}
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 _table = None
@@ -107,17 +108,22 @@ def _one_line(text):
 
 def _email(form, request_id):
     kind = TYPES[form["type"]]
+    bug = form["type"] == "bug"
     lines = [
-        f"{kind} requested: {form['name']}",
+        f"Bug reported: {form['name']}" if bug else f"{kind} requested: {form['name']}",
         "",
-        "What it should do:",
+        "What happened:" if bug else "What it should do:",
         form["details"],
     ]
     if form["examples"]:
-        lines += ["", "Example commands:", form["examples"]]
-    lines += ["", f"Reply to: {form['email'] or '(not given)'}", f"App version: {form['appVersion'] or '(unknown)'}", f"Request id: {request_id}"]
+        lines += ["", "What they expected:" if bug else "Example commands:", form["examples"]]
+    lines += ["", f"Reply to: {form['email'] or '(not given)'}", f"App version: {form['appVersion'] or '(unknown)'}"]
+    if form["device"]:
+        lines.append(f"Device: {form['device']}")
+    lines.append(f"Request id: {request_id}")
+    subject = f"[Ultron] Bug: {form['name']}" if bug else f"[Ultron] {kind} request: {form['name']}"
     message = {
-        "Subject": {"Data": _one_line(f"[Ultron] {kind} request: {form['name']}")[:200], "Charset": "UTF-8"},
+        "Subject": {"Data": _one_line(subject)[:200], "Charset": "UTF-8"},
         "Body": {"Text": {"Data": "\n".join(lines), "Charset": "UTF-8"}},
     }
     params = {

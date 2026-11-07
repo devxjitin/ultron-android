@@ -159,19 +159,16 @@ fun AboutPage(
     }
 }
 
-/** Every version and what changed in it, newest first, read from the changelog shipped inside the app. */
+/** What changed in the newest version only, read from the changelog shipped inside the app. */
 @Composable
 private fun WhatsNew() {
     val context = LocalContext.current
-    val entries = remember {
+    val latest = remember {
         runCatching { Changelog.parse(context.assets.open("changelog.md").bufferedReader().use { it.readText() }) }
-            .getOrDefault(emptyList())
+            .getOrDefault(emptyList()).firstOrNull()
     }
-    if (entries.isEmpty()) return
-    PageLabel("What's new")
-    entries.forEachIndexed { index, entry ->
-        // A gap between versions so each one reads as its own card.
-        if (index > 0) Spacer(Modifier.height(12.dp))
+    latest?.let { entry ->
+        PageLabel("What's new")
         PageCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Version ${entry.version}", color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

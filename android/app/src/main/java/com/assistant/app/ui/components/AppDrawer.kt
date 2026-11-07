@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Code
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,11 +65,13 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 /** Pages reachable from the left menu. */
 enum class NavTab(val label: String, val icon: ImageVector) {
     HOME("Home", AssistantIcons.Home),
+    PROFILE("Profile", Icons.Outlined.AccountCircle),
     KNOWLEDGE("Knowledge", AssistantIcons.Knowledge),
     MEMORY("Memory", Icons.Outlined.Psychology),
     HISTORY("History", Icons.Outlined.History),
     IMAGES("Images", Icons.Outlined.Image),
     SKILLS("Skills", Icons.Outlined.Bolt),
+    SCHEDULE("Schedule", Icons.Outlined.Schedule),
     CONNECTORS("Connectors", Icons.Outlined.Extension),
     SETTINGS("Settings", AssistantIcons.Settings),
     USAGE("Usage", Icons.Outlined.Insights),
