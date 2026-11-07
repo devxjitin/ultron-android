@@ -47,24 +47,6 @@ import com.assistant.app.ui.theme.AssistantTextSecondary
 /** What the request form sends. [type] is "skill" or "connector". */
 data class FeatureRequest(val type: String, val name: String, val details: String, val examples: String, val email: String)
 
-/** A card at the end of the Skills and Connectors lists that opens the request form. */
-@Composable
-fun RequestCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(22.dp)
-    Row(
-        modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).clickable(onClick = onClick)
-            .background(AssistantSurface).border(BorderStroke(1.dp, AssistantOutline), shape).padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.size(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Need something that is not here?", color = AssistantTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text("Ask for a skill or connector. It goes straight to the developer.", color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
-        }
-    }
-}
-
 /** The form for asking the developer to add a skill or a connector. [onSend] must call back with whether it was sent. */
 @Composable
 fun FeatureRequestDialog(

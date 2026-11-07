@@ -84,8 +84,7 @@ fun SkillsPage(
     onToggle: (String, Boolean) -> Unit,
     onSave: (name: String, description: String, body: String) -> String?,
     onDelete: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    onRequest: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     var detailName by rememberSaveable { mutableStateOf<String?>(null) }
     var categoryFilter by rememberSaveable { mutableStateOf<String?>(null) }
@@ -133,7 +132,6 @@ fun SkillsPage(
                     )
                 }
             }
-            RequestCard(onRequest)
             Spacer(Modifier.height(24.dp))
         }
     }

@@ -186,8 +186,7 @@ fun ConnectorsPage(
     enabledTools: Set<DeviceTool>,
     onToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit,
     onRequestPermissions: (List<String>) -> Unit,
-    modifier: Modifier = Modifier,
-    onRequest: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     // Android permission and special-access state changes outside the app, so re-read it on resume.
@@ -345,7 +344,6 @@ fun ConnectorsPage(
                     inGroup.forEach { Card(it) }
                 }
             }
-            RequestCard(onRequest)
             Spacer(Modifier.height(24.dp))
         }
     }

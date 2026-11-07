@@ -69,6 +69,7 @@ import com.assistant.app.ui.components.AssistantToastHost
 import com.assistant.app.ui.components.MemoryPage
 import com.assistant.app.ui.components.HistoryPage
 import com.assistant.app.ui.components.FeatureRequestDialog
+import com.assistant.app.ui.components.HelpPage
 import com.assistant.app.ui.components.ImageOverlay
 import com.assistant.app.ui.components.ImagesPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
@@ -139,6 +140,7 @@ fun AssistantScreen(
     onRestoreMemory: (String) -> Unit = {},
     onHistoryTapped: () -> Unit = {},
     onImagesTapped: () -> Unit = {},
+    onHelpTapped: () -> Unit = {},
     onPickImage: () -> Unit = {},
     onSaveImage: (String, String) -> Unit = { _, _ -> },
     onCancelPendingImage: () -> Unit = {},
@@ -232,6 +234,7 @@ fun AssistantScreen(
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
                         NavTab.HISTORY -> guardedNav(onHistoryTapped)
                         NavTab.IMAGES -> guardedNav(onImagesTapped)
+                        NavTab.HELP -> guardedNav(onHelpTapped)
                         NavTab.SETTINGS -> guardedNav(onSettingsTapped)
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
                         NavTab.ABOUT -> guardedNav(onAboutTapped)
@@ -327,6 +330,10 @@ fun AssistantScreen(
                 )
             }
 
+            if (tab == NavTab.HELP) {
+                HelpPage(onRequest = openRequest, modifier = Modifier.padding(top = topReserve))
+            }
+
             if (tab == NavTab.IMAGES) {
                 val filesDir = androidx.compose.ui.platform.LocalContext.current.filesDir
                 ImagesPage(
@@ -349,8 +356,7 @@ fun AssistantScreen(
                     enabledTools = uiState.settings.enabledDeviceTools,
                     onToolsEnabled = onConnectorToolsEnabled,
                     onRequestPermissions = onRequestConnectorPermissions,
-                    modifier = Modifier.padding(top = topReserve),
-                    onRequest = { openRequest("connector") }
+                    modifier = Modifier.padding(top = topReserve)
                 )
             }
 
@@ -359,7 +365,7 @@ fun AssistantScreen(
                 when (tab) {
                     NavTab.SKILLS -> {
                         val skills by SkillRegistry.entries.collectAsState()
-                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier, onRequest = { openRequest("skill") })
+                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
                     }
                     NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                     NavTab.STORAGE -> StoragePage(

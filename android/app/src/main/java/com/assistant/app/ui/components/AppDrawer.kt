@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
@@ -72,6 +73,7 @@ enum class NavTab(val label: String, val icon: ImageVector) {
     USAGE("Usage", Icons.Outlined.Insights),
     STORAGE("Storage", Icons.Outlined.Inventory2),
     DEVELOPER("Developer", Icons.Outlined.Code),
+    HELP("Help & support", Icons.AutoMirrored.Outlined.HelpOutline),
     ABOUT("About", Icons.Outlined.Info)
 }
 

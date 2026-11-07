@@ -598,6 +598,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onImagesTapped() = openPage(AppPage.IMAGES)
 
+    fun onHelpTapped() = openPage(AppPage.HELP)
+
     private val imageLibrary by lazy { ImageLibrary.forApp(application) }
 
     private fun refreshImages() {
