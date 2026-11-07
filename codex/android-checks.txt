@@ -1,0 +1,81 @@
+> Task :app:objectboxPrepareBuild UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:injectCrashlyticsMappingFileIdDebug UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoDebug UP-TO-DATE
+> Task :app:processDebugGoogleServices UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:generateDebugAndroidTestResValues UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:kaptGenerateStubsDebugKotlin
+
+> Task :app:kaptDebugKotlin
+[ObjectBox] ID model file unchanged: default.json
+[ObjectBox] ObjectBox Generator
+[ObjectBox] Copyright 2017-2025 ObjectBox Ltd, objectbox.io. Licensed under GNU Affero General Public License, Version 3.
+[ObjectBox] This program comes with ABSOLUTELY NO WARRANTY
+[ObjectBox] Processing schema version 1...
+[ObjectBox] Written com.assistant.app.data.ConversationTurnEntityCursor.java
+[ObjectBox] Written com.assistant.app.data.ConversationTurnEntity_.java
+[ObjectBox] Written com.assistant.app.data.KnowledgeChunkEntityCursor.java
+[ObjectBox] Written com.assistant.app.data.KnowledgeChunkEntity_.java
+[ObjectBox] Written com.assistant.app.data.KnowledgeDocumentEntityCursor.java
+[ObjectBox] Written com.assistant.app.data.KnowledgeDocumentEntity_.java
+[ObjectBox] Written com.assistant.app.data.MyObjectBox.java
+[ObjectBox] Processed 3 entities in 175ms
+
+> Task :app:compileDebugKotlin
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/MainActivity.kt:118:32 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/MainActivity.kt:239:34 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/network/GeminiLiveClient.kt:199:112 Unnecessary safe call on a non-null receiver of type 'Response'.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/ui/components/ConnectorsPage.kt:193:21 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/ui/components/ConnectorsPage.kt:225:17 'when' is exhaustive so 'else' is redundant here.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/viewmodel/AssistantViewModel.kt:2345:47 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/viewmodel/AssistantViewModel.kt:2354:52 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///X:/KIRA/android/app/src/main/java/com/assistant/app/viewmodel/AssistantViewModel.kt:2384:56 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:generateDebugLintReportModel
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:transformDebugClassesWithAsm
+> Task :app:generateDebugAndroidTestLintModel
+> Task :app:generateDebugUnitTestLintModel
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kaptGenerateStubsDebugUnitTestKotlin
+> Task :app:kaptDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest
+> Task :app:lintAnalyzeDebug
+> Task :app:lintAnalyzeDebugAndroidTest
+> Task :app:lintAnalyzeDebugUnitTest
+
+> Task :app:lintReportDebug
+Wrote HTML report to file:///X:/KIRA/android/app/build/reports/lint-results-debug.html
+
+> Task :app:lintDebug
+
+BUILD SUCCESSFUL in 3m 34s
+45 actionable tasks: 25 executed, 20 up-to-date

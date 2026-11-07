@@ -1,0 +1,3 @@
+B01 reproduced against actual Lambda + repository fake: revoked item returns active=true during activation race.
+B02 expression probe: negative age passes offline grace; Kotlin source verified, no device test.
+B03 expression probe: ordinary payload word suppresses warning; Kotlin source verified, no model exploit claimed.
