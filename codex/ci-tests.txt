@@ -1,0 +1,18 @@
+test_android_assets_including_markdown_are_app_inputs (test_changes.ChangesTests.test_android_assets_including_markdown_are_app_inputs) ... ok
+test_backend_or_website_edits_do_not_publish (test_changes.ChangesTests.test_backend_or_website_edits_do_not_publish) ... ok
+test_checks_only_change_validates_all_without_publishing (test_changes.ChangesTests.test_checks_only_change_validates_all_without_publishing) ... ok
+test_docs_and_python_version_do_not_publish_apk (test_changes.ChangesTests.test_docs_and_python_version_do_not_publish_apk) ... ok
+test_multi_commit_push_uses_before_after (test_changes.ChangesTests.test_multi_commit_push_uses_before_after) ... ok
+test_pr_uses_merge_base_diff_and_covers_deleted_paths (test_changes.ChangesTests.test_pr_uses_merge_base_diff_and_covers_deleted_paths) ... ok
+test_publishing_logic_is_validated_and_released (test_changes.ChangesTests.test_publishing_logic_is_validated_and_released) ... ok
+test_unreachable_base_and_manual_runs_validate_everything (test_changes.ChangesTests.test_unreachable_base_and_manual_runs_validate_everything) ... ok
+test_missing_heading_is_rejected (test_version_bump.VersionBumpTests.test_missing_heading_is_rejected) ... ok
+test_newer_version_passes_and_compares_numbers_not_text (test_version_bump.VersionBumpTests.test_newer_version_passes_and_compares_numbers_not_text) ... ok
+test_older_version_is_rejected (test_version_bump.VersionBumpTests.test_older_version_is_rejected) ... ok
+test_top_version_is_the_first_heading (test_version_bump.VersionBumpTests.test_top_version_is_the_first_heading) ... ok
+test_unchanged_version_is_rejected (test_version_bump.VersionBumpTests.test_unchanged_version_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.002s
+
+OK

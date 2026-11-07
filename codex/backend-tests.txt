@@ -1,0 +1,76 @@
+test_enforce_mode_refuses_missing_and_bad_tokens (test_appcheck.CheckTests.test_enforce_mode_refuses_missing_and_bad_tokens) ... ok
+test_lambda_copies_are_identical (test_appcheck.CheckTests.test_lambda_copies_are_identical) ... ok
+test_log_mode_lets_missing_and_bad_tokens_through (test_appcheck.CheckTests.test_log_mode_lets_missing_and_bad_tokens_through) ... ok
+test_off_or_no_project_skips_the_check (test_appcheck.CheckTests.test_off_or_no_project_skips_the_check) ... ok
+test_web_extract_refuses_in_enforce_mode_when_behind_the_api (test_appcheck.CheckTests.test_web_extract_refuses_in_enforce_mode_when_behind_the_api) ... ok
+test_changed_payload_invalidates_signature (test_appcheck.VerifyTests.test_changed_payload_invalidates_signature) ... ok
+test_expired_token_is_rejected (test_appcheck.VerifyTests.test_expired_token_is_rejected) ... ok
+test_garbage_never_raises (test_appcheck.VerifyTests.test_garbage_never_raises) ... ok
+test_keys_are_cached_between_calls (test_appcheck.VerifyTests.test_keys_are_cached_between_calls) ... ok
+test_non_rs256_and_unknown_key_are_rejected (test_appcheck.VerifyTests.test_non_rs256_and_unknown_key_are_rejected) ... ok
+test_other_projects_token_is_rejected (test_appcheck.VerifyTests.test_other_projects_token_is_rejected) ... ok
+test_tampered_signature_is_rejected (test_appcheck.VerifyTests.test_tampered_signature_is_rejected) ... ok
+test_valid_token_passes (test_appcheck.VerifyTests.test_valid_token_passes) ... ok
+test_other_paths_are_not_found_even_with_the_old_secret (test_lambdas.JwtModeTests.test_other_paths_are_not_found_even_with_the_old_secret) ... ok
+test_the_web_route_runs_without_a_secret_segment (test_lambdas.JwtModeTests.test_the_web_route_runs_without_a_secret_segment) ... ok
+test_a_bad_batch_member_does_not_fail_the_valid_ones (test_lambdas.RpcEnvelopeTests.test_a_bad_batch_member_does_not_fail_the_valid_ones) ... ok
+test_base64_bodies_are_decoded (test_lambdas.RpcEnvelopeTests.test_base64_bodies_are_decoded) ... ok
+test_non_object_bodies_get_invalid_request (test_lambdas.RpcEnvelopeTests.test_non_object_bodies_get_invalid_request) ... ok
+test_wrong_params_and_arguments_types_are_invalid_params (test_lambdas.RpcEnvelopeTests.test_wrong_params_and_arguments_types_are_invalid_params) ... ok
+test_wrong_secret_path_is_not_found (test_lambdas.RpcEnvelopeTests.test_wrong_secret_path_is_not_found) ... ok
+test_activating_again_on_the_same_device_is_a_no_op (test_license.LicenseTests.test_activating_again_on_the_same_device_is_a_no_op) ... ok
+test_answer_carries_the_buyer_details (test_license.LicenseTests.test_answer_carries_the_buyer_details) ... ok
+test_answer_has_empty_details_when_none_were_entered (test_license.LicenseTests.test_answer_has_empty_details_when_none_were_entered) ... ok
+test_calls_without_a_user_are_refused (test_license.LicenseTests.test_calls_without_a_user_are_refused) ... ok
+test_expired_and_revoked_keys_are_refused (test_license.LicenseTests.test_expired_and_revoked_keys_are_refused) ... ok
+test_first_activation_binds_and_starts_the_clock (test_license.LicenseTests.test_first_activation_binds_and_starts_the_clock) ... ok
+test_key_moves_to_a_new_device_and_the_old_one_locks (test_license.LicenseTests.test_key_moves_to_a_new_device_and_the_old_one_locks) ... ok
+test_lifetime_key_never_expires (test_license.LicenseTests.test_lifetime_key_never_expires) ... ok
+test_malformed_key_is_a_bad_request (test_license.LicenseTests.test_malformed_key_is_a_bad_request) ... ok
+test_moving_does_not_restart_the_clock (test_license.LicenseTests.test_moving_does_not_restart_the_clock) ... ok
+test_normalize_accepts_typing_variations (test_license.LicenseTests.test_normalize_accepts_typing_variations) ... ok
+test_race_with_another_device_is_refused (test_license.LicenseTests.test_race_with_another_device_is_refused) ... ok
+test_status_does_not_bind_a_key (test_license.LicenseTests.test_status_does_not_bind_a_key) ... ok
+test_store_set_expiry_is_kept (test_license.LicenseTests.test_store_set_expiry_is_kept) ... ok
+test_unknown_key_is_not_active (test_license.LicenseTests.test_unknown_key_is_not_active) ... ok
+test_allow_move_clears_the_cooldown (test_license_admin.AdminTests.test_allow_move_clears_the_cooldown) ... ok
+test_create_defaults_and_count (test_license_admin.AdminTests.test_create_defaults_and_count) ... ok
+test_create_stores_only_the_hash_and_returns_the_key_once (test_license_admin.AdminTests.test_create_stores_only_the_hash_and_returns_the_key_once) ... ok
+test_create_validates_input (test_license_admin.AdminTests.test_create_validates_input) ... ok
+test_empty_admin_list_locks_everyone_out (test_license_admin.AdminTests.test_empty_admin_list_locks_everyone_out) ... ok
+test_only_verified_admin_emails_get_in (test_license_admin.AdminTests.test_only_verified_admin_emails_get_in) ... ok
+test_state_and_newest_first (test_license_admin.AdminTests.test_state_and_newest_first) ... ok
+test_unknown_route (test_license_admin.AdminTests.test_unknown_route) ... ok
+test_update_can_extend_expiry_and_rejects_bad_values (test_license_admin.AdminTests.test_update_can_extend_expiry_and_rejects_bad_values) ... ok
+test_update_edits_details_and_revokes (test_license_admin.AdminTests.test_update_edits_details_and_revokes) ... ok
+test_update_unknown_id_is_not_found (test_license_admin.AdminTests.test_update_unknown_id_is_not_found) ... ok
+test_bad_arguments_never_search (test_web_search.WebSearchTests.test_bad_arguments_never_search) ... ok
+test_batches_and_large_bodies_are_refused (test_web_search.WebSearchTests.test_batches_and_large_bodies_are_refused) ... ok
+test_discovery_has_one_read_only_tool (test_web_search.WebSearchTests.test_discovery_has_one_read_only_tool) ... ok
+test_empty_results_are_a_tool_error (test_web_search.WebSearchTests.test_empty_results_are_a_tool_error) ... ok
+test_handler_requires_sign_in_post_and_app_check (test_web_search.WebSearchTests.test_handler_requires_sign_in_post_and_app_check) ... ok
+test_results_are_trimmed_and_marked_untrusted (test_web_search.WebSearchTests.test_results_are_trimmed_and_marked_untrusted) ... ok
+test_unexpected_failures_do_not_leak_details (test_web_search.WebSearchTests.test_unexpected_failures_do_not_leak_details) ... ok
+test_appcheck_enforced (test_youtube_search.YouTubeSearchTests.test_appcheck_enforced) ... ok
+test_bad_arguments_never_extract (test_youtube_search.YouTubeSearchTests.test_bad_arguments_never_extract) ... ok
+test_caption_fetch_rejects_arbitrary_hosts (test_youtube_search.YouTubeSearchTests.test_caption_fetch_rejects_arbitrary_hosts) ... ok
+test_discovery_has_only_four_read_tools (test_youtube_search.YouTubeSearchTests.test_discovery_has_only_four_read_tools) ... ok
+test_external_addresses_and_extractor_pseudo_urls_are_rejected (test_youtube_search.YouTubeSearchTests.test_external_addresses_and_extractor_pseudo_urls_are_rejected) ... ok
+test_extract_never_downloads_and_limits_lazy_entries (test_youtube_search.YouTubeSearchTests.test_extract_never_downloads_and_limits_lazy_entries) ... ok
+test_http_bodies_and_notifications (test_youtube_search.YouTubeSearchTests.test_http_bodies_and_notifications) ... ok
+test_protocol_and_download_rejection (test_youtube_search.YouTubeSearchTests.test_protocol_and_download_rejection) ... ok
+test_route_and_identity_are_checked_before_appcheck (test_youtube_search.YouTubeSearchTests.test_route_and_identity_are_checked_before_appcheck) ... ok
+test_search_is_bounded_and_marks_untrusted_results (test_youtube_search.YouTubeSearchTests.test_search_is_bounded_and_marks_untrusted_results) ... ok
+test_transcript_prefers_manual_and_does_not_fetch_media (test_youtube_search.YouTubeSearchTests.test_transcript_prefers_manual_and_does_not_fetch_media) ... ok
+test_upstream_failure_and_timeout_are_tool_errors (test_youtube_search.YouTubeSearchTests.test_upstream_failure_and_timeout_are_tool_errors) ... ok
+test_video_and_channel_addresses_are_normalized (test_youtube_search.YouTubeSearchTests.test_video_and_channel_addresses_are_normalized) ... ok
+
+----------------------------------------------------------------------
+Ran 66 tests in 0.145s
+
+OK
+App Check missing token (mode=enforce, path=/v1/web/mcp)
+App Check bad signature (mode=enforce, path=/v1/web/mcp)
+App Check missing token (mode=log, path=/v1/web/mcp)
+App Check bad signature (mode=log, path=/v1/web/mcp)
+App Check missing token (mode=enforce, path=/v1/web/mcp)
