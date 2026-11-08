@@ -1,0 +1,7 @@
+# Baseline profile for Ultron, written by hand (no benchmark device was available when it was added).
+# H = hot, S = runs at startup, P = runs soon after startup. Wildcards mark every method of our own code, so the
+# runtime compiles the screens, the voice session and the stores ahead of time. Compose and the other libraries
+# ship their own profiles, which the build merges in. Replace with a measured profile when a device is available:
+# generate it with a Macrobenchmark BaselineProfileRule and overwrite this file.
+HSPLcom/assistant/app/**;->**(**)**
+Lcom/assistant/app/**;
