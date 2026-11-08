@@ -1,16 +1,20 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release, web-extract and license Lambdas.
+Description: Ultron API - one HTTP API that checks the caller's Firebase token, in front of the release, web-extract, web-search, YouTube-search, license and request Lambdas.
 Metadata:
   AWSToolsMetrics:
     AWSAgentToolkit: aws-cloudformation@3
   com.aws.cloudformation.Context:
     why: Keep the backend runtime aligned with Python 3.14 CI and packaged Linux dependencies.
     must: [Rebuild native dependency packages before migrating a live runtime, Preserve existing authentication and data]
-# Deploy without the SAM CLI (build the web-extract zip first):
+# Deploy without the SAM CLI (build the three zips first):
 #   python mcp/web-extract/build.py
+#   python mcp/web-search/build.py
+#   python mcp/youtube-search/build.py
 #   aws cloudformation package --template-file infra/api.yaml --s3-bucket <bucket> --s3-prefix cfn --output-template-file packaged.yaml
 #   aws cloudformation deploy --template-file packaged.yaml --stack-name ultron-api --capabilities CAPABILITY_IAM
+# Every route must be an Event of a function in THIS template. Each deploy re-imports the API from the routes found here
+# and deletes any route that was added from another stack, which is how the search and YouTube MCP routes went missing.
 # The existing hand-made resources (ultron-updates, web-extract-mcp, the releases bucket) are not touched. The old
 # Function URLs keep working until every phone has moved to this API.
 
@@ -197,6 +201,61 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${WebExtractFunction}"
+      RetentionInDays: 14
+
+  WebSearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ultron-api-web-search
+      # Built by mcp/web-search/build.py with Linux x86_64 wheels.
+      CodeUri: ../mcp/web-search/function.zip
+      Architectures: [x86_64]
+      MemorySize: 256
+      Timeout: 25
+      Environment:
+        Variables:
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
+      Events:
+        Mcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/search/mcp
+            Method: POST
+
+  WebSearchLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${WebSearchFunction}"
+      RetentionInDays: 14
+
+  # Read-only yt-dlp lookups (search, info, listings, captions). Downloads never run here; they stay on the phone.
+  YouTubeSearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ultron-api-youtube-search
+      # Built by mcp/youtube-search/build.py with Linux x86_64 wheels.
+      CodeUri: ../mcp/youtube-search/function.zip
+      Architectures: [x86_64]
+      MemorySize: 512
+      Timeout: 25
+      Environment:
+        Variables:
+          FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
+          APP_CHECK_MODE: !Ref AppCheckMode
+      Events:
+        Mcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UltronApi
+            Path: /v1/youtube/mcp
+            Method: POST
+
+  YouTubeSearchLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${YouTubeSearchFunction}"
       RetentionInDays: 14
 
   # One item per activation key sold on the website store (see mcp/license/lambda_function.py for the fields).

@@ -13,13 +13,16 @@ YouTube can block cloud IPs, require login or refuse captions. Such failures ret
 
 ## Deployment
 
-`infra/youtube.yaml` owns a separate stack attached to the existing Ultron API. This avoids replacing existing web/license/update functions or reapplying their configuration. The new route uses the existing Firebase JWT authorizer, and the function additionally enforces Firebase App Check. No public Lambda Function URL is created.
+`infra/api.yaml` (the `ultron-api` stack) owns this function and its route. Keep every route in that template: each deploy re-imports the API from the routes found there and deletes any route created from another stack. That is how the search and YouTube routes went missing on 7 November 2026, and why the two separate stacks were removed. The route uses the Firebase JWT authorizer, and the function also enforces Firebase App Check. No public Lambda Function URL is created.
 
 ```powershell
+python mcp/web-extract/build.py
 python mcp/youtube-search/build.py
-aws cloudformation package --template-file infra/youtube.yaml --s3-bucket <private-artifact-bucket> --s3-prefix cfn/youtube --output-template-file <packaged.yaml> --region us-east-1
-aws cloudformation deploy --template-file <packaged.yaml> --stack-name ultron-youtube --capabilities CAPABILITY_IAM --parameter-overrides ApiId=<existing-http-api-id> AuthorizerId=<existing-firebase-jwt-authorizer-id> --region us-east-1
+aws cloudformation package --template-file infra/api.yaml --s3-bucket <private-artifact-bucket> --s3-prefix cfn --output-template-file <packaged.yaml> --region us-east-1
+aws cloudformation deploy --template-file <packaged.yaml> --stack-name ultron-api --capabilities CAPABILITY_IAM --region us-east-1
 ```
+
+Run the build of every function whose zip is named in `infra/api.yaml` first. Parameters you do not override keep their live values (domain, admin emails and so on).
 
 Endpoint: `POST https://api.devxjitin.dev/v1/youtube/mcp`.
 Lambda target: `ultron-api-youtube-search`, Python 3.14, 512 MB, 25-second timeout. The existing API's default route throttles and account concurrency limits apply. Reserved concurrency is omitted because this account must keep its minimum unreserved capacity.
