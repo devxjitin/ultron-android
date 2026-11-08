@@ -10,13 +10,16 @@ Results are trimmed to title, link and a 500-character excerpt, only `http(s)` l
 
 ## Deployment
 
-`infra/search.yaml` owns a separate stack attached to the existing Ultron API, with the existing Firebase JWT authorizer and App Check, like the YouTube stack. No public Function URL is created.
+`infra/api.yaml` (the `ultron-api` stack) owns this function and its route. Keep every route in that template: each deploy re-imports the API from the routes found there and deletes any route created from another stack. That is how the search and YouTube routes went missing on 7 November 2026, and why the two separate stacks were removed. The route uses the Firebase JWT authorizer, and the function also enforces Firebase App Check. No public Lambda Function URL is created.
 
 ```powershell
+python mcp/web-extract/build.py
 python mcp/web-search/build.py
-aws cloudformation package --template-file infra/search.yaml --s3-bucket <private-artifact-bucket> --s3-prefix cfn/search --output-template-file <packaged.yaml> --region us-east-1
-aws cloudformation deploy --template-file <packaged.yaml> --stack-name ultron-search --capabilities CAPABILITY_IAM --parameter-overrides ApiId=<existing-http-api-id> AuthorizerId=<existing-firebase-jwt-authorizer-id> --region us-east-1
+aws cloudformation package --template-file infra/api.yaml --s3-bucket <private-artifact-bucket> --s3-prefix cfn --output-template-file <packaged.yaml> --region us-east-1
+aws cloudformation deploy --template-file <packaged.yaml> --stack-name ultron-api --capabilities CAPABILITY_IAM --region us-east-1
 ```
+
+Run the build of every function whose zip is named in `infra/api.yaml` first. Parameters you do not override keep their live values (domain, admin emails and so on).
 
 Endpoint: `POST https://api.devxjitin.dev/v1/search/mcp`. Lambda: `ultron-api-web-search`, Python 3.14, 256 MB, 25-second timeout.
 
