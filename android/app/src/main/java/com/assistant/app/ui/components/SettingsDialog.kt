@@ -765,7 +765,7 @@ private fun KnowledgeDocumentRow(doc: RagDocument, onEdit: () -> Unit, onDelete:
                 .background(com.assistant.app.ui.theme.AssistantSelectedBg),
             contentAlignment = androidx.compose.ui.Alignment.Center
         ) {
-            Icon(Icons.Outlined.Description, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(22.dp))
+            Icon(Icons.Outlined.Description, contentDescription = null, tint = com.assistant.app.ui.theme.AssistantTextPrimary, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

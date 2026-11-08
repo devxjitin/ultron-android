@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.16.2 - 2026-11-08
+
+### Changed
+- Storage is a clean list now. It shows one total for what Ultron uses on the phone, and each item has its size and a Clear button. The bars are gone, since nothing there has a limit.
+- Icons across the app match the menu: thin and neutral instead of red or coloured. This covers Storage, Skills, Connectors and the Schedule pickers.
+- Each skill gets an icon that fits what it does, such as a chat bubble for WhatsApp.
+
 ## 1.16.1 - 2026-11-08
 
 ### Changed

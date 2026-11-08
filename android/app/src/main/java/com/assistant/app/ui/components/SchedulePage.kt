@@ -362,7 +362,7 @@ private fun ScheduleEditor(item: ScheduledPrompt, onClose: () -> Unit, onSaved: 
 @Composable
 private fun PickerButton(icon: ImageVector, text: String, modifier: Modifier, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick, shape = AppButtonShape, modifier = modifier.height(48.dp)) {
-        Icon(icon, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = AssistantTextSecondary, modifier = Modifier.size(18.dp))
         Spacer(Modifier.size(8.dp))
         Text(text, color = AssistantTextPrimary, fontSize = 14.sp)
     }

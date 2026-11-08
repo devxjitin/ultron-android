@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.unit.Dp
 import com.assistant.app.data.OWN_SKILLS_CATEGORY
@@ -180,7 +179,7 @@ private fun SkillCard(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: ()
             .background(AssistantSurface).border(BorderStroke(1.dp, AssistantOutline), shape).padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SkillIcon(44.dp, 24.dp)
+            SkillIcon(entry, 44.dp, 22.dp)
             Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(entry.group.name, color = AssistantTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 21.sp)
@@ -198,17 +197,15 @@ private fun SkillCard(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: ()
                 TextButton(onClick = onEdit) { Text("Edit", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
             }
             Spacer(Modifier.weight(1f))
-            Text("View details", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(18.dp))
+            Text("View details", color = AssistantTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AssistantTextSecondary, modifier = Modifier.size(18.dp))
         }
     }
 }
 
 @Composable
-private fun SkillIcon(box: Dp, icon: Dp) {
-    Box(Modifier.size(box).clip(RoundedCornerShape(if (box > 50.dp) 16.dp else 12.dp)).background(AssistantSelectedBg), contentAlignment = Alignment.Center) {
-        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(icon))
-    }
+private fun SkillIcon(entry: SkillEntry, box: Dp, icon: Dp) {
+    NeutralIcon(skillIcon(entry.group.name, entry.category, entry.group.description), box = box, size = icon)
 }
 
 /** A skill's own page: what it is for, its instructions shown as formatted Markdown, and what it can do. Only your own skills can be edited. */
@@ -224,7 +221,7 @@ private fun SkillDetail(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: 
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SkillIcon(56.dp, 30.dp)
+                SkillIcon(entry, 56.dp, 28.dp)
                 Spacer(Modifier.size(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(group.name, color = AssistantTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp)

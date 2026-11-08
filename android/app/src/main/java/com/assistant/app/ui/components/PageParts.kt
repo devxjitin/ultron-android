@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -155,5 +156,29 @@ fun ChoiceChips(options: List<Pair<String, String>>, selectedId: String, onSelec
                 )
             )
         }
+    }
+}
+
+/**
+ * The icon style used across the app, the same quiet look as the menu: a thin outlined glyph in a neutral colour, never red
+ * or tinted. With [boxed] it sits on a soft neutral square, for card headers.
+ */
+@Composable
+fun NeutralIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    boxed: Boolean = true,
+    box: androidx.compose.ui.unit.Dp = 44.dp,
+    size: androidx.compose.ui.unit.Dp = 22.dp
+) {
+    if (boxed) {
+        Box(
+            modifier.size(box).clip(RoundedCornerShape(12.dp)).background(com.assistant.app.ui.theme.AssistantSelectedBg),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = AssistantTextPrimary, modifier = Modifier.size(size))
+        }
+    } else {
+        androidx.compose.material3.Icon(icon, contentDescription = null, tint = AssistantTextSecondary, modifier = modifier.size(size))
     }
 }
