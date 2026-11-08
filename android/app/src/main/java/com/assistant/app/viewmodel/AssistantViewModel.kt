@@ -116,6 +116,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Hard cap on one session, counted from the user's mic tap. It then stops and the user
          *  taps the mic to start again; auto-reconnects inside the cap don't extend it. */
         const val maxSessionMs: Long = 15 * 60_000L
+        /** How long before [maxSessionMs] the user is told the session is about to end. */
+        const val SESSION_WARNING_MS = 60_000L
         /** How long to wait, once the user has finished speaking (local UI heuristic) or a
          *  tool response has been sent back, for the model to produce SOMETHING -- audio,
          *  another tool call, or turnComplete. The Live protocol has no server-side "I'm still
@@ -256,7 +258,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val results = linkedMapOf<String, GeminiLiveClient.ToolResult>()
         val traces = mutableMapOf<String, Pair<com.assistant.app.util.LatencyTool?, Long>>()
     }
-    private var awaitingToolContinuation = false
 
     /** A session opened ahead of time (while idle, before the user taps the mic) so the model
      *  has already ingested the persona + knowledge-base system instruction by the time the
@@ -598,7 +599,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
         if (page == AppPage.STORAGE || page == AppPage.HISTORY) refreshPastConversations()
-        if (page == AppPage.STORAGE || page == AppPage.IMAGES || page == AppPage.KNOWLEDGE) refreshImages()
+        if (page == AppPage.STORAGE || page == AppPage.KNOWLEDGE) refreshImages()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
@@ -614,8 +615,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onMemoryTapped() = openPage(AppPage.MEMORY)
 
     fun onHistoryTapped() = openPage(AppPage.HISTORY)
-
-    fun onImagesTapped() = openPage(AppPage.KNOWLEDGE)
 
     fun onHelpTapped() = openPage(AppPage.HELP)
 
@@ -854,9 +853,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Switches a phone connector's tools on or off together, with one confirmation. */
+    /** Switches a phone connector's tools on or off together, with one confirmation toast. */
     fun onConnectorToolsEnabled(tools: List<DeviceTool>, enabled: Boolean, name: String) {
-        launchPersist("") {
+        launchPersist(if (enabled) "$name connected" else "$name removed") {
             tools.forEach { settingsStore.setDeviceToolEnabled(it, enabled) }
             invalidateWarmSessionAndReprewarm()
         }
@@ -1078,19 +1077,25 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onClearApiKey() {
-        apiKeyStore.clearApiKey()
-        _uiState.update {
-            it.copy(hasApiKey = hasGeminiAccess(), currentApiKey = "")
+        viewModelScope.launch {
+            // Keystore access is slow, so it stays off the main thread.
+            val hasAccess = withContext(Dispatchers.IO) {
+                apiKeyStore.clearApiKey()
+                hasGeminiAccess()
+            }
+            _uiState.update { it.copy(hasApiKey = hasAccess, currentApiKey = "") }
+            showToast("API key removed")
+            invalidateWarmSessionAndReprewarm()
         }
-        showToast("API key removed")
-        invalidateWarmSessionAndReprewarm()
     }
 
     fun onClearEmbeddingApiKey() {
-        apiKeyStore.clearEmbeddingApiKey()
-        cachedEmbeddingClient = null
-        _uiState.update { it.copy(currentEmbeddingApiKey = "") }
-        showToast("Knowledge API key removed")
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { apiKeyStore.clearEmbeddingApiKey() }
+            cachedEmbeddingClient = null
+            _uiState.update { it.copy(currentEmbeddingApiKey = "") }
+            showToast("Knowledge API key removed")
+        }
     }
 
     fun onLiveModelSelected(id: String) {
@@ -1568,7 +1573,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun startSessionLimitTimer() {
         sessionLimitJob?.cancel()
         sessionLimitJob = viewModelScope.launch {
-            delay(maxSessionMs)
+            delay(maxSessionMs - SESSION_WARNING_MS)
+            if (isSessionActive(_uiState.value.voiceState)) showToast("This session ends in 1 minute.", AppNotificationType.INFO)
+            delay(SESSION_WARNING_MS)
             val state = _uiState.value.voiceState
             if (state != VoiceState.IDLE && state != VoiceState.ERROR) {
                 showToast("Session ended after 15 minutes. Tap the mic to start again.")
@@ -1627,7 +1634,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (liveClient !== client) return
                 // A tool result can be followed by a separate model turn. Its first audio is the
                 // proof that the original visitor interaction has resumed.
-                awaitingToolContinuation = false
                 lastAudioChunkAtMs = SystemClock.elapsedRealtime()
                 silentTurnRetried = false
                 cancelTurnTimeout()
@@ -1684,10 +1690,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     audioPlayer?.notifyTurnComplete()
                     return
                 }
-                // awaitingToolContinuation can still be set here: every tool response was already
-                // sent and the model has now finished its follow-up turn, possibly with no audio
-                // at all. Deferring again would leave the mic muted and the UI on SPEAKING forever.
-                awaitingToolContinuation = false
+                // Every tool response was already sent and the model has now finished its follow-up turn,
+                // possibly with no audio at all, so the turn ends here.
                 // The reply to every tool is done, so no tool name may stay on screen into the next request.
                 _uiState.update { it.copy(activeTool = null) }
                 finalizeTurnIfAny()
@@ -1724,7 +1728,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 silentTurnRetried = false
                 cancelTurnTimeout()
                 resetIdleTimeout()
-                awaitingToolContinuation = true
                 recordUsage(UsageDay("", toolCalls = calls.size))
                 // Duplicate delivery of a function-call frame must not execute retrieval
                 // twice or produce two responses for the same protocol ID.
@@ -1824,7 +1827,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // The calls left in a batch may all be done now that the cancelled ones no longer count.
                 toolBatches.toList().forEach { flushToolBatch(client, it) }
                 if (pendingToolCallIds.isEmpty()) {
-                    awaitingToolContinuation = false
                     _uiState.update { it.copy(activeTool = null) }
                 }
             }
@@ -2215,7 +2217,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         pendingToolJobs.clear()
         pendingToolCallIds.clear()
         toolBatches.clear()
-        awaitingToolContinuation = false
         _uiState.update { it.copy(activeTool = null) }
     }
 
@@ -2265,7 +2266,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 if (now - maxOf(lastProgressAt, lastAudioChunkAtMs) >= SPEAKING_STALL_MS) {
                     Log.w("AssistantError", "Speaking stalled for ${SPEAKING_STALL_MS}ms; returning to listening")
-                    awaitingToolContinuation = false
                     finalizeTurnIfAny()
                     micStreamer?.setMuted(false)
                     resetSpeechDetection()

@@ -3,6 +3,16 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.18.3 - 2026-11-08
+
+### Fixed
+- The close button on a picture Ultron shows is no longer hidden behind the top bar.
+- The voice ribbon on the home screen now stands still when no conversation is running, which saves battery.
+- Messages at the bottom sit lower on pages that have no mic button.
+- Ultron now warns you one minute before a conversation reaches the 15-minute limit.
+- Adding or removing a connector now shows a short confirmation.
+- Removing an API key no longer pauses the screen for a moment.
+
 ## 1.18.2 - 2026-11-08
 
 ### Fixed

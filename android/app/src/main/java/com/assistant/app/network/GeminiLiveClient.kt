@@ -108,7 +108,7 @@ class GeminiLiveClient(
     private var setupTimeoutRunnable: Runnable? = null
 
     // Coarse latency instrumentation -- logged, not surfaced in UI. Useful for comparing
-    // connect-to-ready timing across changes (e.g. confirming the RAG removal actually helped).
+    // connect-to-ready timing across changes.
     private var connectStartMillis = 0L
     private var firstAudioChunkLogged = false
     private var sentAudioChunks = 0
@@ -309,7 +309,7 @@ class GeminiLiveClient(
         // or text instead."). Confirmed against the live endpoint that "audio" is correct.
         val message = JSONObject().put("realtimeInput", JSONObject().put("audio", audio))
         val accepted = webSocket?.send(message.toString()) == true
-        if (++sentAudioChunks % 25 == 0 || !accepted) {
+        if (++sentAudioChunks % 25 == 0 && BuildConfig.DEBUG || !accepted) {
             Log.i(TAG, "mic chunks sent=$sentAudioChunks accepted=$accepted")
         }
     }
@@ -467,7 +467,7 @@ class GeminiLiveClient(
     }
 }
 
-/** Knowledge search is always declared; each other tool is added only if its switch is on. Shared by both Live clients. */
+/** Knowledge search is always declared; each other tool is added only if its switch is on.  */
 internal fun liveFunctionDeclarations(settings: AssistantSettings): JSONArray {
     val declarations = JSONArray()
     declarations.put(ToolDeclarations.knowledgeSearch())

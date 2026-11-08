@@ -28,10 +28,18 @@ fun VoiceRibbon(voiceState: VoiceState, amplitude: () -> Float, modifier: Modifi
     val (leftTarget, rightTarget) = ribbonColors(voiceState)
     val left by animateColorAsState(leftTarget, tween(900), label = "ribbonLeft")
     val right by animateColorAsState(rightTarget, tween(900), label = "ribbonRight")
-    val motion = rememberInfiniteTransition(label = "ribbon")
-    // Read animated values in the draw phase, avoiding recomposition of the whole screen.
-    val phase = motion.animateFloat(0f, (2 * PI).toFloat(),
-        infiniteRepeatable(tween(6500, easing = LinearEasing)), label = "ribbonFlow")
+    // The flow only runs during a session; an idle or errored screen holds still instead of redrawing every frame.
+    val flowing = voiceState != VoiceState.IDLE && voiceState != VoiceState.ERROR
+    val phase = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(flowing) {
+        if (!flowing) return@LaunchedEffect
+        var last = withFrameNanos { it }
+        while (true) {
+            val now = withFrameNanos { it }
+            phase.floatValue = (phase.floatValue + (now - last) / 1e9f * (2 * PI).toFloat() / 6.5f) % (2 * PI).toFloat()
+            last = now
+        }
+    }
     val level = animateFloatAsState(
         // Read here so only the ribbon recomposes on each level update, not the whole screen.
         if (live) amplitude().let { if (it.isFinite()) it.coerceIn(0f, 1f) else 0f } else 0f,
@@ -41,7 +49,7 @@ fun VoiceRibbon(voiceState: VoiceState, amplitude: () -> Float, modifier: Modifi
     Canvas(modifier) {
         val samples = 64
         val layers = 10
-        val p = phase.value
+        val p = phase.floatValue
         val strength = level.value
         val gradient = Brush.horizontalGradient(listOf(Color.Transparent, left, right, Color.Transparent))
         fun y(t: Float): Float = size.height * (0.5f +
