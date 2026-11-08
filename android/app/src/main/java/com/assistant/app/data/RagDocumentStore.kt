@@ -1,6 +1,7 @@
 package com.assistant.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -8,6 +9,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.assistant.app.network.GeminiEmbeddingClient
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
@@ -187,6 +190,10 @@ class RagDocumentStore(private val context: Context) {
     private val sourceRevisionKey = longPreferencesKey("knowledge_source_revision")
     private val indexedRevisionKey = longPreferencesKey("knowledge_indexed_revision")
     private val reconciliationVersionKey = intPreferencesKey("knowledge_index_reconciliation_version")
+    /** Set once the documents and chunks have been moved into ObjectBox; from then on ObjectBox alone holds them. */
+    private val objectBoxSourceKey = booleanPreferencesKey("knowledge_objectbox_is_source")
+    private var boxSource: ObjectBoxKnowledgeSource? = null
+    private val documentsVersion = MutableStateFlow(0L)
     private val objectBoxStore: BoxStore by lazy { sharedObjectBoxStore(context.applicationContext) }
     private val objectBoxIndex by lazy { ObjectBoxKnowledgeIndex(objectBoxStore) }
 
@@ -204,7 +211,8 @@ class RagDocumentStore(private val context: Context) {
                 .also { sharedStore = it }
     }
 
-    private val indexCoordinator = KnowledgeIndexCoordinator(
+    /** The old DataStore-owned storage. Only used for the one-time import and for an install that has not yet imported. */
+    private val legacyCoordinator = KnowledgeIndexCoordinator(
         readState = {
             val prefs = context.ragDataStore.data.first()
             val revision = prefs[sourceRevisionKey] ?: 0L
@@ -241,8 +249,26 @@ class RagDocumentStore(private val context: Context) {
         invalidateCache = { cachedSnapshot = null }
     )
 
+    /** Moves the knowledge into ObjectBox once. The caller holds [chunksMutex]. The old DataStore copy stays untouched. */
+    private suspend fun coordinator(): KnowledgeIndexCoordinator {
+        boxSource?.let { return it.coordinator() }
+        val prefs = context.ragDataStore.data.first()
+        if (prefs[objectBoxSourceKey] != true) {
+            // Make ObjectBox identical to the DataStore copy (checked inside one transaction) before switching over.
+            legacyCoordinator.reconcile()
+            context.ragDataStore.edit { it[objectBoxSourceKey] = true }
+        }
+        val start = context.ragDataStore.data.first()[sourceRevisionKey] ?: 0L
+        cachedSnapshot = null
+        val source = ObjectBoxKnowledgeSource(objectBoxIndex, start) { revision ->
+            context.ragDataStore.edit { it[sourceRevisionKey] = revision }
+        }
+        boxSource = source
+        return source.coordinator()
+    }
+
     val documents: Flow<List<RagDocument>> =
-        context.ragDataStore.data.map { prefs -> decodeDocs(prefs[docsKey]) }
+        documentsVersion.map { chunksMutex.withLock { coordinator().snapshot().documents } }
             .flowOn(Dispatchers.Default)
 
     suspend fun allChunks(trace: LatencyTool? = null): List<RagChunk> = chunksWithRevision(trace).second
@@ -251,7 +277,7 @@ class RagDocumentStore(private val context: Context) {
     suspend fun chunksWithRevision(trace: LatencyTool? = null): Pair<Long, List<RagChunk>> = withContext(Dispatchers.Default) {
         chunksMutex.withLock {
             trace?.event("chunk_cache", mapOf("cache" to if (cachedSnapshot == null) "miss" else "hit"))
-            val snapshot = indexCoordinator.snapshot()
+            val snapshot = coordinator().snapshot()
             snapshot.revision to snapshot.chunks
         }
     }
@@ -260,11 +286,11 @@ class RagDocumentStore(private val context: Context) {
     suspend fun nearestChunks(queryEmbedding: FloatArray, limit: Int, trace: LatencyTool? = null): RagSearchMatches =
         withContext(Dispatchers.Default) {
             chunksMutex.withLock {
-                val source = indexCoordinator.snapshot()
+                val source = coordinator().snapshot()
                 check(!requiresEmbeddingMigration(source.chunks)) {
                     "Knowledge embeddings still require model migration. Retry the search."
                 }
-                val indexedSource = indexCoordinator.reconcile()
+                val indexedSource = coordinator().reconcile()
                 RagSearchMatches(objectBoxIndex.nearest(queryEmbedding, limit), indexedSource.documents, indexedSource.revision)
             }
         }
@@ -282,10 +308,11 @@ class RagDocumentStore(private val context: Context) {
         val doc = RagDocument(id = UUID.randomUUID().toString(), title = title.trim(), text = text.trim())
         val newChunks = embedChunks(doc, embeddingClient, onProgress = onProgress)
         chunksMutex.withLock {
-            indexCoordinator.mutate { current ->
+            coordinator().mutate { current ->
                 current.copy(documents = current.documents + doc, chunks = current.chunks + newChunks)
             }
         }
+        documentsVersion.update { it + 1 }
         return doc
     }
 
@@ -303,7 +330,7 @@ class RagDocumentStore(private val context: Context) {
         val updated = RagDocument(id = id, title = title.trim(), text = text.trim())
         // Chunks whose embedding input is unchanged keep their stored vector; only edited ones are re-embedded.
         val (previousDoc, previousChunks) = chunksMutex.withLock {
-            val source = indexCoordinator.snapshot()
+            val source = coordinator().snapshot()
             source.documents.firstOrNull { it.id == id } to source.chunks.filter { it.docId == id }
         }
         val reusable = previousDoc?.let { old ->
@@ -313,7 +340,7 @@ class RagDocumentStore(private val context: Context) {
         val newChunks = embedChunks(updated, embeddingClient, reusable, onProgress)
         var applied = false
         chunksMutex.withLock {
-            indexCoordinator.mutate { current ->
+            coordinator().mutate { current ->
                 if (current.documents.any { it.id == id }) {
                     applied = true
                     current.copy(
@@ -325,11 +352,13 @@ class RagDocumentStore(private val context: Context) {
                 }
             }
         }
+        documentsVersion.update { it + 1 }
         return if (applied) updated else null
     }
 
     /** Recovery for an unreadable stored blob: clears documents, chunks and the search index
-     *  without decoding the old data, which is exactly what cannot be done when it is corrupt. */
+     *  without decoding the old data, which is exactly what cannot be done when it is corrupt. The old
+     *  DataStore copy is emptied first, so a failed import of it cannot block the reset. */
     suspend fun resetKnowledge() {
         chunksMutex.withLock {
             try {
@@ -342,22 +371,25 @@ class RagDocumentStore(private val context: Context) {
             } finally {
                 cachedSnapshot = null
             }
-            indexCoordinator.reconcile()
+            // Also empties ObjectBox, which owns the data once it has been imported.
+            coordinator().mutate { it.copy(documents = emptyList(), chunks = emptyList()) }
         }
+        documentsVersion.update { it + 1 }
     }
 
     suspend fun deleteDocument(id: String) {
         chunksMutex.withLock {
-            indexCoordinator.mutate { current ->
+            coordinator().mutate { current ->
                 current.copy(documents = current.documents.filterNot { it.id == id },
                     chunks = current.chunks.filterNot { it.docId == id })
             }
             // Only report success once the committed source really has no trace of the document.
-            val after = indexCoordinator.snapshot()
+            val after = coordinator().snapshot()
             check(after.documents.none { it.id == id } && after.chunks.none { it.docId == id }) {
                 "Document was not removed from the knowledge store"
             }
         }
+        documentsVersion.update { it + 1 }
     }
 
     /** Prepares all vectors before committing, preserving source text/title/timestamps.
@@ -366,7 +398,7 @@ class RagDocumentStore(private val context: Context) {
         embeddingClient: GeminiEmbeddingClient,
         onProgress: (Int, Int) -> Unit = { _, _ -> }
     ) {
-        val documentsToIndex = chunksMutex.withLock { indexCoordinator.snapshot().documents }
+        val documentsToIndex = chunksMutex.withLock { coordinator().snapshot().documents }
         val totalChunks = documentsToIndex.sumOf { chunkMarkdownText(it.text).size }
         var completedChunks = 0
         val prepared = documentsToIndex.map { document ->
@@ -377,7 +409,7 @@ class RagDocumentStore(private val context: Context) {
             document to newChunks
         }
         chunksMutex.withLock {
-            indexCoordinator.mutate { current -> applyReindexedChunks(current, prepared) }
+            coordinator().mutate { current -> applyReindexedChunks(current, prepared) }
         }
     }
 
