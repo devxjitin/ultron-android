@@ -68,8 +68,6 @@ import androidx.compose.ui.unit.sp
 import com.assistant.app.data.AssistantOptions
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.MAX_ASSISTANT_NAME_LENGTH
-import com.assistant.app.data.MAX_GREETING_LENGTH
 import com.assistant.app.data.MAX_RETRIEVAL_CHUNK_LIMIT
 import com.assistant.app.data.MIN_RETRIEVAL_CHUNK_LIMIT
 import com.assistant.app.data.MicSensitivity
@@ -103,7 +101,7 @@ fun SettingsPage(
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
     onPersonalitySelected: (String) -> Unit = {},
-    onSaveDeveloperChanges: (String, String, String, String, Int) -> Unit,
+    onSaveDeveloperChanges: (String, String, Int) -> Unit,
     knowledgeDocuments: List<RagDocument>,
     isSavingKnowledgeDocument: Boolean,
     knowledgePreparationStage: KnowledgePreparationStage?,
@@ -143,15 +141,11 @@ fun SettingsPage(
     var confirmingDeleteDocId by remember { mutableStateOf<String?>(null) }
     var confirmingResetKnowledge by remember { mutableStateOf(false) }
     var confirmingUnsavedChanges by remember { mutableStateOf(false) }
-    var nameInput by remember(settings.assistantName) { mutableStateOf(settings.assistantName) }
-    var greetingInput by remember(settings.greeting) { mutableStateOf(settings.greeting) }
     var retrievalChunkLimitInput by remember(settings.retrievalChunkLimit) {
         androidx.compose.runtime.mutableIntStateOf(settings.retrievalChunkLimit)
     }
     val developerChangesPending =
-        nameInput != settings.assistantName ||
-            greetingInput != settings.greeting ||
-            keyInput != currentApiKey ||
+        keyInput != currentApiKey ||
             embeddingKeyInput != currentEmbeddingApiKey ||
             retrievalChunkLimitInput != settings.retrievalChunkLimit
 
@@ -179,25 +173,6 @@ fun SettingsPage(
     }
     val developerContent: @Composable () -> Unit = {
         Column {
-                    PageLabel("Developer · Identity", Modifier.padding(top = 0.dp))
-                    PageCard {
-                    Text("Assistant name", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
-                    OutlinedTextField(
-                        value = nameInput,
-                        onValueChange = { nameInput = it.take(MAX_ASSISTANT_NAME_LENGTH) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = assistantTextFieldColors()
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Text("Greeting", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
-                    OutlinedTextField(
-                        value = greetingInput,
-                        onValueChange = { greetingInput = it.take(MAX_GREETING_LENGTH) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = assistantTextFieldColors()
-                    )
-                    }
                     PageLabel("Gemini API key")
                     PageCard {
                     OutlinedTextField(
@@ -454,8 +429,6 @@ fun SettingsPage(
             androidx.compose.material3.Button(
                 onClick = {
                     onSaveDeveloperChanges(
-                        nameInput,
-                        greetingInput,
                         keyInput,
                         embeddingKeyInput,
                         retrievalChunkLimitInput
@@ -490,8 +463,6 @@ fun SettingsPage(
             confirmButton = {
                 TextButton(enabled = !isSavingDeveloper, onClick = {
                     onSaveDeveloperChanges(
-                        nameInput,
-                        greetingInput,
                         keyInput,
                         embeddingKeyInput,
                         retrievalChunkLimitInput

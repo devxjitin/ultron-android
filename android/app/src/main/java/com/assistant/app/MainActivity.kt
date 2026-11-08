@@ -431,10 +431,8 @@ class MainActivity : ComponentActivity() {
                         onAnnounceNotificationsToggled = { enabled -> viewModel.onAnnounceNotificationsToggled(enabled) },
                         onPersonalitySelected = { id -> viewModel.onPersonalitySelected(id) },
                         onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
-                        onSaveDeveloperChanges = { name, greeting, apiKey, embeddingApiKey, retrievalLimit ->
+                        onSaveDeveloperChanges = { apiKey, embeddingApiKey, retrievalLimit ->
                             viewModel.onSaveDeveloperChanges(
-                                name,
-                                greeting,
                                 apiKey,
                                 embeddingApiKey,
                                 retrievalLimit

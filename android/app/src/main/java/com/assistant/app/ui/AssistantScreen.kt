@@ -176,7 +176,7 @@ fun AssistantScreen(
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit = {},
     onPersonalitySelected: (String) -> Unit = {},
-    onSaveDeveloperChanges: (String, String, String, String, Int) -> Unit,
+    onSaveDeveloperChanges: (String, String, Int) -> Unit,
     onAddKnowledgeDocument: (String, String) -> Unit,
     onUpdateKnowledgeDocument: (String, String, String) -> Unit,
     onDeleteKnowledgeDocument: (String) -> Unit,
@@ -212,6 +212,8 @@ fun AssistantScreen(
         var requestError by remember { mutableStateOf<String?>(null) }
         val openRequest: (String) -> Unit = { requestError = null; requestType = it }
         val sessionActive = uiState.voiceState != VoiceState.IDLE && uiState.voiceState != VoiceState.ERROR
+        // A new line for every session: it changes whenever a session starts or ends.
+        val greeting = remember(sessionActive) { com.assistant.app.data.randomHomeGreeting() }
         var sessionStartMs by remember { mutableStateOf<Long?>(null) }
         LaunchedEffect(sessionActive) {
             sessionStartMs = if (sessionActive) System.currentTimeMillis() else null
@@ -286,7 +288,7 @@ fun AssistantScreen(
                     Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
                     when (uiState.voiceState) {
                         VoiceState.IDLE, VoiceState.ERROR -> Text(
-                            text = uiState.settings.greeting,
+                            text = greeting,
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light),
                             fontSize = if (compact) 24.sp else 30.sp,
                             lineHeight = if (compact) 32.sp else 40.sp,

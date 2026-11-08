@@ -1208,8 +1208,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onSaveDeveloperChanges(
-        name: String,
-        greeting: String,
         apiKey: String,
         embeddingApiKey: String,
         retrievalChunkLimit: Int
@@ -1227,11 +1225,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 withContext(Dispatchers.IO) {
                     saveDeveloperConfiguration(apiKeyStore, apiKeyChange, embeddingKeyChange) {
-                        settingsStore.setDeveloperSettings(
-                            name = name,
-                            greeting = greeting,
-                            retrievalChunkLimit = retrievalChunkLimit
-                        )
+                        settingsStore.setDeveloperSettings(retrievalChunkLimit = retrievalChunkLimit)
                     }
                 }
                 // Only now that everything is persisted does the UI/runtime state change.

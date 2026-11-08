@@ -44,11 +44,7 @@ const val DEFAULT_ASSISTANT_NAME = "Ultron"
  */
 val DEFAULT_CONNECTOR_IDS: List<String> get() = ConnectorRegistry.defaultIds
 
-/** Names earlier builds stored as if the user had chosen them; they now fall back to the default. */
-private val LEGACY_DEFAULT_NAMES = setOf("Assistant", "Kira", "KIRA", "Sakhi")
-const val DEFAULT_GREETING = "What can I do for you today?"
 const val MAX_ASSISTANT_NAME_LENGTH = 24
-const val MAX_GREETING_LENGTH = 60
 const val DEFAULT_RETRIEVAL_CHUNK_LIMIT = 5
 const val MIN_RETRIEVAL_CHUNK_LIMIT = 1
 const val MAX_RETRIEVAL_CHUNK_LIMIT = 15
@@ -109,10 +105,8 @@ data class AssistantSettings(
     val personalityId: String = Personalities.DESTRUCTIVE,
     /** The persona text for [personalityId]; the fixed policy is added on top when a session starts. */
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT.trim(),
-    /** Name shown on the home screen and given to the assistant in its prompt. */
+    /** Name shown on the home screen and given to the assistant in its prompt. It is fixed. */
     val assistantName: String = DEFAULT_ASSISTANT_NAME,
-    /** The home-screen headline shown while idle. */
-    val greeting: String = DEFAULT_GREETING,
     /** Who the assistant serves; empty until the user sets it, then the prompt says "the user". */
     val ownerName: String = "",
     /** Prompt used to prepare PDFs for paragraph-based knowledge retrieval. */
@@ -139,7 +133,7 @@ class AppSettingsStore(private val context: Context) {
     private val systemPromptAutoKey = booleanPreferencesKey("system_prompt_auto")
     private val assistantNameKey = stringPreferencesKey("assistant_name")
     private val ownerNameKey = stringPreferencesKey("owner_name")
-    private val greetingKey = stringPreferencesKey("greeting")
+    private val greetingKey = stringPreferencesKey("greeting")  // legacy; only cleared
     private val documentFormatPromptKey = stringPreferencesKey("document_format_prompt")
     private val retrievalChunkLimitKey = stringPreferencesKey("retrieval_chunk_limit")
     private val toolOverridesKey = stringSetPreferencesKey("device_tool_overrides")
@@ -161,8 +155,7 @@ class AppSettingsStore(private val context: Context) {
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
             personalityId = Personalities.byId(prefs[personalityKey]).id,
             systemPrompt = Personalities.byId(prefs[personalityKey]).prompt,
-            assistantName = prefs[assistantNameKey]?.takeIf { it.isNotBlank() && it !in LEGACY_DEFAULT_NAMES } ?: DEFAULT_ASSISTANT_NAME,
-            greeting = prefs[greetingKey]?.takeIf { it.isNotBlank() && it.trim() != DEFAULT_GREETING } ?: DEFAULT_GREETING,
+            assistantName = DEFAULT_ASSISTANT_NAME,
             ownerName = prefs[ownerNameKey]?.trim().orEmpty(),
             documentFormatPrompt = DEFAULT_DOCUMENT_FORMAT_PROMPT,
             retrievalChunkLimit = prefs[retrievalChunkLimitKey]?.toIntOrNull()
@@ -221,16 +214,11 @@ class AppSettingsStore(private val context: Context) {
     }
 
     /** Applies the Developer form together so its fields never save as unrelated partial edits. */
-    suspend fun setDeveloperSettings(
-        name: String,
-        greeting: String,
-        retrievalChunkLimit: Int
-    ) {
-        val cleanName = name.trim().take(MAX_ASSISTANT_NAME_LENGTH)
-        val cleanGreeting = greeting.trim().take(MAX_GREETING_LENGTH)
+    suspend fun setDeveloperSettings(retrievalChunkLimit: Int) {
         context.settingsDataStore.edit {
-            if (cleanName.isBlank()) it.remove(assistantNameKey) else it[assistantNameKey] = cleanName
-            if (cleanGreeting.isBlank()) it.remove(greetingKey) else it[greetingKey] = cleanGreeting
+            // The name is fixed and greetings are picked at random; drop anything an earlier version saved.
+            it.remove(assistantNameKey)
+            it.remove(greetingKey)
             // The prompts are built in and no longer editable; drop any text an earlier version saved.
             it.remove(systemPromptKey)
             it.remove(systemPromptAutoKey)
