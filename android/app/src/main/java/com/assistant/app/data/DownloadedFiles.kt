@@ -37,6 +37,7 @@ object DownloadedFiles {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listFromMediaStore(context) else listFromFolder(context)
     }.getOrDefault(emptyList()).sortedByDescending { it.addedMillis }
 
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
     private fun listFromMediaStore(context: Context): List<DownloadedFile> {
         val found = mutableListOf<DownloadedFile>()
         val columns = arrayOf(
