@@ -11,15 +11,12 @@ import com.assistant.app.network.GeminiEmbeddingClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.json.JSONArray
-import org.json.JSONObject
 import java.util.UUID
 import com.assistant.app.util.LatencyTool
 import com.assistant.app.util.UserInputException
@@ -183,15 +180,16 @@ internal fun validateFormattedDataset(text: String): String {
  */
 class RagDocumentStore(private val context: Context) {
     private val chunksMutex = Mutex()
-    @Volatile private var cachedSnapshot: KnowledgeSnapshot? = null
 
-    private val docsKey = stringPreferencesKey("documents")
-    private val chunksKey = stringPreferencesKey("chunks")
+    /** Kept only to number knowledge changes; the documents and chunks themselves live in ObjectBox. */
     private val sourceRevisionKey = longPreferencesKey("knowledge_source_revision")
-    private val indexedRevisionKey = longPreferencesKey("knowledge_indexed_revision")
-    private val reconciliationVersionKey = intPreferencesKey("knowledge_index_reconciliation_version")
-    /** Set once the documents and chunks have been moved into ObjectBox; from then on ObjectBox alone holds them. */
-    private val objectBoxSourceKey = booleanPreferencesKey("knowledge_objectbox_is_source")
+    /** Leftovers of the old DataStore-owned storage, removed the first time the store is opened. */
+    private val retiredKeys = listOf(
+        stringPreferencesKey("documents"), stringPreferencesKey("chunks"),
+        longPreferencesKey("knowledge_indexed_revision"),
+        intPreferencesKey("knowledge_index_reconciliation_version"),
+        booleanPreferencesKey("knowledge_objectbox_is_source")
+    )
     private var boxSource: ObjectBoxKnowledgeSource? = null
     private val documentsVersion = MutableStateFlow(0L)
     private val objectBoxStore: BoxStore by lazy { sharedObjectBoxStore(context.applicationContext) }
@@ -211,55 +209,14 @@ class RagDocumentStore(private val context: Context) {
                 .also { sharedStore = it }
     }
 
-    /** The old DataStore-owned storage. Only used for the one-time import and for an install that has not yet imported. */
-    private val legacyCoordinator = KnowledgeIndexCoordinator(
-        readState = {
-            val prefs = context.ragDataStore.data.first()
-            val revision = prefs[sourceRevisionKey] ?: 0L
-            val source = cachedSnapshot?.takeIf { it.revision == revision }
-                ?: KnowledgeSnapshot(revision, decodeDocs(prefs[docsKey]), decodeChunks(prefs[chunksKey]))
-                    .also { cachedSnapshot = it }
-            KnowledgeIndexState(
-                source,
-                prefs[indexedRevisionKey], prefs[reconciliationVersionKey] ?: 0
-            )
-        },
-        commitSource = { transform ->
-            context.ragDataStore.edit { prefs ->
-                val current = KnowledgeSnapshot(prefs[sourceRevisionKey] ?: 0L,
-                    decodeDocs(prefs[docsKey]), decodeChunks(prefs[chunksKey]))
-                val changed = transform(current)
-                if (changed !== current) {
-                    prefs[docsKey] = encodeDocs(changed.documents)
-                    prefs[chunksKey] = encodeChunks(changed.chunks)
-                    prefs[sourceRevisionKey] = changed.revision
-                }
-            }
-        },
-        replaceIndex = { source -> objectBoxIndex.replace(source) },
-        markIndexed = { source ->
-            context.ragDataStore.edit { prefs ->
-                check((prefs[sourceRevisionKey] ?: 0L) == source.revision) {
-                    "Knowledge source changed during index reconciliation."
-                }
-                prefs[indexedRevisionKey] = source.revision
-                prefs[reconciliationVersionKey] = KNOWLEDGE_INDEX_RECONCILIATION_VERSION
-            }
-        },
-        invalidateCache = { cachedSnapshot = null }
-    )
-
-    /** Moves the knowledge into ObjectBox once. The caller holds [chunksMutex]. The old DataStore copy stays untouched. */
+    /** Opens the ObjectBox-backed knowledge source once. The caller holds [chunksMutex]. */
     private suspend fun coordinator(): KnowledgeIndexCoordinator {
         boxSource?.let { return it.coordinator() }
-        val prefs = context.ragDataStore.data.first()
-        if (prefs[objectBoxSourceKey] != true) {
-            // Make ObjectBox identical to the DataStore copy (checked inside one transaction) before switching over.
-            legacyCoordinator.reconcile()
-            context.ragDataStore.edit { it[objectBoxSourceKey] = true }
+        var start = 0L
+        context.ragDataStore.edit { prefs ->
+            start = prefs[sourceRevisionKey] ?: 0L
+            retiredKeys.forEach { prefs.remove(it) }
         }
-        val start = context.ragDataStore.data.first()[sourceRevisionKey] ?: 0L
-        cachedSnapshot = null
         val source = ObjectBoxKnowledgeSource(objectBoxIndex, start) { revision ->
             context.ragDataStore.edit { it[sourceRevisionKey] = revision }
         }
@@ -276,7 +233,6 @@ class RagDocumentStore(private val context: Context) {
     /** The chunks together with the knowledge revision they belong to, read under one lock. */
     suspend fun chunksWithRevision(trace: LatencyTool? = null): Pair<Long, List<RagChunk>> = withContext(Dispatchers.Default) {
         chunksMutex.withLock {
-            trace?.event("chunk_cache", mapOf("cache" to if (cachedSnapshot == null) "miss" else "hit"))
             val snapshot = coordinator().snapshot()
             snapshot.revision to snapshot.chunks
         }
@@ -356,22 +312,9 @@ class RagDocumentStore(private val context: Context) {
         return if (applied) updated else null
     }
 
-    /** Recovery for an unreadable stored blob: clears documents, chunks and the search index
-     *  without decoding the old data, which is exactly what cannot be done when it is corrupt. The old
-     *  DataStore copy is emptied first, so a failed import of it cannot block the reset. */
+    /** Clears documents, chunks and the search index. */
     suspend fun resetKnowledge() {
         chunksMutex.withLock {
-            try {
-                context.ragDataStore.edit { prefs ->
-                    prefs[sourceRevisionKey] = Math.addExact(prefs[sourceRevisionKey] ?: 0L, 1L)
-                    prefs.remove(docsKey)
-                    prefs.remove(chunksKey)
-                    prefs.remove(indexedRevisionKey)
-                }
-            } finally {
-                cachedSnapshot = null
-            }
-            // Also empties ObjectBox, which owns the data once it has been imported.
             coordinator().mutate { it.copy(documents = emptyList(), chunks = emptyList()) }
         }
         documentsVersion.update { it + 1 }
@@ -442,81 +385,6 @@ class RagDocumentStore(private val context: Context) {
                     embeddingModel = result.model
                 )
             }
-        }
-    }
-
-    private fun encodeDocs(docs: List<RagDocument>): String {
-        val array = JSONArray()
-        docs.forEach { doc ->
-            array.put(
-                JSONObject()
-                    .put("id", doc.id)
-                    .put("title", doc.title)
-                    .put("text", doc.text)
-                    .put("updatedAt", doc.updatedAtMillis)
-            )
-        }
-        return array.toString()
-    }
-
-    private fun decodeDocs(raw: String?): List<RagDocument> {
-        if (raw.isNullOrBlank()) return emptyList()
-        return try {
-            val array = JSONArray(raw)
-            (0 until array.length()).map { i ->
-                val obj = array.getJSONObject(i)
-                RagDocument(
-                    id = obj.getString("id"),
-                    title = obj.optString("title"),
-                    text = obj.optString("text"),
-                    updatedAtMillis = obj.optLong("updatedAt")
-                )
-            }
-        } catch (e: Exception) {
-            throw IllegalStateException("Stored knowledge documents could not be decoded.", e)
-        }
-    }
-
-    private fun encodeChunks(chunks: List<RagChunk>): String {
-        val array = JSONArray()
-        chunks.forEach { chunk ->
-            array.put(
-                JSONObject()
-                    .put("docId", chunk.docId)
-                    .put("chunkIndex", chunk.chunkIndex)
-                    .put("text", chunk.text)
-                    .put("embeddingB64", EmbeddingCodec.encode(chunk.embedding))
-                    .put("embeddingModel", chunk.embeddingModel)
-                    .put("heading", chunk.heading ?: "")
-            )
-        }
-        return array.toString()
-    }
-
-    private fun decodeChunks(raw: String?): List<RagChunk> {
-        if (raw.isNullOrBlank()) return emptyList()
-        return try {
-            val array = JSONArray(raw)
-            (0 until array.length()).map { i ->
-                val obj = array.getJSONObject(i)
-                RagChunk(
-                    docId = obj.getString("docId"),
-                    chunkIndex = obj.optInt("chunkIndex"),
-                    text = obj.optString("text"),
-                    embedding = if (obj.has("embeddingB64")) {
-                        EmbeddingCodec.decode(obj.getString("embeddingB64"))
-                    } else {
-                        // Legacy format: JSON array of doubles.
-                        val embeddingArray = obj.getJSONArray("embedding")
-                        FloatArray(embeddingArray.length()) { j -> embeddingArray.getDouble(j).toFloat() }
-                    },
-                    embeddingModel = obj.optString("embeddingModel").takeIf { it.isNotBlank() }
-                        ?: "gemini-embedding-001",
-                    heading = obj.optString("heading").takeIf { it.isNotBlank() }
-                )
-            }
-        } catch (e: Exception) {
-            throw IllegalStateException("Stored knowledge chunks could not be decoded.", e)
         }
     }
 }
