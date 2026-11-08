@@ -94,7 +94,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
         /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
-        private const val TOOL_LABEL_MAX_MS = 25_000L
         /** No conversational activity (transcript text or a turn boundary) for this long while
          *  a session is active auto-stops it and clears saved history, so a later session
          *  doesn't inherit a stale leftover conversation or an abandoned open mic. */
@@ -247,21 +246,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var liveClient: LiveClient? = null
     private var micStreamer: MicStreamer? = null
     private var audioPlayer: AudioPlayer? = null
-    @Volatile private var toolSearchScope: CoroutineScope? = null
-    /** Tool calls split one visitor interaction into a tool stage and a later response stage.
-     *  Keep the buffers and reply watchdog attached to that one interaction until it genuinely
-     *  finishes, rather than treating the protocol's tool boundary as a completed conversation. */
-    private val pendingToolCallIds = mutableSetOf<String>()
-    private val pendingToolJobs = mutableMapOf<String, Job>()
-    /** Finished results waiting for the rest of their `toolCall` message, by call id; see [flushToolBatch]. */
-    private val toolBatches = mutableListOf<ToolBatch>()
-
-    /** The calls of one `toolCall` message. Their results go back to the model in one `toolResponse`. */
-    private class ToolBatch(val ids: List<String>) {
-        val results = linkedMapOf<String, GeminiLiveClient.ToolResult>()
-        val traces = mutableMapOf<String, Pair<com.assistant.app.util.LatencyTool?, Long>>()
-    }
-
     /** A session opened ahead of time (while idle, before the user taps the mic) so the model
      *  has already ingested the persona + knowledge-base system instruction by the time the
      *  first real command arrives -- that ingestion is what makes the very first turn slow. */
@@ -736,71 +720,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** save_memory / forget_memory, called by the voice model. Memory is kept on this device only. */
-    private suspend fun runMemoryTool(name: String, args: JSONObject): String {
-        if (!_uiState.value.settings.memoryEnabled) {
-            return "status=disabled\nMemory is turned off by the user. Do not save or forget anything."
-        }
-        if (name != MEMORY_SAVE_TOOL) {
-            val forgotten = memoryStore.forget(args.optString("about"))
-            return when {
-                forgotten.removed.isNotEmpty() -> "status=ok\nForgot: ${forgotten.removed.joinToString("; ") { it.text }}."
-                forgotten.ambiguous.isNotEmpty() -> "status=ambiguous\nNothing was forgotten because several notes match: " +
-                    forgotten.ambiguous.take(5).joinToString("; ") { it.text } +
-                    ". Ask the user which one, then call forget_memory again with words from that note only."
-                else -> "status=ok\nNothing saved matched that."
-            }
-        }
-        val result = memoryStore.save(args.optString("fact"), args.optString("replaces").takeIf { it.isNotBlank() })
-        return buildString {
-            append("status=ok\n")
-            append(if (result.added) "Saved to memory." else "That is already remembered or empty.")
-            if (result.replaced.isNotEmpty()) append(" Replaced: ").append(result.replaced.joinToString("; ")).append(".")
-            if (result.ambiguous.isNotEmpty()) {
-                append("\nNothing was deleted because the replaces hint matched several notes: ").append(result.ambiguous.joinToString("; ")).append(". ")
-                append("Call save_memory again with replaces set to the exact old note, or ask the user which one is outdated.")
-            }
-            if (result.related.isNotEmpty()) {
-                append("\nRelated older notes still saved: ").append(result.related.joinToString("; ")).append(". ")
-                append("If any of them is now outdated or contradicted, call save_memory again with the same fact and replaces set to that note.")
-            }
-        }
-    }
-
-    /** Turns an unexpected exception in a tool into a failed result, so the model still gets an answer and the app never crashes. */
-    private suspend fun runToolSafely(name: String, block: suspend () -> String): String = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Log.e("AssistantError", "Tool $name failed", e)
-        "status=failed\nThat action could not be completed."
-    }
-
-    /** What the home screen shows while a tool runs, e.g. "Set alarm". */
-    private fun toolDisplayName(functionName: String): String = when {
-        functionName == "search_knowledge_base" -> "Searching knowledge"
-        functionName == MEMORY_SAVE_TOOL -> "Saving to memory"
-        functionName == MEMORY_FORGET_TOOL -> "Forgetting a memory"
-        functionName == USE_SKILL_TOOL -> "Loading a skill"
-        functionName == SET_PERSONALITY_TOOL -> "Changing personality"
-        else -> DeviceTool.fromFunctionName(functionName)?.label ?: functionName.replace('_', ' ')
-    }
-
-    private fun announceTool(label: String) {
-        _uiState.update { it.copy(activeTool = label) }
-        // Safety net so a session that dies mid-tool never leaves the name on screen.
-        clearToolLater(label, TOOL_LABEL_MAX_MS)
-    }
-
-    /** Keeps the tool name visible a moment after it finishes, then removes it if it is still the same one. */
-    private fun clearToolLater(label: String, afterMs: Long = 0L) {
-        viewModelScope.launch {
-            delay(afterMs)
-            _uiState.update { if (it.activeTool == label && pendingToolCallIds.isEmpty()) it.copy(activeTool = null) else it }
-        }
-    }
-
     /** Switches a phone connector's tools on or off together, with one confirmation toast. */
     fun onConnectorToolsEnabled(tools: List<DeviceTool>, enabled: Boolean, name: String) {
         launchPersist(if (enabled) "$name connected" else "$name removed") {
@@ -962,20 +881,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** set_personality, called by the voice model. The running session switches style at once through the reply. */
-    private suspend fun runPersonalityTool(args: JSONObject): String {
-        val id = args.optString("personality")
-        if (!Personalities.isKnown(id)) {
-            return "status=invalid\nChoose one of: ${Personalities.all.joinToString { it.id }}."
-        }
-        val personality = Personalities.byId(id)
-        settingsStore.setPersonality(personality.id)
-        invalidateWarmSessionAndReprewarm()
-        return "status=ok\nPersonality is now ${personality.label}. From your next reply on, speak this way: " +
-            "${personality.styleNote}. This replaces your earlier character description; every other rule stays. " +
-            "Confirm the change in one short line in the new style."
-    }
-
     fun onLanguageSelected(code: String) {
         launchPersist(settingsAppliedMessage("Language updated")) {
             settingsStore.setLanguageCode(code)
@@ -1023,27 +928,33 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     )
 
-    /** Runs a device tool and returns the text handed back to the voice model. */
-    private suspend fun runDeviceTool(tool: DeviceTool, args: JSONObject): String {
-        if (tool !in _uiState.value.settings.enabledDeviceTools && tool !in DeviceTool.ASSISTANT_OWN) {
-            return "status=disabled\nThe user has turned this tool off. Tell them it is switched off in Settings."
-        }
-        if (tool == DeviceTool.SEARCH_CONVERSATION_HISTORY || tool == DeviceTool.RECENT_CONVERSATION) {
-            return UntrustedContent.track(tool, runToolSafely(tool.functionName) { runHistoryTool(tool, args) })
-        }
-        return UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
-    }
+    private val toolRunner = ToolRunner(
+        state = _uiState,
+        memoryStore = memoryStore,
+        settingsStore = settingsStore,
+        deviceToolRunner = deviceToolRunner,
+        knowledge = knowledge,
+        historyTools = {
+            ConversationHistoryTools(
+                store = conversationHistoryStore,
+                embedQuery = { text -> knowledge.embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.QUERY).embedding },
+                currentSessionId = historySessionId
+            )
+        },
+        onPersonalityChanged = { invalidateWarmSessionAndReprewarm() }
+    )
+
+    private val tools = ToolDispatcher(
+        scope = viewModelScope,
+        state = _uiState,
+        isCurrent = { client -> liveClient === client },
+        startTurnTimeout = { startTurnTimeout() },
+        displayName = ToolRunner::displayName,
+        execute = { call, trace -> toolRunner.run(call, trace) }
+    )
 
     /** The last few exchanges are replayed into every new Live session; anything older is looked up with the history tools. */
     private fun sessionStartHistory(history: List<ConversationTurn>) = KnowledgeBaseProvider.liveHistoryTurns(history)
-
-    private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {
-        ConversationHistoryTools(
-            store = conversationHistoryStore,
-            embedQuery = { text -> knowledge.embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.QUERY).embedding },
-            currentSessionId = historySessionId
-        ).run(tool, args)
-    }
 
     fun onSaveDeveloperChanges(
         apiKey: String,
@@ -1346,7 +1257,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (liveClient !== client) return
                 client.latency.complete()
                 cancelTurnTimeout()
-                if (pendingToolCallIds.isNotEmpty()) {
+                if (tools.hasPending) {
                     // The model has yielded for local retrieval. Its eventual audio belongs to
                     // the same user/assistant transcript pair, so do not persist it yet. The filler
                     // it spoke ("one moment") still drains and hands the mic back, so a slow tool
@@ -1394,73 +1305,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 cancelTurnTimeout()
                 resetIdleTimeout()
                 recordUsage(UsageDay("", toolCalls = calls.size))
-                // Duplicate delivery of a function-call frame must not execute retrieval
-                // twice or produce two responses for the same protocol ID.
-                val fresh = calls.filter { pendingToolCallIds.add(it.id) }
-                if (fresh.isEmpty()) return
-                val batch = ToolBatch(fresh.map { it.id }).also { toolBatches.add(it) }
-                fresh.forEach { call ->
-                    val trace = client.latency.turn()?.tool()
-                    announceTool(toolDisplayName(call.name))
-                    val job = toolSearchScope?.launch {
-                        val searchStartedAt = SystemClock.elapsedRealtime()
-                        val deviceTool = DeviceTool.fromFunctionName(call.name)
-                        val resultText = if (deviceTool != null) {
-                            runDeviceTool(deviceTool, call.args)
-                        } else if (call.name == MEMORY_SAVE_TOOL || call.name == MEMORY_FORGET_TOOL) {
-                            runToolSafely(call.name) { runMemoryTool(call.name, call.args) }
-                        } else if (call.name == SET_PERSONALITY_TOOL) {
-                            runToolSafely(call.name) { runPersonalityTool(call.args) }
-                        } else if (call.name == USE_SKILL_TOOL) {
-                            SkillRegistry.use(call.args.optString("skill"), call.args.optString("task"))
-                        } else if (call.name != "search_knowledge_base") {
-                            "status=unknown_tool\nThere is no tool named ${call.name}. Do not call it again; tell the user you cannot do that with the tools you have."
-                        } else {
-                            knowledge.runSearchTool(call.args.optString("query"), call.id, trace)
-                        }
-                        if (BuildConfig.DEBUG) {
-                            Log.d("AssistantLatency", "knowledge-search=${SystemClock.elapsedRealtime() - searchStartedAt}ms")
-                        }
-                        // A cancellation, new session, or interruption may happen while an HTTP
-                        // embedding request is in flight. Never revive an abandoned turn by
-                        // sending its result after that point.
-                        if (liveClient === client && pendingToolCallIds.contains(call.id)) {
-                            batch.results[call.id] = GeminiLiveClient.ToolResult(call.id, call.name, resultText)
-                            batch.traces[call.id] = trace to searchStartedAt
-                            pendingToolJobs.remove(call.id)
-                            clearToolLater(toolDisplayName(call.name))
-                            flushToolBatch(client, batch)
-                        }
-                    }
-                    if (job == null) {
-                        pendingToolCallIds.remove(call.id)
-                        trace?.failure()
-                        clearToolLater(toolDisplayName(call.name))
-                        flushToolBatch(client, batch)
-                    } else {
-                        pendingToolJobs[call.id] = job
-                    }
-                }
+                tools.onToolCalls(client, calls)
             }
 
             override fun onToolCallCancellation(ids: List<String>) {
                 if (liveClient !== client) return
-                ids.forEach { id ->
-                    pendingToolCallIds.remove(id)
-                    pendingToolJobs.remove(id)?.cancel()
-                }
-                // The calls left in a batch may all be done now that the cancelled ones no longer count.
-                toolBatches.toList().forEach { flushToolBatch(client, it) }
-                if (pendingToolCallIds.isEmpty()) {
-                    _uiState.update { it.copy(activeTool = null) }
-                }
+                tools.onCancellation(client, ids)
             }
 
             override fun onGoAway(timeLeftMs: Long, closeNow: () -> Unit) {
                 val busy = liveClient === client && (
                     _uiState.value.voiceState == VoiceState.SPEAKING ||
                         _uiState.value.voiceState == VoiceState.PROCESSING ||
-                        pendingToolCallIds.isNotEmpty())
+                        tools.hasPending)
                 if (!busy) {
                     closeNow()
                     return
@@ -1566,11 +1423,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             "reused_warm" to reusedWarm,
             "connection_age_ms" to (client.latency.now() - client.latency.createdAtMs)
         ))
-        toolSearchScope?.cancel()
-        toolSearchScope = CoroutineScope(
-            SupervisorJob() + Dispatchers.Main +
-                CoroutineExceptionHandler { _, e -> Log.e("AssistantError", "Uncaught tool error", e) }
-        )
+        tools.openScope()
         if (!audio.acquire()) {
             releaseResources()
             _uiState.update {
@@ -1606,7 +1459,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 ) {
                     _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
                 }
-                if (pendingToolCallIds.isEmpty()) runPendingGoAway()
+                if (!tools.hasPending) runPendingGoAway()
             },
             onPlaybackFailure = playbackFailure@{ message ->
                 if (liveClient !== client || audioPlayer !== player) return@playbackFailure
@@ -1828,9 +1681,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         speakingWatchdogJob?.cancel()
         speakingWatchdogJob = null
         liveClient?.latency?.close(if (userInitiatedStop) "stopped" else "failed")
-        toolSearchScope?.cancel()
-        toolSearchScope = null
-        cancelPendingToolCalls()
+        tools.shutdown()
         cancelIdleTimeout()
         cancelTurnTimeout()
         micStreamer?.stop()
@@ -1847,37 +1698,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // never genuinely completed, so it isn't finalized/persisted either.
         userTextBuffer.clear()
         assistantTextBuffer.clear()
-    }
-
-    /** Sends a batch's results once every call in it that is still wanted has one. Gemini waits for every response in a
-     *  toolCall message, so the reply watchdog starts only after the last of them is actually sent. */
-    private fun flushToolBatch(client: LiveClient, batch: ToolBatch) {
-        val wanted = batch.ids.filter { it in pendingToolCallIds }
-        if (wanted.any { it !in batch.results }) return
-        toolBatches.remove(batch)
-        val results = wanted.mapNotNull { batch.results[it] }
-        if (results.isEmpty()) return
-        val accepted = liveClient === client && client.sendToolResponses(results)
-        val now = SystemClock.elapsedRealtime()
-        results.forEach { result ->
-            val (trace, startedAt) = batch.traces[result.id] ?: (null to now)
-            trace?.event("tool_response_sent", mapOf(
-                "accepted" to accepted, "context_chars" to result.resultText.length, "duration_ms" to (now - startedAt)
-            ))
-            if (!accepted) trace?.failure()
-            pendingToolCallIds.remove(result.id)
-        }
-        if (accepted && pendingToolCallIds.isEmpty()) startTurnTimeout()
-        // The ids only leave pendingToolCallIds here, after clearToolLater already looked, so the label is removed now.
-        if (pendingToolCallIds.isEmpty()) _uiState.update { it.copy(activeTool = null) }
-    }
-
-    private fun cancelPendingToolCalls() {
-        pendingToolJobs.values.forEach { it.cancel() }
-        pendingToolJobs.clear()
-        pendingToolCallIds.clear()
-        toolBatches.clear()
-        _uiState.update { it.copy(activeTool = null) }
     }
 
     /** Restarts the idle-timeout countdown -- called whenever there's a sign of real
@@ -1920,7 +1740,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (_uiState.value.voiceState != VoiceState.SPEAKING) return@launch
                 val head = audioPlayer?.playbackHeadFrames() ?: return@launch
                 val now = SystemClock.elapsedRealtime()
-                if (head != lastHead || pendingToolCallIds.isNotEmpty()) {
+                if (head != lastHead || tools.hasPending) {
                     lastHead = head
                     lastProgressAt = now
                 }
