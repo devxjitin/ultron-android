@@ -600,7 +600,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
         if (page == AppPage.STORAGE || page == AppPage.HISTORY) refreshPastConversations()
-        if (page == AppPage.STORAGE || page == AppPage.IMAGES) refreshImages()
+        if (page == AppPage.STORAGE || page == AppPage.IMAGES || page == AppPage.KNOWLEDGE) refreshImages()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
             stopSession()
@@ -617,7 +617,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onHistoryTapped() = openPage(AppPage.HISTORY)
 
-    fun onImagesTapped() = openPage(AppPage.IMAGES)
+    fun onImagesTapped() = openPage(AppPage.KNOWLEDGE)
 
     fun onHelpTapped() = openPage(AppPage.HELP)
 
@@ -1493,7 +1493,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.update {
                 it.copy(
                     voiceState = VoiceState.ERROR,
-                    errorMessage = "The assistant isn't set up yet. Add a Gemini API key in Developer settings."
+                    errorMessage = "The assistant isn't set up yet. Add a Gemini API key in Settings."
                 )
             }
             // Send the user to Settings so they can add a key.

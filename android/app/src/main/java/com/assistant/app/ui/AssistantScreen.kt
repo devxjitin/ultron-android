@@ -23,7 +23,9 @@ import com.assistant.app.data.MicSensitivity
 import kotlinx.coroutines.delay
 import com.assistant.app.ui.components.HomeBackground
 import com.assistant.app.ui.components.VoiceRibbon
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
@@ -192,7 +194,12 @@ fun AssistantScreen(
         val isDarkTheme = themeMode == ThemeMode.DARK || (themeMode == ThemeMode.SYSTEM && androidx.compose.foundation.isSystemInDarkTheme())
         val compact = availableHeight < 480.dp
         // NavTab and AppPage share their names, so the menu row for a page is found by name.
-        val currentTab = NavTab.valueOf(uiState.page.name)
+        // Developer is part of Settings, and pictures are part of Knowledge, so those two highlight their parent row.
+        val currentTab = NavTab.valueOf(uiState.page.name).let {
+            when (it) { NavTab.DEVELOPER -> NavTab.SETTINGS; NavTab.IMAGES -> NavTab.KNOWLEDGE; else -> it }
+        }
+        // Knowledge has two parts: the documents and the pictures Ultron can show.
+        var knowledgeSection by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
         // Settings, Knowledge and Developer are one page. While it fades out the state already points elsewhere,
         // so it keeps showing the sub-page it was last on instead of jumping to another one mid-animation.
         val lastSettingsPage = remember { arrayOf(AppPage.SETTINGS) }
@@ -231,6 +238,7 @@ fun AssistantScreen(
             AppDrawerContent(
                 selected = currentTab,
                 assistantName = uiState.settings.assistantName,
+                userName = license?.status?.name?.takeIf { it.isNotBlank() } ?: uiState.settings.ownerName,
                 onClose = { scope.launch { drawerState.close() } },
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
@@ -361,22 +369,6 @@ fun AssistantScreen(
                 HelpPage(onRequest = openRequest, modifier = Modifier.padding(top = topReserve))
             }
 
-            if (tab == NavTab.IMAGES) {
-                val filesDir = androidx.compose.ui.platform.LocalContext.current.filesDir
-                ImagesPage(
-                    images = uiState.images,
-                    pendingUri = uiState.pendingImageUri,
-                    isSaving = uiState.isSavingImage,
-                    imageFile = { com.assistant.app.data.ImageLibrary.fileIn(filesDir, it) },
-                    onPick = onPickImage,
-                    onSave = onSaveImage,
-                    onCancelPending = onCancelPendingImage,
-                    onUpdate = onUpdateImage,
-                    onDelete = onDeleteImage,
-                    modifier = Modifier.padding(top = topReserve)
-                )
-            }
-
             if (tab == NavTab.CONNECTORS) {
                 ConnectorsPage(
                     enabledTools = uiState.settings.enabledDeviceTools,
@@ -428,8 +420,26 @@ fun AssistantScreen(
             }
 
             if (tab in listOf(NavTab.SETTINGS, NavTab.KNOWLEDGE, NavTab.DEVELOPER)) {
+              val onKnowledge = lastSettingsPage[0] == AppPage.KNOWLEDGE
+              Column(Modifier.fillMaxSize().padding(top = topReserve)) {
+                if (onKnowledge) KnowledgeSectionSwitch(knowledgeSection) { knowledgeSection = it }
+                if (onKnowledge && knowledgeSection == 1) {
+                val filesDir = androidx.compose.ui.platform.LocalContext.current.filesDir
+                ImagesPage(
+                    images = uiState.images,
+                    pendingUri = uiState.pendingImageUri,
+                    isSaving = uiState.isSavingImage,
+                    imageFile = { com.assistant.app.data.ImageLibrary.fileIn(filesDir, it) },
+                    onPick = onPickImage,
+                    onSave = onSaveImage,
+                    onCancelPending = onCancelPendingImage,
+                    onUpdate = onUpdateImage,
+                    onDelete = onDeleteImage,
+                    modifier = Modifier.weight(1f)
+                )
+                } else
                 SettingsPage(
-                    modifier = Modifier.padding(top = topReserve),
+                    modifier = Modifier.weight(1f),
                     page = lastSettingsPage[0],
                     currentApiKey = uiState.currentApiKey,
                     currentEmbeddingApiKey = uiState.currentEmbeddingApiKey,
@@ -465,6 +475,7 @@ fun AssistantScreen(
                     pendingNavigation = pendingNav,
                     onPendingNavigationHandled = { pendingNav = null }
                 )
+              }
             }
 
         }
@@ -606,6 +617,31 @@ fun AssistantScreen(
     }
 }
 
+/** Two pills at the top of Knowledge: the documents Ultron can search, and the pictures it can show. */
+@Composable
+private fun KnowledgeSectionSwitch(selected: Int, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("Documents", "Pictures").forEachIndexed { index, label ->
+            val on = index == selected
+            Box(
+                Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .background(if (on) com.assistant.app.ui.theme.AssistantSelectedBg else androidx.compose.ui.graphics.Color.Transparent)
+                    .border(
+                        androidx.compose.foundation.BorderStroke(1.dp, com.assistant.app.ui.theme.AssistantOutline),
+                        androidx.compose.foundation.shape.RoundedCornerShape(50)
+                    )
+                    .clickable { onSelect(index) }
+                    .padding(horizontal = 18.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    label, fontSize = 14.sp, fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+                    color = if (on) com.assistant.app.ui.theme.AssistantTextPrimary else AssistantTextSecondary
+                )
+            }
+        }
+    }
+}
+
 /** Shows which tool the assistant is running, so tool calls are visible and not only "thinking". */
 @Composable
 private fun ToolChip(name: String) {
@@ -640,7 +676,7 @@ private fun StatusLine(
         !hasMicPermission -> strings.micRationale to AssistantError
         uiState.voiceState == VoiceState.ERROR ->
             (uiState.errorMessage ?: "Something went wrong") to AssistantError
-        !uiState.hasApiKey -> "The assistant isn't set up yet. Add a Gemini API key in Developer settings." to AssistantError
+        !uiState.hasApiKey -> "The assistant isn't set up yet. Add a Gemini API key in Settings." to AssistantError
         uiState.voiceState == VoiceState.CONNECTING -> strings.connectingCancel to AssistantTextSecondary
         uiState.voiceState == VoiceState.RESETTING -> strings.refreshingCancel to AssistantTextSecondary
         uiState.isMicMuted && uiState.voiceState == VoiceState.LISTENING -> strings.micMuted to AssistantError

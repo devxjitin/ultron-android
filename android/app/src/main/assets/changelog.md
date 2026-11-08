@@ -3,6 +3,14 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.16.0 - 2026-11-08
+
+### Changed
+- Profile is no longer in the menu list. At the bottom of the menu you now see a circle with the first letter of your name, and your name. Tap it to open Profile.
+- Developer is part of Settings now. Scroll to the end of Settings for the assistant name, greeting and API keys.
+- Images moved inside Knowledge. Open Knowledge and switch between Documents and Pictures.
+- Settings now has its own row in the menu.
+
 ## 1.15.1 - 2026-11-07
 
 ### Changed

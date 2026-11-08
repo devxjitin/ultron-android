@@ -159,7 +159,7 @@ class ScheduledPromptService : Service() {
                 return AgentOutcome(false, "Ultron is not activated on this phone, so the task did not run.")
             }
             val apiKey = ApiKeyStore(app).getApiKey().orEmpty()
-            if (apiKey.isBlank()) return AgentOutcome(false, "Add your Gemini key in Developer settings so scheduled tasks can run.")
+            if (apiKey.isBlank()) return AgentOutcome(false, "Add your Gemini key in Settings so scheduled tasks can run.")
             val settings = AppSettingsStore(app).settings.first()
             val locked = app.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
             val tools = settings.enabledDeviceTools

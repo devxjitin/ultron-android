@@ -88,17 +88,19 @@ private val RowHeight = 40.dp
 
 /** The menu in reading order: the basics, what Ultron does, what it knows about you, the numbers, then the app itself. */
 private val DrawerGroups: List<Pair<String?, List<NavTab>>> = listOf(
-    null to listOf(NavTab.HOME, NavTab.PROFILE),
+    null to listOf(NavTab.HOME),
     "Assistant" to listOf(NavTab.SKILLS, NavTab.CONNECTORS, NavTab.SCHEDULE),
-    "Your data" to listOf(NavTab.KNOWLEDGE, NavTab.MEMORY, NavTab.HISTORY, NavTab.IMAGES),
+    "Your data" to listOf(NavTab.KNOWLEDGE, NavTab.MEMORY, NavTab.HISTORY),
     "Insights" to listOf(NavTab.USAGE, NavTab.STORAGE),
-    "App" to listOf(NavTab.DEVELOPER, NavTab.HELP, NavTab.ABOUT)
+    "App" to listOf(NavTab.SETTINGS, NavTab.HELP, NavTab.ABOUT)
 )
 
 @Composable
 fun AppDrawerContent(
     selected: NavTab,
     assistantName: String,
+    /** The signed-in buyer's name (or the name set in Settings); blank shows "Your profile". */
+    userName: String,
     onSelect: (NavTab) -> Unit,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
@@ -114,7 +116,7 @@ fun AppDrawerContent(
             }
             Spacer(Modifier.height(16.dp))
         }
-        DrawerFooter(assistantName, selected == NavTab.SETTINGS) { onSelect(NavTab.SETTINGS) }
+        DrawerFooter(userName, selected == NavTab.PROFILE) { onSelect(NavTab.PROFILE) }
     }
 }
 
@@ -176,19 +178,26 @@ private fun DrawerHeader(assistantName: String, onClose: (() -> Unit)?) {
     }
 }
 
-/** Pinned at the bottom: the app icon and name on the left, a settings button on the right. */
+/** Pinned at the bottom: a circle with the first letter of the user's name, then the name. Tapping it opens Profile. */
 @Composable
-private fun DrawerFooter(assistantName: String, settingsSelected: Boolean, onSettings: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun DrawerFooter(userName: String, selected: Boolean, onProfile: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    val shown = userName.trim().ifBlank { "Your profile" }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).clip(shape)
+            .then(if (selected) Modifier.background(AssistantSelectedBg, shape) else Modifier)
+            .clickable(onClick = onProfile).padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(Modifier.size(40.dp).background(AssistantSurfaceElevated, CircleShape), contentAlignment = Alignment.Center) {
             Text(
-                assistantName.trim().firstOrNull()?.uppercase() ?: "U",
+                userName.trim().firstOrNull()?.uppercase() ?: "U",
                 color = AssistantTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium
             )
         }
         Spacer(Modifier.size(14.dp))
         Text(
-            assistantName,
+            shown,
             color = AssistantTextPrimary,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
@@ -196,12 +205,6 @@ private fun DrawerFooter(assistantName: String, settingsSelected: Boolean, onSet
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
-        IconButton(
-            onClick = onSettings,
-            modifier = Modifier.then(if (settingsSelected) Modifier.background(AssistantSurfaceElevated, CircleShape) else Modifier)
-        ) {
-            Icon(NavTab.SETTINGS.icon, contentDescription = "Settings", tint = AssistantTextSecondary, modifier = Modifier.size(22.dp))
-        }
     }
 }
 
