@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.16.1 - 2026-11-08
+
+### Changed
+- The assistant's name is now fixed, and the Assistant name and Greeting fields are gone from Settings.
+- The home screen shows a different greeting each session, picked from over a hundred.
+- Ultron no longer says "checking" out loud before a slow task. It stays quiet and speaks when the result is ready.
+
 ## 1.16.0 - 2026-11-08
 
 ### Changed
