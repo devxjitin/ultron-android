@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.19.9 - 2026-11-09
+
+### Improved
+- Behind-the-scenes cleanup of the timers and the speech detection used during a voice session, so future changes are safer. Nothing looks or works differently.
+
 ## 1.19.8 - 2026-11-09
 
 ### Improved
