@@ -170,6 +170,8 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("androidx.security:security-crypto:1.1.0")
+    // Installs baseline-prof.txt on the phone: without Play Store nothing else compiles the profile ahead of time.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     // Identity (anonymous at first), proof that requests come from the genuine app, and crash and usage reporting.
