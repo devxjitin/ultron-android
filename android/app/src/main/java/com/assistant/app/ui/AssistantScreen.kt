@@ -112,80 +112,10 @@ fun AssistantScreen(
     uiState: AssistantUiState,
     hasMicPermission: Boolean,
     micPermissionPermanentlyDenied: Boolean = false,
-    onMicTapped: () -> Unit,
-    onMuteToggled: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeModeChange: (ThemeMode) -> Unit = {},
-    onRequestPermission: () -> Unit,
-    onOpenAppSettings: () -> Unit = {},
-    onSettingsTapped: () -> Unit,
-    onDeveloperTapped: () -> Unit = {},
-    onAboutTapped: () -> Unit = {},
-    onProfileTapped: () -> Unit = {},
-    /** Re-checks the activation key with the server, from the Profile page. */
-    onRefreshLicense: () -> Unit = {},
-    /** Opens the website store to renew; null when this build has no store link. */
-    onRenewLicense: (() -> Unit)? = null,
-    onKnowledgeTapped: () -> Unit = {},
-    onHomeTapped: () -> Unit = {},
-    onConnectorsTapped: () -> Unit = {},
-    onInstallUpdate: () -> Unit = {},
-    onDismissUpdate: () -> Unit = {},
-    onCheckForUpdates: () -> Unit = {},
-    onUpdateNow: () -> Unit = {},
-    onUsageTapped: () -> Unit = {},
-    onStorageTapped: () -> Unit = {},
-    onDownloadsTapped: () -> Unit = {},
-    onSkillsTapped: () -> Unit = {},
-    onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
-    onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
-    onSkillDeleted: (String) -> Unit = {},
-    onClearCache: () -> Unit = {},
-    onResetUsage: () -> Unit = {},
-    onMemoryTapped: () -> Unit = {},
-    onMemoryEnabledToggled: (Boolean) -> Unit = {},
-    onAddMemory: (String) -> Unit = {},
-    onUpdateMemory: (String, String) -> Unit = { _, _ -> },
-    onDeleteMemory: (String) -> Unit = {},
-    onClearMemory: () -> Unit = {},
-    onRestoreMemory: (String) -> Unit = {},
-    onHistoryTapped: () -> Unit = {},
-    onHelpTapped: () -> Unit = {},
-    onPickImage: () -> Unit = {},
-    onSaveImage: (String, String) -> Unit = { _, _ -> },
-    onCancelPendingImage: () -> Unit = {},
-    onUpdateImage: (Long, String, String) -> Unit = { _, _, _ -> },
-    onDeleteImage: (Long) -> Unit = {},
-    onClearImages: () -> Unit = {},
-    onDismissShownImage: () -> Unit = {},
-    onSendFeatureRequest: (FeatureRequest, (String?) -> Unit) -> Unit = { _, _ -> },
-    onDeletePastSession: (List<Long>) -> Unit = {},
-    onClearPastConversations: () -> Unit = {},
-    onShowOlderConversations: () -> Unit = {},
-    onConnectorToolsEnabled: (List<DeviceTool>, Boolean, String) -> Unit = { _, _, _ -> },
-    onRequestConnectorPermissions: (List<String>) -> Unit = {},
-    onDismissSettings: () -> Unit,
-    onClearApiKey: () -> Unit,
-    onClearEmbeddingApiKey: () -> Unit,
-    onLiveModelSelected: (String) -> Unit,
-    onVoiceSelected: (String) -> Unit,
-    onLanguageSelected: (String) -> Unit,
-    onMicSensitivitySelected: (MicSensitivity) -> Unit,
-    onBargeInToggled: (Boolean) -> Unit,
-    onAnnounceNotificationsToggled: (Boolean) -> Unit,
-    onOwnerNameChanged: (String) -> Unit = {},
-    onPersonalitySelected: (String) -> Unit = {},
-    onSaveDeveloperChanges: (String, String, Int) -> Unit,
-    onAddKnowledgeDocument: (String, String) -> Unit,
-    onUpdateKnowledgeDocument: (String, String, String) -> Unit,
-    onDeleteKnowledgeDocument: (String) -> Unit,
-    onResetKnowledge: () -> Unit,
-    onUploadPdfFile: () -> Unit,
-    onDismissKnowledgeDocumentError: () -> Unit,
-    onDismissToast: () -> Unit,
     voiceLevel: () -> Float = { 0f },
     license: LicenseSummary? = null,
-    onRemoveLicense: () -> Unit = {},
+    actions: AssistantActions,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(com.assistant.app.ui.theme.AssistantBackground)) {
         val availableHeight = maxHeight
@@ -230,7 +160,7 @@ fun AssistantScreen(
         val scope = rememberCoroutineScope()
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         // Back from any other page goes to the home screen.
-        BackHandler(enabled = currentTab != NavTab.HOME && !drawerState.isOpen) { guardedNav(onHomeTapped) }
+        BackHandler(enabled = currentTab != NavTab.HOME && !drawerState.isOpen) { guardedNav(actions.onHomeTapped) }
         // Back with the menu open closes the menu instead of leaving the app.
         BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
         // Inside Connectors, back from the browse view returns to the added connectors first.
@@ -244,20 +174,20 @@ fun AssistantScreen(
                 onSelect = { tab ->
                     scope.launch { drawerState.close() }
                     if (tab != currentTab) when (tab) {
-                        NavTab.HOME -> guardedNav(onHomeTapped)
-                        NavTab.USAGE -> guardedNav(onUsageTapped)
-                        NavTab.STORAGE -> guardedNav(onStorageTapped)
-                        NavTab.DOWNLOADS -> guardedNav(onDownloadsTapped)
-                        NavTab.SKILLS -> guardedNav(onSkillsTapped)
-                        NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
-                        NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
-                        NavTab.MEMORY -> guardedNav(onMemoryTapped)
-                        NavTab.HISTORY -> guardedNav(onHistoryTapped)
-                        NavTab.HELP -> guardedNav(onHelpTapped)
-                        NavTab.SETTINGS -> guardedNav(onSettingsTapped)
-                        NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
-                        NavTab.ABOUT -> guardedNav(onAboutTapped)
-                        NavTab.PROFILE -> guardedNav(onProfileTapped)
+                        NavTab.HOME -> guardedNav(actions.onHomeTapped)
+                        NavTab.USAGE -> guardedNav(actions.onUsageTapped)
+                        NavTab.STORAGE -> guardedNav(actions.onStorageTapped)
+                        NavTab.DOWNLOADS -> guardedNav(actions.onDownloadsTapped)
+                        NavTab.SKILLS -> guardedNav(actions.onSkillsTapped)
+                        NavTab.KNOWLEDGE -> guardedNav(actions.onKnowledgeTapped)
+                        NavTab.CONNECTORS -> guardedNav(actions.onConnectorsTapped)
+                        NavTab.MEMORY -> guardedNav(actions.onMemoryTapped)
+                        NavTab.HISTORY -> guardedNav(actions.onHistoryTapped)
+                        NavTab.HELP -> guardedNav(actions.onHelpTapped)
+                        NavTab.SETTINGS -> guardedNav(actions.onSettingsTapped)
+                        NavTab.DEVELOPER -> guardedNav(actions.onDeveloperTapped)
+                        NavTab.ABOUT -> guardedNav(actions.onAboutTapped)
+                        NavTab.PROFILE -> guardedNav(actions.onProfileTapped)
                     }
                 },
                 modifier = drawerModifier.windowInsetsPadding(WindowInsets.displayCutout)
@@ -312,7 +242,7 @@ fun AssistantScreen(
                     Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
                     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                         if (uiState.voiceState in setOf(VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING)) {
-                            IconButton(onClick = onMuteToggled) {
+                            IconButton(onClick = actions.onMuteToggled) {
                                 Icon(
                                     imageVector = if (uiState.isMicMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
                                     contentDescription = if (uiState.isMicMuted) strings.unmute else strings.mute,
@@ -328,14 +258,14 @@ fun AssistantScreen(
                 MemoryPage(
                     memories = uiState.memories,
                     enabled = uiState.settings.memoryEnabled,
-                    onEnabledChange = onMemoryEnabledToggled,
-                    onAdd = onAddMemory,
-                    onUpdate = onUpdateMemory,
-                    onDelete = onDeleteMemory,
-                    onClearAll = onClearMemory,
+                    onEnabledChange = actions.onMemoryEnabledToggled,
+                    onAdd = actions.onAddMemory,
+                    onUpdate = actions.onUpdateMemory,
+                    onDelete = actions.onDeleteMemory,
+                    onClearAll = actions.onClearMemory,
                     modifier = Modifier.padding(top = topReserve),
                     removedByAssistant = uiState.removedMemories,
-                    onRestore = onRestoreMemory
+                    onRestore = actions.onRestoreMemory
                 )
             }
 
@@ -343,9 +273,9 @@ fun AssistantScreen(
                 HistoryPage(
                     turns = uiState.pastConversations,
                     total = uiState.pastConversationCount,
-                    onDeleteSession = onDeletePastSession,
-                    onClearAll = onClearPastConversations,
-                    onShowOlder = onShowOlderConversations,
+                    onDeleteSession = actions.onDeletePastSession,
+                    onClearAll = actions.onClearPastConversations,
+                    onShowOlder = actions.onShowOlderConversations,
                     modifier = Modifier.padding(top = topReserve)
                 )
             }
@@ -354,9 +284,9 @@ fun AssistantScreen(
                 ProfilePage(
                     license = license,
                     ownerName = uiState.settings.ownerName,
-                    onRefresh = onRefreshLicense,
-                    onRenew = onRenewLicense,
-                    onRemoveKey = onRemoveLicense,
+                    onRefresh = actions.onRefreshLicense,
+                    onRenew = actions.onRenewLicense,
+                    onRemoveKey = actions.onRemoveLicense,
                     modifier = Modifier.padding(top = topReserve)
                 )
             }
@@ -368,8 +298,8 @@ fun AssistantScreen(
             if (tab == NavTab.CONNECTORS) {
                 ConnectorsPage(
                     enabledTools = uiState.settings.enabledDeviceTools,
-                    onToolsEnabled = onConnectorToolsEnabled,
-                    onRequestPermissions = onRequestConnectorPermissions,
+                    onToolsEnabled = actions.onConnectorToolsEnabled,
+                    onRequestPermissions = actions.onRequestConnectorPermissions,
                     modifier = Modifier.padding(top = topReserve)
                 )
             }
@@ -379,7 +309,7 @@ fun AssistantScreen(
                 when (tab) {
                     NavTab.SKILLS -> {
                         val skills by SkillRegistry.entries.collectAsState()
-                        SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
+                        SkillsPage(skills, actions.onSkillToggled, actions.onSkillSaved, actions.onSkillDeleted, pageModifier)
                     }
                     NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
                     NavTab.DOWNLOADS -> DownloadsPage(pageModifier)
@@ -388,18 +318,18 @@ fun AssistantScreen(
                         knowledgeCount = uiState.knowledgeDocuments.size,
                         cacheBytes = uiState.cacheBytes,
                         hasUsage = uiState.usageDays.isNotEmpty(),
-                        onClearCache = onClearCache,
-                        onClearMemory = onClearMemory,
-                        onResetUsage = onResetUsage,
+                        onClearCache = actions.onClearCache,
+                        onClearMemory = actions.onClearMemory,
+                        onResetUsage = actions.onResetUsage,
                         modifier = pageModifier,
                         pastConversationCount = uiState.pastConversationCount,
                         pastConversationBytes = uiState.pastConversationBytes,
                         memoryBytes = uiState.memories.sumOf { it.text.length.toLong() },
                         knowledgeBytes = uiState.knowledgeDocuments.sumOf { it.text.length.toLong() },
-                        onClearPastConversations = onClearPastConversations,
+                        onClearPastConversations = actions.onClearPastConversations,
                         imageCount = uiState.images.size,
                         imageBytes = uiState.imageBytes,
-                        onClearImages = onClearImages
+                        onClearImages = actions.onClearImages
                     )
                     NavTab.ABOUT -> AboutPage(
                         assistantName = uiState.settings.assistantName,
@@ -408,8 +338,8 @@ fun AssistantScreen(
                         lastCheckedAt = uiState.lastUpdateCheckAt,
                         updateError = uiState.updateCheckError,
                         downloadProgress = uiState.updateDownloadProgress,
-                        onCheckForUpdates = onCheckForUpdates,
-                        onUpdateNow = onUpdateNow,
+                        onCheckForUpdates = actions.onCheckForUpdates,
+                        onUpdateNow = actions.onUpdateNow,
                         modifier = pageModifier
                     )
                     else -> Unit
@@ -427,11 +357,11 @@ fun AssistantScreen(
                     pendingUri = uiState.pendingImageUri,
                     isSaving = uiState.isSavingImage,
                     imageFile = { com.assistant.app.data.ImageLibrary.fileIn(filesDir, it) },
-                    onPick = onPickImage,
-                    onSave = onSaveImage,
-                    onCancelPending = onCancelPendingImage,
-                    onUpdate = onUpdateImage,
-                    onDelete = onDeleteImage,
+                    onPick = actions.onPickImage,
+                    onSave = actions.onSaveImage,
+                    onCancelPending = actions.onCancelPendingImage,
+                    onUpdate = actions.onUpdateImage,
+                    onDelete = actions.onDeleteImage,
                     modifier = Modifier.weight(1f)
                 )
                 } else
@@ -441,17 +371,17 @@ fun AssistantScreen(
                     currentApiKey = uiState.currentApiKey,
                     currentEmbeddingApiKey = uiState.currentEmbeddingApiKey,
                     settings = uiState.settings,
-                    onLiveModelSelected = onLiveModelSelected,
-                    onVoiceSelected = onVoiceSelected,
-                    onLanguageSelected = onLanguageSelected,
-                    onMicSensitivitySelected = onMicSensitivitySelected,
-                    onBargeInToggled = onBargeInToggled,
-                    onAnnounceNotificationsToggled = onAnnounceNotificationsToggled,
-                    onOwnerNameChanged = onOwnerNameChanged,
-                    onPersonalitySelected = onPersonalitySelected,
-                    onClearApiKey = onClearApiKey,
-                    onClearEmbeddingApiKey = onClearEmbeddingApiKey,
-                    onSaveDeveloperChanges = onSaveDeveloperChanges,
+                    onLiveModelSelected = actions.onLiveModelSelected,
+                    onVoiceSelected = actions.onVoiceSelected,
+                    onLanguageSelected = actions.onLanguageSelected,
+                    onMicSensitivitySelected = actions.onMicSensitivitySelected,
+                    onBargeInToggled = actions.onBargeInToggled,
+                    onAnnounceNotificationsToggled = actions.onAnnounceNotificationsToggled,
+                    onOwnerNameChanged = actions.onOwnerNameChanged,
+                    onPersonalitySelected = actions.onPersonalitySelected,
+                    onClearApiKey = actions.onClearApiKey,
+                    onClearEmbeddingApiKey = actions.onClearEmbeddingApiKey,
+                    onSaveDeveloperChanges = actions.onSaveDeveloperChanges,
                     isSavingDeveloper = uiState.isSavingDeveloperSettings,
                     knowledgeDocuments = uiState.knowledgeDocuments,
                     isSavingKnowledgeDocument = uiState.isSavingKnowledgeDocument,
@@ -460,14 +390,14 @@ fun AssistantScreen(
                     uploadedChunks = uiState.uploadedChunks,
                     totalChunks = uiState.totalChunks,
                     knowledgeDocumentError = uiState.knowledgeDocumentError,
-                    onAddKnowledgeDocument = onAddKnowledgeDocument,
-                    onUpdateKnowledgeDocument = onUpdateKnowledgeDocument,
-                    onDeleteKnowledgeDocument = onDeleteKnowledgeDocument,
+                    onAddKnowledgeDocument = actions.onAddKnowledgeDocument,
+                    onUpdateKnowledgeDocument = actions.onUpdateKnowledgeDocument,
+                    onDeleteKnowledgeDocument = actions.onDeleteKnowledgeDocument,
                     knowledgeStoreCorrupt = uiState.knowledgeStoreCorrupt,
-                    onResetKnowledge = onResetKnowledge,
-                    onUploadPdfFile = onUploadPdfFile,
-                    onDismissKnowledgeDocumentError = onDismissKnowledgeDocumentError,
-                    onDismiss = onDismissSettings,
+                    onResetKnowledge = actions.onResetKnowledge,
+                    onUploadPdfFile = actions.onUploadPdfFile,
+                    onDismissKnowledgeDocumentError = actions.onDismissKnowledgeDocumentError,
+                    onDismiss = actions.onDismissSettings,
                     onDirtyChanged = { settingsDirty = it },
                     pendingNavigation = pendingNav,
                     onPendingNavigationHandled = { pendingNav = null }
@@ -488,9 +418,9 @@ fun AssistantScreen(
                 voiceState = uiState.voiceState,
                 onClick = {
                     when {
-                        hasMicPermission -> onMicTapped()
-                        micPermissionPermanentlyDenied -> onOpenAppSettings()
-                        else -> onRequestPermission()
+                        hasMicPermission -> actions.onMicTapped()
+                        micPermissionPermanentlyDenied -> actions.onOpenAppSettings()
+                        else -> actions.onRequestPermission()
                     }
                 },
                 accent = true,
@@ -503,7 +433,7 @@ fun AssistantScreen(
             showMenuButton = !wide,
             onMenuClick = { scope.launch { drawerState.open() } },
             onToggleTheme = if (currentTab == NavTab.HOME) {
-                { onThemeModeChange(if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK) }
+                { actions.onThemeModeChange(if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK) }
             } else null,
             isDarkTheme = isDarkTheme,
             modifier = Modifier.align(Alignment.TopCenter)
@@ -511,7 +441,7 @@ fun AssistantScreen(
 
         // Above the top bar, so the picture's close button is never covered by the bar's buttons.
         uiState.shownImage?.let { shown ->
-            androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, onDismissShownImage) }
+            androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, actions.onDismissShownImage) }
         }
 
         requestType?.let { kind ->
@@ -520,7 +450,7 @@ fun AssistantScreen(
                 onSend = { form ->
                     requestSending = true
                     requestError = null
-                    onSendFeatureRequest(form) { error ->
+                    actions.onSendFeatureRequest(form) { error ->
                         requestSending = false
                         if (error == null) requestType = null else requestError = error
                     }
@@ -532,7 +462,7 @@ fun AssistantScreen(
         uiState.updateInfo?.let { update ->
             val progress = uiState.updateDownloadProgress
             AlertDialog(
-                onDismissRequest = { if (progress == null) onDismissUpdate() },
+                onDismissRequest = { if (progress == null) actions.onDismissUpdate() },
                 title = { Text("Update available") },
                 text = {
                     // The version and the progress bar always stay on screen; the release notes open only on request.
@@ -563,8 +493,8 @@ fun AssistantScreen(
                         }
                     }
                 },
-                confirmButton = { TextButton(onClick = onInstallUpdate, enabled = progress == null) { Text("Update") } },
-                dismissButton = { TextButton(onClick = onDismissUpdate, enabled = progress == null) { Text("Later") } }
+                confirmButton = { TextButton(onClick = actions.onInstallUpdate, enabled = progress == null) { Text("Update") } },
+                dismissButton = { TextButton(onClick = actions.onDismissUpdate, enabled = progress == null) { Text("Later") } }
             )
         }
 
@@ -573,7 +503,7 @@ fun AssistantScreen(
             message = uiState.toastMessage,
             type = uiState.toastType,
             toastId = uiState.toastId,
-            onDismiss = onDismissToast,
+            onDismiss = actions.onDismissToast,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = if (currentTab == NavTab.HOME) 116.dp else 24.dp)

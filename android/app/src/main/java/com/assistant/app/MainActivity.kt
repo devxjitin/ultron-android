@@ -38,6 +38,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.assistant.app.ui.AssistantActions
 import com.assistant.app.ui.AssistantScreen
 import com.assistant.app.ui.theme.AssistantTheme
 import com.assistant.app.ui.theme.ActivePalette
@@ -329,100 +330,102 @@ class MainActivity : ComponentActivity() {
                         voiceLevel = { voiceLevel.value },
                         hasMicPermission = micGranted,
                         micPermissionPermanentlyDenied = micPermissionPermanentlyDenied,
-                        onMicTapped = { viewModel.onMicTapped() },
-                        onMuteToggled = { viewModel.onMuteToggled() },
                         themeMode = themeMode,
-                        onThemeModeChange = { mode ->
-                            themeMode = mode
-                            ThemePrefs.save(this@MainActivity, mode)
-                            val night = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                                android.content.res.Configuration.UI_MODE_NIGHT_YES
-                            ActivePalette.current = paletteFor(mode, night)
-                        },
-                        onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
-                        onHomeTapped = { viewModel.onHomeTapped() },
-                        onConnectorsTapped = { viewModel.onConnectorsTapped() },
-                        onInstallUpdate = { viewModel.onInstallUpdate() },
-                        onDismissUpdate = { viewModel.onDismissUpdate() },
-                        onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
-                        onUpdateNow = { viewModel.onUpdateNow() },
-                        onUsageTapped = { viewModel.onUsageTapped() },
-                        onStorageTapped = { viewModel.onStorageTapped() },
-                        onDownloadsTapped = { viewModel.onDownloadsTapped() },
-                        onSkillsTapped = { viewModel.onSkillsTapped() },
-                        onSkillToggled = { name, on -> viewModel.onSkillToggled(name, on) },
-                        onSkillSaved = { name, description, body -> viewModel.onSkillSaved(name, description, body) },
-                        onSkillDeleted = { viewModel.onSkillDeleted(it) },
-                        onClearCache = { viewModel.onClearCache() },
-                        onResetUsage = { viewModel.onResetUsage() },
-                        onMemoryTapped = { viewModel.onMemoryTapped() },
-                        onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
-                        onAddMemory = { viewModel.onAddMemory(it) },
-                        onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
-                        onDeleteMemory = { viewModel.onDeleteMemory(it) },
-                        onClearMemory = { viewModel.onClearMemory() },
-                        onRestoreMemory = { viewModel.onRestoreMemory(it) },
-                        onHistoryTapped = { viewModel.onHistoryTapped() },
-                        onHelpTapped = { viewModel.onHelpTapped() },
-                        onPickImage = { imagePickerLauncher.launch("image/*") },
-                        onSaveImage = { title, description -> viewModel.onSaveImage(title, description) },
-                        onCancelPendingImage = { viewModel.onCancelPendingImage() },
-                        onUpdateImage = { id, title, description -> viewModel.onUpdateImage(id, title, description) },
-                        onDeleteImage = { viewModel.onDeleteImage(it) },
-                        onClearImages = { viewModel.onClearImages() },
-                        onDismissShownImage = { viewModel.onDismissShownImage() },
-                        onSendFeatureRequest = { form, done ->
-                            viewModel.onSendFeatureRequest(form, done)
-                        },
-                        onDeletePastSession = { viewModel.onDeletePastSession(it) },
-                        onClearPastConversations = { viewModel.onClearPastConversations() },
-                        onShowOlderConversations = { viewModel.onShowOlderConversations() },
-                        onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
-                        onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
-                        onRequestPermission = {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        },
-                        onOpenAppSettings = {
-                            startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                    .setData(Uri.fromParts("package", packageName, null))
-                            )
-                        },
-                        onSettingsTapped = { viewModel.onSettingsTapped() },
-                        onDeveloperTapped = { viewModel.onDeveloperTapped() },
-                        onAboutTapped = { viewModel.onAboutTapped() },
-                        onProfileTapped = { viewModel.onProfileTapped() },
-                        onRefreshLicense = { access.refresh(quiet = true) },
-                        onRenewLicense = if (BuildConfig.STORE_URL.isNotBlank()) ::openStore else null,
-                        onDismissSettings = { viewModel.onDismissSettings() },
-                        onClearApiKey = { viewModel.onClearApiKey() },
-                        onClearEmbeddingApiKey = { viewModel.onClearEmbeddingApiKey() },
-                        onLiveModelSelected = { id -> viewModel.onLiveModelSelected(id) },
-                        onVoiceSelected = { voice -> viewModel.onVoiceSelected(voice) },
-                        onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
-                        onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
-                        onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
-                        onAnnounceNotificationsToggled = { enabled -> viewModel.onAnnounceNotificationsToggled(enabled) },
-                        onPersonalitySelected = { id -> viewModel.onPersonalitySelected(id) },
-                        onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
-                        onSaveDeveloperChanges = { apiKey, embeddingApiKey, retrievalLimit ->
-                            viewModel.onSaveDeveloperChanges(
-                                apiKey,
-                                embeddingApiKey,
-                                retrievalLimit
-                            )
-                        },
-                        onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
-                        onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
-                        onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },
-                        onResetKnowledge = { viewModel.onResetKnowledge() },
-                        onUploadPdfFile = {
-                            pdfPickerLauncher.launch(arrayOf("application/pdf"))
-                        },
-                        onDismissKnowledgeDocumentError = { viewModel.onDismissKnowledgeDocumentError() },
-                        onDismissToast = { viewModel.onDismissToast() },
                         license = LicenseSummary(active.key, active.status),
-                        onRemoveLicense = { access.removeKey() },
+                        actions = AssistantActions(
+                            onMicTapped = { viewModel.onMicTapped() },
+                            onMuteToggled = { viewModel.onMuteToggled() },
+                            onThemeModeChange = { mode ->
+                                themeMode = mode
+                                ThemePrefs.save(this@MainActivity, mode)
+                                val night = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+                                ActivePalette.current = paletteFor(mode, night)
+                            },
+                            onKnowledgeTapped = { viewModel.onKnowledgeTapped() },
+                            onHomeTapped = { viewModel.onHomeTapped() },
+                            onConnectorsTapped = { viewModel.onConnectorsTapped() },
+                            onInstallUpdate = { viewModel.onInstallUpdate() },
+                            onDismissUpdate = { viewModel.onDismissUpdate() },
+                            onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
+                            onUpdateNow = { viewModel.onUpdateNow() },
+                            onUsageTapped = { viewModel.onUsageTapped() },
+                            onStorageTapped = { viewModel.onStorageTapped() },
+                            onDownloadsTapped = { viewModel.onDownloadsTapped() },
+                            onSkillsTapped = { viewModel.onSkillsTapped() },
+                            onSkillToggled = { name, on -> viewModel.onSkillToggled(name, on) },
+                            onSkillSaved = { name, description, body -> viewModel.onSkillSaved(name, description, body) },
+                            onSkillDeleted = { viewModel.onSkillDeleted(it) },
+                            onClearCache = { viewModel.onClearCache() },
+                            onResetUsage = { viewModel.onResetUsage() },
+                            onMemoryTapped = { viewModel.onMemoryTapped() },
+                            onMemoryEnabledToggled = { viewModel.onMemoryEnabledToggled(it) },
+                            onAddMemory = { viewModel.onAddMemory(it) },
+                            onUpdateMemory = { id, text -> viewModel.onUpdateMemory(id, text) },
+                            onDeleteMemory = { viewModel.onDeleteMemory(it) },
+                            onClearMemory = { viewModel.onClearMemory() },
+                            onRestoreMemory = { viewModel.onRestoreMemory(it) },
+                            onHistoryTapped = { viewModel.onHistoryTapped() },
+                            onHelpTapped = { viewModel.onHelpTapped() },
+                            onPickImage = { imagePickerLauncher.launch("image/*") },
+                            onSaveImage = { title, description -> viewModel.onSaveImage(title, description) },
+                            onCancelPendingImage = { viewModel.onCancelPendingImage() },
+                            onUpdateImage = { id, title, description -> viewModel.onUpdateImage(id, title, description) },
+                            onDeleteImage = { viewModel.onDeleteImage(it) },
+                            onClearImages = { viewModel.onClearImages() },
+                            onDismissShownImage = { viewModel.onDismissShownImage() },
+                            onSendFeatureRequest = { form, done ->
+                                viewModel.onSendFeatureRequest(form, done)
+                            },
+                            onDeletePastSession = { viewModel.onDeletePastSession(it) },
+                            onClearPastConversations = { viewModel.onClearPastConversations() },
+                            onShowOlderConversations = { viewModel.onShowOlderConversations() },
+                            onConnectorToolsEnabled = { tools, enabled, name -> viewModel.onConnectorToolsEnabled(tools, enabled, name) },
+                            onRequestConnectorPermissions = { permissions -> viewModel.onRequestConnectorPermissions(permissions) },
+                            onRequestPermission = {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            },
+                            onOpenAppSettings = {
+                                startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                        .setData(Uri.fromParts("package", packageName, null))
+                                )
+                            },
+                            onSettingsTapped = { viewModel.onSettingsTapped() },
+                            onDeveloperTapped = { viewModel.onDeveloperTapped() },
+                            onAboutTapped = { viewModel.onAboutTapped() },
+                            onProfileTapped = { viewModel.onProfileTapped() },
+                            onRefreshLicense = { access.refresh(quiet = true) },
+                            onRenewLicense = if (BuildConfig.STORE_URL.isNotBlank()) ::openStore else null,
+                            onDismissSettings = { viewModel.onDismissSettings() },
+                            onClearApiKey = { viewModel.onClearApiKey() },
+                            onClearEmbeddingApiKey = { viewModel.onClearEmbeddingApiKey() },
+                            onLiveModelSelected = { id -> viewModel.onLiveModelSelected(id) },
+                            onVoiceSelected = { voice -> viewModel.onVoiceSelected(voice) },
+                            onLanguageSelected = { code -> viewModel.onLanguageSelected(code) },
+                            onMicSensitivitySelected = { sensitivity -> viewModel.onMicSensitivitySelected(sensitivity) },
+                            onBargeInToggled = { enabled -> viewModel.onBargeInToggled(enabled) },
+                            onAnnounceNotificationsToggled = { enabled -> viewModel.onAnnounceNotificationsToggled(enabled) },
+                            onPersonalitySelected = { id -> viewModel.onPersonalitySelected(id) },
+                            onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },
+                            onSaveDeveloperChanges = { apiKey, embeddingApiKey, retrievalLimit ->
+                                viewModel.onSaveDeveloperChanges(
+                                    apiKey,
+                                    embeddingApiKey,
+                                    retrievalLimit
+                                )
+                            },
+                            onAddKnowledgeDocument = { title, text -> viewModel.onAddKnowledgeDocument(title, text) },
+                            onUpdateKnowledgeDocument = { id, title, text -> viewModel.onUpdateKnowledgeDocument(id, title, text) },
+                            onDeleteKnowledgeDocument = { id -> viewModel.onDeleteKnowledgeDocument(id) },
+                            onResetKnowledge = { viewModel.onResetKnowledge() },
+                            onUploadPdfFile = {
+                                pdfPickerLauncher.launch(arrayOf("application/pdf"))
+                            },
+                            onDismissKnowledgeDocumentError = { viewModel.onDismissKnowledgeDocumentError() },
+                            onDismissToast = { viewModel.onDismissToast() },
+                            onRemoveLicense = { access.removeKey() },
+                        ),
                     )
                 }
             }
