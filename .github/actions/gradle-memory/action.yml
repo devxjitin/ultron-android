@@ -1,0 +1,14 @@
+name: Gradle memory for CI
+description: Give Gradle and Kotlin more heap on the 16 GB runner; the 2 GB local default makes R8 crawl.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        # The user-home file overrides android/gradle.properties without changing local builds.
+        mkdir -p "${GRADLE_USER_HOME:-$HOME/.gradle}"
+        cat >> "${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties" <<'PROPS'
+        org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC -Dfile.encoding=UTF-8
+        kotlin.daemon.jvmargs=-Xmx3g -XX:+UseParallelGC
+        org.gradle.parallel=true
+        PROPS
