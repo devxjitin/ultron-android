@@ -3,6 +3,8 @@ package com.assistant.app.data
 import com.assistant.app.network.GeminiEmbeddingClient
 import com.assistant.app.util.LatencyTool
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /** Stored chunks use an older embedding model and must be re-embedded before they can be searched. */
@@ -75,7 +77,10 @@ class RagSearchEngine(
 ) {
 
     /** Embeds the query in the current model space; fails fast if stored chunks need migration first. */
-    suspend fun search(query: String, trace: LatencyTool? = null): List<String> {
+    suspend fun search(query: String, trace: LatencyTool? = null): List<String> = coroutineScope {
+        // The question is embedded while the chunks load; the network call is the slow part. If there turns out to be
+        // nothing to search, or a migration is needed, the scope ends and the pending call is cancelled.
+        val queryEmbeddingDeferred = async { embeddingClient.embed(query, GeminiEmbeddingClient.TaskType.QUERY, trace).embedding }
         val loadStartedAt = trace?.now()
         var (revision, chunks) = documentStore.chunksWithRevision(trace)
         if (requiresEmbeddingMigration(chunks)) {
@@ -87,9 +92,9 @@ class RagSearchEngine(
         if (trace != null && loadStartedAt != null) trace.event("chunks_loaded", mapOf(
             "duration_ms" to (trace.now() - loadStartedAt), "chunk_count" to chunks.size
         ))
-        if (chunks.isEmpty()) return emptyList()
+        if (chunks.isEmpty()) return@coroutineScope emptyList()
 
-        val queryEmbedding = embeddingClient.embed(query, GeminiEmbeddingClient.TaskType.QUERY, trace).embedding
+        val queryEmbedding = queryEmbeddingDeferred.await()
 
         val rankingStartedAt = trace?.now()
         val limit = if (isListQuery(query)) {
@@ -105,7 +110,7 @@ class RagSearchEngine(
             chunks = reloaded.second
             matches = documentStore.nearestChunks(queryEmbedding, limit, trace)
         }
-        if (chunks.isEmpty()) return emptyList()
+        if (chunks.isEmpty()) return@coroutineScope emptyList()
         val keywordKeys = withContext(Dispatchers.Default) { Bm25Cache.forChunks(chunks).search(query, limit) }
         val fusedKeys = fuseRankings(matches.chunks.map { it.key() }, keywordKeys, limit = limit)
         if (trace != null && rankingStartedAt != null) trace.event("ranking_complete", mapOf(
@@ -113,11 +118,11 @@ class RagSearchEngine(
             "vector_count" to matches.chunks.size, "keyword_count" to keywordKeys.size,
             "index" to "objectbox_hnsw+bm25"
         ))
-        if (fusedKeys.isEmpty()) return emptyList()
+        if (fusedKeys.isEmpty()) return@coroutineScope emptyList()
 
         val byKey = chunks.associateBy { it.key() }
         val topChunks = fusedKeys.mapNotNull { byKey[it] }
-        return assembleContext(topChunks, chunks, matches.documents.associate { it.id to it.title })
+        assembleContext(topChunks, chunks, matches.documents.associate { it.id to it.title })
     }
 
 }
