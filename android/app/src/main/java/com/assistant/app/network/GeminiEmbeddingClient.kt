@@ -42,6 +42,36 @@ class GeminiEmbeddingClient(private val apiKey: String) {
         /** Honors a server-provided Retry-After (capped), otherwise the fixed default delay. */
         internal fun embeddingRetryDelayMs(e: Throwable): Long =
             ((e as? HttpFailure)?.retryAfterMs ?: DOCUMENT_RETRY_DELAY_MS).coerceIn(0L, MAX_RETRY_AFTER_MS)
+
+        /** Chunks sent per batchEmbedContents call (the API allows up to 100). */
+        internal const val BATCH_SIZE = 50
+
+        /** The batchEmbedContents request body: one embed request per text, all for the same task type. */
+        internal fun batchBody(texts: List<String>, taskType: TaskType): String {
+            val requests = JSONArray()
+            texts.forEach { text ->
+                requests.put(
+                    JSONObject()
+                        .put("model", "models/$MODEL")
+                        .put("content", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", text))))
+                        .put("taskType", taskType.apiValue)
+                        .put("outputDimensionality", OUTPUT_DIMENSIONS)
+                )
+            }
+            return JSONObject().put("requests", requests).toString()
+        }
+
+        /** Reads the vectors back in request order; a missing or extra vector is an error, never silently shifted. */
+        internal fun parseBatch(raw: String, expected: Int): List<FloatArray> {
+            val embeddings = JSONObject(raw).getJSONArray("embeddings")
+            if (embeddings.length() != expected) {
+                throw IllegalStateException("Expected $expected embeddings but got ${embeddings.length()}.")
+            }
+            return List(expected) { i ->
+                val values = embeddings.getJSONObject(i).getJSONArray("values")
+                FloatArray(values.length()) { j -> values.getDouble(j).toFloat() }
+            }
+        }
     }
 
     private val client = HttpClients.shared.newBuilder()
@@ -101,6 +131,47 @@ class GeminiEmbeddingClient(private val apiKey: String) {
             }
         }
     }
+
+    /**
+     * Embeds many document chunks with a few batched calls instead of one call per chunk, in order. Each batch is
+     * retried like a single document embed; [onProgress] gets the number of texts finished so far.
+     */
+    suspend fun embedDocuments(texts: List<String>, onProgress: (Int) -> Unit = {}): List<Result> {
+        val results = ArrayList<Result>(texts.size)
+        for (batch in texts.chunked(BATCH_SIZE)) {
+            var retryCount = 0
+            while (true) {
+                try {
+                    embedBatch(batch).forEach { results += Result(MODEL, it) }
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (!isRetryableEmbeddingFailure(e)) throw e
+                    if (retryCount >= DOCUMENT_RETRY_COUNT) throw DocumentEmbeddingRetryExhausted(e)
+                    retryCount++
+                    delay(embeddingRetryDelayMs(e))
+                }
+            }
+            onProgress(results.size)
+        }
+        return results
+    }
+
+    private suspend fun embedBatch(texts: List<String>): List<FloatArray> =
+        withContext(Dispatchers.IO) {
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:batchEmbedContents"
+            val body = batchBody(texts, TaskType.DOCUMENT).toRequestBody(JSON_MEDIA_TYPE)
+            val request = Request.Builder().url(url).header("x-goog-api-key", apiKey).post(body).build()
+            client.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val retryAfterMs = response.header("Retry-After")?.trim()?.toLongOrNull()?.times(1000)
+                    throw HttpFailure(response.code, "Embedding request failed (${response.code}): ${raw.take(200)}", retryAfterMs)
+                }
+                parseBatch(raw, texts.size)
+            }
+        }
 
     private suspend fun embedOne(text: String, taskType: TaskType): FloatArray =
         withContext(Dispatchers.IO) {

@@ -546,3 +546,4 @@
 [2026-11-06 11:15] [Claude] [Feat: Long-term memory phase 4: Past conversations on the Memory page (by day, read, delete one or a day, clear all), Storage page line and clear row; 9 new tests]
 [2026-11-08 12:00] [Claude] [Refactor: review cleanup 1.18.3 - ribbon idle, overlay above top bar, toast spacing, 1-minute session warning, removed unused Images tab/flag/function, keystore clear off main thread; untracked site bundles + hosting caches, archived old audit reports to docs/archive, demo.js not deployed]
 [2026-11-08 13:00] [Claude] [Perf: 1.18.4 - query embedding runs in parallel with chunk loading, goAway waits for the reply to end (max server deadline minus 2 s), warm session opens after 2 s in front and restarts the wait on each settings change]
+[2026-11-08 17:00] [Claude] [Perf: 1.18.5 - Knowledge import and re-index embed chunks with batchEmbedContents (50 per call) instead of one call per chunk; 4 new tests]

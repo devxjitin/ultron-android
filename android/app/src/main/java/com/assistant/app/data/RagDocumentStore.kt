@@ -381,7 +381,7 @@ class RagDocumentStore(private val context: Context) {
         }
     }
 
-    /** Prepares one paragraph at a time so the UI can show real, steadily advancing progress. */
+    /** Embeds the new paragraphs in batches (reusing unchanged ones); progress advances once per finished batch. */
     private suspend fun embedChunks(
         doc: RagDocument,
         embeddingClient: GeminiEmbeddingClient,
@@ -391,15 +391,16 @@ class RagDocumentStore(private val context: Context) {
         val pieces = searchableDocumentChunks(doc.text)
         val embeddingTexts = pieces.map { documentEmbeddingText(doc.title, it.first, it.second) }
         val toEmbed = embeddingTexts.count { it !in reusable }
-        var embedded = 0
         onProgress(0, toEmbed)
+        val missing = embeddingTexts.indices.filter { embeddingTexts[it] !in reusable }
+        val fresh = embeddingClient.embedDocuments(missing.map { embeddingTexts[it] }) { done -> onProgress(done, toEmbed) }
+        val freshByIndex = missing.zip(fresh).toMap()
         return pieces.mapIndexed { index, piece ->
             val kept = reusable[embeddingTexts[index]]
             if (kept != null) {
                 kept.copy(chunkIndex = index)
             } else {
-                val result = embeddingClient.embed(embeddingTexts[index], GeminiEmbeddingClient.TaskType.DOCUMENT)
-                onProgress(++embedded, toEmbed)
+                val result = freshByIndex.getValue(index)
                 RagChunk(
                     docId = doc.id,
                     chunkIndex = index,
