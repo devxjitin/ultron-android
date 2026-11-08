@@ -45,7 +45,6 @@ import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
 import com.assistant.app.data.memoriesForPrompt
-import com.assistant.app.network.AppUpdater
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
 import com.assistant.app.data.validateFormattedDataset
@@ -105,8 +104,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val SEARCH_RETRY_LIMIT = 1
         private const val SEARCH_RETRY_DELAY_MS = 500L
         private const val MAX_SEARCH_QUERY_CHARS = 500
-        /** How often the app asks the AWS update server for a newer build on its own, also while it stays open. */
-        private const val UPDATE_CHECK_INTERVAL_MS = 5 * 60_000L
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
         /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
@@ -244,6 +241,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
 
+    private val updates = UpdateManager(
+        scope = viewModelScope,
+        state = _uiState,
+        source = AppUpdaterSource(application),
+        showToast = { message, type -> showToast(message, type) },
+        isVoiceSessionActive = { isSessionActive(_uiState.value.voiceState) }
+    )
+
     /** Mic level while listening, playback level while speaking. Kept out of [uiState] because it changes
      *  ~25 times a second and only the voice ribbon needs it; putting it in the state recomposed the whole screen. */
     private val _voiceLevel = MutableStateFlow(0f)
@@ -346,7 +351,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // An app left open (kiosk, or just never swiped away) never gets a resume event, so it asks on its own too.
         viewModelScope.launch {
             while (true) {
-                delay(UPDATE_CHECK_INTERVAL_MS)
+                delay(UpdateManager.CHECK_INTERVAL_MS)
                 if (isForeground) checkForUpdate(manual = false)
             }
         }
@@ -874,126 +879,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private var lastUpdateCheckMs = 0L
-    private var downloadedUpdate: Pair<Int, java.io.File>? = null
-    /** Silent download started right after a check finds a build, so tapping Update can install at once. */
-    private var prefetchJob: Job? = null
-    @Volatile private var showPrefetchProgress = false
-    /** True while a check is running, so two never overlap. The page only shows "Checking" for a check the user started. */
-    private var updateCheckInFlight = false
+    /** Asks the AWS update server for a newer build; see [UpdateManager]. */
+    fun checkForUpdate(manual: Boolean) = updates.checkForUpdate(manual)
 
-    /** Asks the AWS update server for a newer build; the automatic check runs at most every [UPDATE_CHECK_INTERVAL_MS] (5 minutes). */
-    fun checkForUpdate(manual: Boolean) {
-        if (!AppUpdater.isConfigured) {
-            if (manual) _uiState.update {
-                it.copy(updateCheckState = UpdateCheckState.FAILED, updateCheckError = "Updates are not set up in this build.")
-            }
-            return
-        }
-        if (_uiState.value.updateDownloadProgress != null || updateCheckInFlight) return
-        if (!manual && System.currentTimeMillis() - lastUpdateCheckMs < UPDATE_CHECK_INTERVAL_MS) return
-        lastUpdateCheckMs = System.currentTimeMillis()
-        updateCheckInFlight = true
-        // An automatic check runs quietly. "Checking" is only shown when the user taps Check for updates.
-        if (manual) _uiState.update { it.copy(updateCheckState = UpdateCheckState.CHECKING, updateCheckError = null) }
-        viewModelScope.launch {
-            val result = AppUpdater.check()
-            updateCheckInFlight = false
-            result.fold(
-                onSuccess = { info ->
-                    val checkedAt = System.currentTimeMillis()
-                    if (info != null) {
-                        // A quiet check never interrupts a voice conversation, and a build the user already
-                        // declined waits until the next launch (About still offers it).
-                        val quiet = !manual && (isSessionActive(_uiState.value.voiceState) || info.versionCode == dismissedUpdateVersion)
-                        _uiState.update {
-                            it.copy(
-                                updateCheckState = UpdateCheckState.AVAILABLE, lastUpdateCheckAt = checkedAt, availableUpdate = info,
-                                updateInfo = if (quiet) it.updateInfo else info
-                            )
-                        }
-                        prefetchUpdate(info)
-                    } else {
-                        _uiState.update {
-                            it.copy(updateCheckState = UpdateCheckState.UP_TO_DATE, lastUpdateCheckAt = checkedAt, availableUpdate = null)
-                        }
-                    }
-                },
-                onFailure = { error ->
-                    // A failed check (offline) must not block the next try for a whole interval.
-                    lastUpdateCheckMs = 0L
-                    // A quiet check that fails says nothing; only a check the user asked for shows the error.
-                    if (manual) _uiState.update {
-                        it.copy(
-                            updateCheckState = UpdateCheckState.FAILED,
-                            updateCheckError = "Could not reach the update server. Check your connection and try again."
-                        )
-                    }
-                    Log.w("AssistantUpdate", "Update check failed: ${error.javaClass.simpleName}")
-                }
-            )
-        }
-    }
+    fun onUpdateNow() = updates.onUpdateNow()
 
-    private var dismissedUpdateVersion = 0
+    fun onInstallUpdate() = updates.onInstallUpdate()
 
-    /** Offers the build that About found, the same way the automatic dialog does. */
-    fun onUpdateNow() {
-        val info = _uiState.value.availableUpdate ?: return
-        _uiState.update { it.copy(updateInfo = info) }
-        onInstallUpdate()
-    }
-
-    /** Downloads [info] in the background on an unmetered network (Wi-Fi), without any UI. */
-    private fun prefetchUpdate(info: com.assistant.app.network.UpdateInfo) {
-        if (prefetchJob?.isActive == true || downloadedUpdate?.first == info.versionCode) return
-        val connectivity = getApplication<Application>().getSystemService(android.net.ConnectivityManager::class.java)
-        if (connectivity == null || connectivity.isActiveNetworkMetered) return
-        showPrefetchProgress = false
-        prefetchJob = viewModelScope.launch {
-            AppUpdater.download(getApplication(), info) { p ->
-                if (showPrefetchProgress) _uiState.update { it.copy(updateDownloadProgress = p) }
-            }.onSuccess { downloadedUpdate = info.versionCode to it }
-        }
-    }
-
-    /** Downloads the offered build (unless it is already downloaded) and opens Android's installer. */
-    fun onInstallUpdate() {
-        val info = _uiState.value.updateInfo ?: return
-        if (_uiState.value.updateDownloadProgress != null) return
-        viewModelScope.launch {
-            // A background download already running: show its progress and wait for it instead of starting over.
-            prefetchJob?.takeIf { it.isActive }?.let { job ->
-                showPrefetchProgress = true
-                _uiState.update { it.copy(updateDownloadProgress = 0f) }
-                job.join()
-                _uiState.update { it.copy(updateDownloadProgress = null) }
-            }
-            val ready = downloadedUpdate?.takeIf { it.first == info.versionCode && it.second.exists() }?.second
-            val file = ready ?: run {
-                _uiState.update { it.copy(updateDownloadProgress = 0f) }
-                val result = AppUpdater.download(getApplication(), info) { p -> _uiState.update { it.copy(updateDownloadProgress = p) } }
-                _uiState.update { it.copy(updateDownloadProgress = null) }
-                result.getOrElse {
-                    showToast(it.message ?: "The update could not be downloaded.", AppNotificationType.ERROR)
-                    // The download link expires after a while; fetch a fresh one for the next try.
-                    lastUpdateCheckMs = 0L
-                    checkForUpdate(manual = false)
-                    return@launch
-                }
-            }
-            downloadedUpdate = info.versionCode to file
-            when (AppUpdater.install(getApplication(), file)) {
-                AppUpdater.InstallStart.OPENED -> _uiState.update { it.copy(updateInfo = null) }
-                AppUpdater.InstallStart.NEEDS_PERMISSION -> showToast("Allow installs from this app, come back and tap Update again.")
-            }
-        }
-    }
-
-    fun onDismissUpdate() {
-        dismissedUpdateVersion = _uiState.value.updateInfo?.versionCode ?: dismissedUpdateVersion
-        _uiState.update { it.copy(updateInfo = null) }
-    }
+    fun onDismissUpdate() = updates.onDismissUpdate()
 
     private var voiceUsageStartMs = 0L
 
@@ -1028,14 +921,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (_uiState.value.updateDownloadProgress != null) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                val updateBusy = prefetchJob?.isActive == true
+                val updateBusy = updates.isDownloading
                 getApplication<Application>().cacheDir.listFiles()?.forEach { entry ->
                     // Leave alone what is in use: downloads and open previews hold a lease on their files.
                     val inUse = (updateBusy && entry.name == "updates") || com.assistant.app.data.CacheLeases.isLeased(entry.name)
                     if (!inUse) runCatching { entry.deleteRecursively() }
                 }
             }
-            downloadedUpdate = null
+            updates.forgetDownload()
             refreshCacheSize()
         }
     }
