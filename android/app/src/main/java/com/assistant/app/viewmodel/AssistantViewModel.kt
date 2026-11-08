@@ -98,6 +98,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
         val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
+        /** How long the app must stay in front, and settings stay unchanged, before a warm session is opened. */
+        const val PREWARM_DELAY_MS = 2_000L
         const val MAX_PICKED_IMAGE_BYTES = 25 * 1024 * 1024
         /** One quick retry for transient knowledge-search failures; keeps worst case well under the 15 s model watchdog. */
         private const val SEARCH_RETRY_LIMIT = 1
@@ -118,6 +120,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         const val maxSessionMs: Long = 15 * 60_000L
         /** How long before [maxSessionMs] the user is told the session is about to end. */
         const val SESSION_WARNING_MS = 60_000L
+        /** After a server go-away notice: how long the current reply may finish first, and the margin kept before the deadline. */
+        const val GO_AWAY_DEFAULT_WAIT_MS = 8_000L
+        const val GO_AWAY_MARGIN_MS = 2_000L
         /** How long to wait, once the user has finished speaking (local UI heuristic) or a
          *  tool response has been sent back, for the model to produce SOMETHING -- audio,
          *  another tool call, or turnComplete. The Live protocol has no server-side "I'm still
@@ -169,6 +174,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      *  automatic reconnect; cleared whenever the user starts or stops a session. */
     private var sessionResumptionHandle: String? = null
     private var prewarmJob: Job? = null
+    /** A server "going away" notice that waits for the current reply to finish before reconnecting. */
+    private var pendingGoAway: (() -> Unit)? = null
+    private var goAwayJob: Job? = null
     private var isForeground = false
     /** True while a session keeps running after the app left the screen. */
     private var backgroundSessionAllowed = false
@@ -1831,6 +1839,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
+            override fun onGoAway(timeLeftMs: Long, closeNow: () -> Unit) {
+                val busy = liveClient === client && (
+                    _uiState.value.voiceState == VoiceState.SPEAKING ||
+                        _uiState.value.voiceState == VoiceState.PROCESSING ||
+                        pendingToolCallIds.isNotEmpty())
+                if (!busy) {
+                    closeNow()
+                    return
+                }
+                // Reconnecting now would cut Ultron off mid-sentence. Wait for the reply to end, but never past
+                // the time the server gave (minus a safety margin).
+                pendingGoAway = closeNow
+                goAwayJob?.cancel()
+                val waitMs = if (timeLeftMs < 0) GO_AWAY_DEFAULT_WAIT_MS else (timeLeftMs - GO_AWAY_MARGIN_MS).coerceAtLeast(0L)
+                goAwayJob = viewModelScope.launch {
+                    delay(waitMs)
+                    runPendingGoAway()
+                }
+            }
+
             override fun onResumptionHandle(handle: String) {
                 // A warm session has no conversation yet, so only the live one's handle counts.
                 if (liveClient === client) sessionResumptionHandle = handle
@@ -1961,6 +1989,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 ) {
                     _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
                 }
+                if (pendingToolCallIds.isEmpty()) runPendingGoAway()
             },
             onPlaybackFailure = playbackFailure@{ message ->
                 if (liveClient !== client || audioPlayer !== player) return@playbackFailure
@@ -2136,6 +2165,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val generation = prewarmGeneration
         prewarmJob = viewModelScope.launch {
             try {
+                // Wait a moment first: many warm sessions were never used (the app was only passing through, or a
+                // setting was changed several times). Each change cancels this job and starts the wait again.
+                delay(PREWARM_DELAY_MS)
                 // Read the settings and history directly from their stores rather than the
                 // mirrored _uiState copy -- that copy is only updated by a separate collector, so
                 // right after a setting changes or history is cleared (or right at app launch,
@@ -2164,7 +2196,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private fun runPendingGoAway() {
+        goAwayJob?.cancel()
+        goAwayJob = null
+        val close = pendingGoAway ?: return
+        pendingGoAway = null
+        close()
+    }
+
     private fun releaseResources() {
+        goAwayJob?.cancel()
+        goAwayJob = null
+        pendingGoAway = null
         speakingWatchdogJob?.cancel()
         speakingWatchdogJob = null
         liveClient?.latency?.close(if (userInitiatedStop) "stopped" else "failed")

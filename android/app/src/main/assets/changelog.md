@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.18.4 - 2026-11-08
+
+### Improved
+- Knowledge answers come back a little faster: Ultron now prepares your question while it loads your documents.
+- When the server asks for a fresh connection mid-answer, Ultron finishes its sentence first instead of cutting off.
+- Ultron opens its ready-to-talk connection only after the app has stayed open for a moment, so fewer unused connections are made.
+
 ## 1.18.3 - 2026-11-08
 
 ### Fixed

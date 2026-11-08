@@ -68,6 +68,9 @@ class GeminiLiveClient(
         fun onToolCallCancellation(ids: List<String>) {}
         fun onError(message: String) {}
         fun onClosed() {}
+        /** The server will drop this connection soon ([timeLeftMs] away, or -1 when unknown). Call [closeNow] to
+         *  reconnect; the default does so at once, a listener may wait for a better moment (e.g. the reply ends). */
+        fun onGoAway(timeLeftMs: Long, closeNow: () -> Unit) { closeNow() }
         /** The latest handle that lets a dropped connection continue this conversation; see
          *  [connect]'s resumeHandle. */
         fun onResumptionHandle(handle: String) {}
@@ -453,8 +456,12 @@ class GeminiLiveClient(
         // now instead of waiting routes this through the existing onClosed()/reconnect-with-
         // backoff path immediately rather than after a wasted 15s timeout.
         json.optJSONObject("goAway")?.let {
-            Log.i(TAG, "goAway received (timeLeft=${it.optString("timeLeft")}) -- closing to reconnect")
-            actions.add { webSocket?.close(1000, "server goAway") }
+            val timeLeftText = it.optString("timeLeft")
+            Log.i(TAG, "goAway received (timeLeft=$timeLeftText) -- reconnecting")
+            // The server sends a duration like "30s"; -1 when it cannot be read.
+            val timeLeftMs = timeLeftText.removeSuffix("s").toDoubleOrNull()?.let { s -> (s * 1000).toLong() } ?: -1L
+            val closeNow = { webSocket?.close(1000, "server goAway"); Unit }
+            actions.add { listener?.onGoAway(timeLeftMs, closeNow) ?: closeNow() }
         }
 
         json.optJSONObject("sessionResumptionUpdate")?.let {
