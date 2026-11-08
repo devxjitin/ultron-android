@@ -4,8 +4,6 @@ import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.Personalities
 import com.assistant.app.data.SET_PERSONALITY_TOOL
-import com.assistant.app.data.PromptRepeat
-import com.assistant.app.data.SCHEDULE_PROMPT_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.SkillGroup
 import com.assistant.app.data.USE_SKILL_TOOL
@@ -69,24 +67,6 @@ object ToolDeclarations {
                     .put("task", JSONObject().put("type", "STRING").put("description", "Optional. One task name exactly as the skill listed it.")))
                 .put("required", JSONArray().put("skill")))
         return declaration
-    }
-
-    /** schedule_prompt: saves a task the assistant runs on its own later, shown on the Schedule page. */
-    fun schedulePrompt(): JSONObject {
-        fun string(description: String) = JSONObject().put("type", "STRING").put("description", description)
-        return JSONObject()
-            .put("name", SCHEDULE_PROMPT_TOOL)
-            .put("description", "Schedules a task for you to do on your own at a later time, for example \"send Sonia hello on WhatsApp at 9 pm\" " +
-                "or \"every morning at 7 tell me the weather\". Use it when the user wants something done later that is more than a plain reminder; " +
-                "for a plain reminder use the reminder tool.")
-            .put("parameters", JSONObject().put("type", "OBJECT")
-                .put("properties", JSONObject()
-                    .put("prompt", string("The task in the user's words, as a full instruction, e.g. \"Send Sonia 'Hello' on WhatsApp\"."))
-                    .put("at_time", string("Clock time, HH:MM, 24-hour."))
-                    .put("date", string("Optional. YYYY-MM-DD. Leave out for the next time that clock time comes."))
-                    .put("repeat", JSONObject().put("type", "STRING").put("description", "How often. once unless the user asks for a repeat.")
-                        .put("enum", JSONArray(PromptRepeat.entries.map { it.id }))))
-                .put("required", JSONArray().put("prompt").put("at_time")))
     }
 
     /** set_personality: switches how the assistant talks when the user asks for it by voice. */

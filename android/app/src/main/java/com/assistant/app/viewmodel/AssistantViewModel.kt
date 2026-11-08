@@ -41,8 +41,6 @@ import com.assistant.app.data.MEMORY_FORGET_TOOL
 import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.Personalities
 import com.assistant.app.data.SET_PERSONALITY_TOOL
-import com.assistant.app.data.SCHEDULE_PROMPT_TOOL
-import com.assistant.app.data.ScheduledPrompts
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
@@ -564,8 +562,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onProfileTapped() = openPage(AppPage.PROFILE)
 
-    fun onScheduleTapped() = openPage(AppPage.SCHEDULE)
-
     fun onKnowledgeTapped() = openPage(AppPage.KNOWLEDGE)
 
     fun onUsageTapped() = openPage(AppPage.USAGE)
@@ -841,7 +837,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         functionName == MEMORY_FORGET_TOOL -> "Forgetting a memory"
         functionName == USE_SKILL_TOOL -> "Loading a skill"
         functionName == SET_PERSONALITY_TOOL -> "Changing personality"
-        functionName == SCHEDULE_PROMPT_TOOL -> "Scheduling a task"
         else -> DeviceTool.fromFunctionName(functionName)?.label ?: functionName.replace('_', ' ')
     }
 
@@ -1746,10 +1741,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             runDeviceTool(deviceTool, call.args)
                         } else if (call.name == MEMORY_SAVE_TOOL || call.name == MEMORY_FORGET_TOOL) {
                             runToolSafely(call.name) { runMemoryTool(call.name, call.args) }
-                        } else if (call.name == SCHEDULE_PROMPT_TOOL) {
-                            runToolSafely(call.name) {
-                                withContext(Dispatchers.IO) { ScheduledPrompts.saveFromVoice(getApplication(), call.args) }
-                            }
                         } else if (call.name == SET_PERSONALITY_TOOL) {
                             runToolSafely(call.name) { runPersonalityTool(call.args) }
                         } else if (call.name == USE_SKILL_TOOL) {

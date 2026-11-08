@@ -9,7 +9,7 @@ import com.assistant.app.data.StoredTurn
 data class ShownImage(val uri: String, val title: String, val id: Int)
 
 /** The page on screen. Exactly one is shown at a time; HOME is the voice screen. */
-enum class AppPage { HOME, PROFILE, KNOWLEDGE, MEMORY, HISTORY, IMAGES, SKILLS, SCHEDULE, CONNECTORS, SETTINGS, USAGE, STORAGE, DOWNLOADS, DEVELOPER, HELP, ABOUT }
+enum class AppPage { HOME, PROFILE, KNOWLEDGE, MEMORY, HISTORY, IMAGES, SKILLS, CONNECTORS, SETTINGS, USAGE, STORAGE, DOWNLOADS, DEVELOPER, HELP, ABOUT }
 
 /** Where the "is there a newer build" check stands; About shows it. */
 enum class UpdateCheckState { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, FAILED }

@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.18.0 - 2026-11-08
+
+### Removed
+- The Schedule feature is gone: the Schedule page in the menu, scheduling a task by voice, and the background runs with their notifications. Saved schedules are cleared the first time the updated app opens. Alarms, timers and reminders are not affected.
+
 ## 1.17.0 - 2026-11-08
 
 ### Added

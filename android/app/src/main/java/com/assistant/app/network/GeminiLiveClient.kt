@@ -473,7 +473,6 @@ internal fun liveFunctionDeclarations(settings: AssistantSettings): JSONArray {
     declarations.put(ToolDeclarations.knowledgeSearch())
     if (settings.memoryEnabled) ToolDeclarations.memory().forEach { declarations.put(it) }
     declarations.put(ToolDeclarations.personality())
-    declarations.put(ToolDeclarations.schedulePrompt())
     SkillRegistry.all().takeIf { it.isNotEmpty() }?.let { declarations.put(ToolDeclarations.skill(it)) }
     DeviceTool.entries.filter { it in settings.enabledDeviceTools || it in DeviceTool.ASSISTANT_OWN }
         .forEach { declarations.put(ToolDeclarations.device(it)) }

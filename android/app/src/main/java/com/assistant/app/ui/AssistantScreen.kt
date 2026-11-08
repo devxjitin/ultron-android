@@ -75,7 +75,6 @@ import com.assistant.app.ui.components.FeatureRequest
 import com.assistant.app.ui.components.FeatureRequestPage
 import com.assistant.app.ui.components.HelpPage
 import com.assistant.app.ui.components.ProfilePage
-import com.assistant.app.ui.components.SchedulePage
 import com.assistant.app.ui.components.ImageOverlay
 import com.assistant.app.ui.components.ImagesPage
 import com.assistant.app.ui.components.AppDrawerContainerColor
@@ -123,7 +122,6 @@ fun AssistantScreen(
     onDeveloperTapped: () -> Unit = {},
     onAboutTapped: () -> Unit = {},
     onProfileTapped: () -> Unit = {},
-    onScheduleTapped: () -> Unit = {},
     /** Re-checks the activation key with the server, from the Profile page. */
     onRefreshLicense: () -> Unit = {},
     /** Opens the website store to renew; null when this build has no store link. */
@@ -262,7 +260,6 @@ fun AssistantScreen(
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
                         NavTab.ABOUT -> guardedNav(onAboutTapped)
                         NavTab.PROFILE -> guardedNav(onProfileTapped)
-                        NavTab.SCHEDULE -> guardedNav(onScheduleTapped)
                     }
                 },
                 modifier = drawerModifier.windowInsetsPadding(WindowInsets.displayCutout)
@@ -364,10 +361,6 @@ fun AssistantScreen(
                     onRemoveKey = onRemoveLicense,
                     modifier = Modifier.padding(top = topReserve)
                 )
-            }
-
-            if (tab == NavTab.SCHEDULE) {
-                SchedulePage(modifier = Modifier.padding(top = topReserve))
             }
 
             if (tab == NavTab.HELP) {
