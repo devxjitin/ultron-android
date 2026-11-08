@@ -413,12 +413,7 @@ private fun ConnectorCard(
             .background(AssistantSurface).border(BorderStroke(1.dp, AssistantOutline), cardShape).padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(AssistantSelectedBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(connector.icon, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(24.dp))
-            }
+            NeutralIcon(connector.icon)
             Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(connector.name, color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
@@ -438,8 +433,8 @@ private fun ConnectorCard(
             TextButton(onClick = onRemove) { Text("Remove", color = AssistantTextSecondary, fontSize = 13.sp) }
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-            Text("View details", color = AssistantAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(18.dp))
+            Text("View details", color = AssistantTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AssistantTextSecondary, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -475,7 +470,7 @@ private fun ConnectorDetail(
                     Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(AssistantSelectedBg),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(connector.icon, contentDescription = null, tint = AssistantAccent, modifier = Modifier.size(30.dp))
+                    Icon(connector.icon, contentDescription = null, tint = AssistantTextPrimary, modifier = Modifier.size(30.dp))
                 }
                 Spacer(Modifier.size(14.dp))
                 Column(Modifier.weight(1f)) {

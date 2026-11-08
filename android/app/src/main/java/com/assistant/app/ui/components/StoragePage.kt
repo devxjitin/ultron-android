@@ -1,25 +1,20 @@
 package com.assistant.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cached
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,26 +24,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.theme.AlertDialog
-import com.assistant.app.ui.theme.AssistantAccent
-import com.assistant.app.ui.theme.AssistantAmber
 import com.assistant.app.ui.theme.AssistantError
-import com.assistant.app.ui.theme.AssistantFieldBackground
-import com.assistant.app.ui.theme.AssistantPrimaryLight
+import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
-/** One kind of data kept on the phone, shown as its own card. [bytes] is null when a size makes no sense for it. */
+/** One kind of data kept on the phone. [bytes] is null when a size makes no sense for it. */
 private class StorageItem(
     val icon: ImageVector,
-    val tint: Color,
     val title: String,
     val value: String,
     val detail: String,
@@ -90,89 +79,81 @@ fun StoragePage(
 
     val items = listOf(
         StorageItem(
-            Icons.Outlined.Psychology, AssistantAccent, "Memory",
+            Icons.Outlined.Psychology, "Memory",
             "$memoryCount ${if (memoryCount == 1) "fact" else "facts"}", "What the assistant knows about you.", memoryBytes,
             "Clear memory?", "Everything it remembers about you will be forgotten.", if (memoryCount > 0) onClearMemory else null
         ),
         StorageItem(
-            Icons.Outlined.History, AssistantPrimaryLight, "Past conversations",
+            Icons.Outlined.History, "Past conversations",
             if (pastConversationCount == 0) "None" else "$pastConversationCount saved",
             "Everything you and the assistant said before.", pastConversationBytes,
             "Clear past conversations?", "The assistant will no longer be able to look up anything said before.",
             if (pastConversationCount > 0) onClearPastConversations else null
         ),
         StorageItem(
-            AssistantIcons.Knowledge, AssistantAmber, "Knowledge documents",
+            AssistantIcons.Knowledge, "Knowledge documents",
             "$knowledgeCount ${if (knowledgeCount == 1) "document" else "documents"}",
             "Your own documents. Add or remove them in Knowledge.", knowledgeBytes
         ),
         StorageItem(
-            Icons.Outlined.Image, AssistantAccent, "Images",
+            Icons.Outlined.Image, "Images",
             if (imageCount == 0) "None" else "$imageCount ${if (imageCount == 1) "picture" else "pictures"}",
             "Pictures you added for the assistant to show.", imageBytes,
             "Clear all pictures?", "Every picture you added will be deleted.", if (imageCount > 0) onClearImages else null
         ),
         StorageItem(
-            Icons.Outlined.Cached, AssistantTextSecondary, "Cache",
-            formatBytes(cacheBytes), "Temporary files the app can rebuild.", cacheBytes,
+            Icons.Outlined.Cached, "Cache",
+            if (cacheBytes > 0) "Temporary files" else "Empty", "Temporary files the app can rebuild.", cacheBytes,
             "Clear cache?", "Temporary files will be deleted.", if (cacheBytes > 0) onClearCache else null
         ),
         StorageItem(
-            Icons.Outlined.Insights, AssistantError, "Usage statistics",
+            Icons.Outlined.Insights, "Usage statistics",
             if (hasUsage) "Recorded" else "Empty", "The numbers on the Usage page.", null,
             "Reset usage statistics?", "Usage will start again from zero.", if (hasUsage) onResetUsage else null
         )
     )
-    val total = items.sumOf { it.bytes ?: 0L }.coerceAtLeast(1L)
+    val total = items.sumOf { it.bytes ?: 0L }
 
     PageColumn(modifier) {
+        // One number: how much room Ultron takes on this phone. No bars, since nothing here has a limit to fill.
+        PageCard {
+            Text("Used by Ultron", color = AssistantTextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(formatBytes(total), color = AssistantTextPrimary, fontSize = 32.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text("Everything below is stored only on this phone.", color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+        }
         PageLabel("On this phone")
-        items.forEach { item ->
-            StorageCard(item, share = item.bytes?.let { it.toFloat() / total }, onClear = { pending = item })
-            Spacer(Modifier.height(12.dp))
+        PageCard {
+            items.forEachIndexed { index, item ->
+                if (index > 0) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp).height(1.dp).background(AssistantOutline))
+                }
+                StorageRow(item, onClear = { pending = item })
+            }
         }
         Text(
             "Clearing cannot be undone.",
-            color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+            color = AssistantTextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, start = 4.dp)
         )
     }
 }
 
 @Composable
-private fun StorageCard(item: StorageItem, share: Float?, onClear: () -> Unit) {
-    PageCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).clip(CircleShape).background(item.tint.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(item.icon, contentDescription = null, tint = item.tint, modifier = Modifier.size(24.dp))
-            }
-            Spacer(Modifier.size(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(item.title, color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(item.detail, color = AssistantTextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(item.value, color = AssistantTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            if (item.bytes != null && item.title != "Cache") {
-                Text(formatBytes(item.bytes), color = AssistantTextSecondary, fontSize = 14.sp, modifier = Modifier.padding(bottom = 3.dp))
-            }
-        }
-        if (share != null) {
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(AssistantFieldBackground)) {
-                Box(Modifier.fillMaxHeight().fillMaxWidth(share.coerceIn(0.02f, 1f)).background(item.tint, RoundedCornerShape(3.dp)))
-            }
+private fun StorageRow(item: StorageItem, onClear: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        NeutralIcon(item.icon)
+        Spacer(Modifier.size(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.title, color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            val size = item.bytes?.takeIf { it > 0 }?.let { " · ${formatBytes(it)}" }.orEmpty()
+            Text(item.value + size, color = AssistantTextSecondary, fontSize = 14.sp)
+            Text(item.detail, color = AssistantTextMuted, fontSize = 12.sp, lineHeight = 16.sp)
         }
         if (item.clearTitle != null) {
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
-                val enabled = item.onClear != null
-                TextButton(onClick = onClear, enabled = enabled) {
-                    Text("Clear", color = if (enabled) AssistantError else AssistantTextMuted)
-                }
+            val enabled = item.onClear != null
+            TextButton(onClick = onClear, enabled = enabled) {
+                Text("Clear", color = if (enabled) AssistantError else AssistantTextMuted)
             }
         }
     }
