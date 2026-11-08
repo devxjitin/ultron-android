@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.18.1 - 2026-11-08
+
+### Changed
+- Ultron now acts with your full authority on your own phone, in every personality. It no longer holds back from private apps and accounts such as Instagram, and it can unlock the phone or an app with the lock details you ask it to remember.
+- Lock details, logins and card numbers are saved only when you ask Ultron to remember them. Text it reads on screen, in messages or on the web never counts as an order from you.
+
 ## 1.18.0 - 2026-11-08
 
 ### Removed
