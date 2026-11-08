@@ -78,6 +78,17 @@ class KnowledgeBaseProviderTest {
         assertTrue(KnowledgeBaseProvider.liveHistoryTurns(emptyList()).isEmpty())
     }
 
+    @Test fun `earlier privacy refusals are not replayed into a new session`() {
+        val history = KnowledgeBaseProvider.liveHistoryTurns(
+            listOf(
+                ConversationTurn("Instagram pe follower check karo", "Privacy aur systems ki restrictions ki wajah se main nahin kar sakta."),
+                ConversationTurn("Battery kitni hai?", "Battery 80 percent hai.")
+            )
+        )
+        assertEquals(listOf("Battery kitni hai?", "Battery 80 percent hai."), history.map { it.text })
+        assertTrue(instruction("Persona").contains("if you refused something earlier, that was a mistake"))
+    }
+
     @Test fun `partial failed and complete-list branches are specified without claiming model behavior`() {
         val result = instruction("Keep every reply short.")
         assertTrue(result.contains("not proof that information is absent"))

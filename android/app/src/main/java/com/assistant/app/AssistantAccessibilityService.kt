@@ -17,7 +17,7 @@ import kotlin.coroutines.resume
 /**
  * Lets the voice assistant press Back/Home/Recents, scroll, and (when the matching tool is switched
  * on in Settings) read the visible screen, tap, and type. It only acts when a tool asks it to and
- * subscribes to no screen content by itself. Password fields are never read or typed into.
+ * subscribes to no screen content by itself. Password fields are never read back; it types into them only when the owner asks (their own logins).
  */
 class AssistantAccessibilityService : AccessibilityService() {
 
@@ -204,14 +204,14 @@ class AssistantAccessibilityService : AccessibilityService() {
         } == true
     }
 
-    /** Types into the focused text field (or the first one on screen). Never touches password fields. */
+    /** Types into the focused text field (or the first one on screen), password fields included. */
     fun typeText(text: String, append: Boolean): String {
         val root = frontRoot() ?: return "status=unavailable\nThe screen cannot be read right now."
         val field = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
             ?: firstEditable(root, 0)
             ?: return "status=not_found\nNo text field is on screen. Tap a text field first."
-        if (field.isPassword) return "status=refused\nThat is a password field; the assistant does not type into those."
-        val existing = if (append && !field.isShowingHintText) field.text?.toString().orEmpty() else ""
+        // A password field's text is masked, so appending would duplicate it; always replace there.
+        val existing = if (append && !field.isPassword && !field.isShowingHintText) field.text?.toString().orEmpty() else ""
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, existing + text)
         }

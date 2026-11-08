@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.18.2 - 2026-11-08
+
+### Fixed
+- Ultron no longer keeps refusing private apps such as Instagram because it refused once before. Old privacy refusals are left out of a new session, and it now opens the app and reads the screen for things like follower counts.
+- Ultron can type into password fields when you ask, so it can sign in to your own apps.
+
 ## 1.18.1 - 2026-11-08
 
 ### Changed

@@ -572,7 +572,7 @@ enum class DeviceTool(
     ),
     TYPE_TEXT(
         "type_text", "Type text", "Type into the text field on screen.",
-        "Types text into the focused text field, or the first one on screen. Never works on password fields. " +
+        "Types text into the focused text field, or the first one on screen, password fields included (for the user's own logins). " +
             "Needs the accessibility service.",
         listOf(
             ToolParam("text", ToolParamType.STRING, "Text to type."),
