@@ -126,6 +126,13 @@ internal class ObjectBoxKnowledgeIndex(private val store: BoxStore) {
         }
     }
 
+    /** Everything stored, in the order it was written. */
+    fun snapshot(revision: Long): KnowledgeSnapshot = KnowledgeSnapshot(
+        revision,
+        documents.all.map { RagDocument(it.externalId, it.title, it.text, it.updatedAtMillis) },
+        chunks.all.map { it.toRagChunk() }
+    )
+
     fun nearest(
         queryEmbedding: FloatArray,
         limit: Int,
@@ -143,5 +150,40 @@ internal class ObjectBoxKnowledgeIndex(private val store: BoxStore) {
     private fun KnowledgeChunkEntity.toRagChunk() = RagChunk(
         docId = documentExternalId, chunkIndex = chunkIndex, text = text,
         embedding = requireNotNull(embedding), embeddingModel = embeddingModel, heading = heading
+    )
+}
+
+/**
+ * Knowledge storage where ObjectBox itself is the source of truth (after the one-time import from DataStore).
+ * Each change is one verified ObjectBox transaction, so there is no second copy to keep in step; the revision is a
+ * counter kept in memory and saved through [persistRevision] on a best-effort basis.
+ */
+internal class ObjectBoxKnowledgeSource(
+    private val index: ObjectBoxKnowledgeIndex,
+    startRevision: Long,
+    private val persistRevision: suspend (Long) -> Unit
+) {
+    @Volatile private var revision = startRevision
+    @Volatile private var cached: KnowledgeSnapshot? = null
+
+    private fun current(): KnowledgeSnapshot =
+        cached?.takeIf { it.revision == revision } ?: index.snapshot(revision).also { cached = it }
+
+    fun coordinator() = KnowledgeIndexCoordinator(
+        readState = { current().let { KnowledgeIndexState(it, it.revision, KNOWLEDGE_INDEX_RECONCILIATION_VERSION) } },
+        commitSource = { transform ->
+            val before = current()
+            val changed = transform(before)
+            if (changed !== before) {
+                cached = null
+                index.replace(changed)
+                revision = changed.revision
+                cached = changed // replace() just verified the stored data equals it
+                try { persistRevision(revision) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
+            }
+        },
+        replaceIndex = { },
+        markIndexed = { },
+        invalidateCache = { cached = null }
     )
 }

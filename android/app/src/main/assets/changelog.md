@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.19.0 - 2026-11-08
+
+### Improved
+- Your Knowledge documents are now stored in one place on the phone instead of two, so adding, editing and deleting a document is quicker and the app opens a little lighter.
+- On the first start after this update your existing documents are moved over automatically. Nothing for you to do, and your documents and search work as before.
+
 ## 1.18.6 - 2026-11-08
 
 ### Improved
