@@ -393,6 +393,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
         }
         collectKnowledgeDocuments()
+        viewModelScope.launch {
+            memoryStore.items
+                .catch { e -> Log.e("AssistantError", "Failed to read memory", e) }
+                .collect { items -> _uiState.update { it.copy(memories = items) } }
+        }
+        viewModelScope.launch {
+            memoryStore.removedByAssistant
+                .catch { e -> Log.e("AssistantError", "Failed to read removed memory", e) }
+                .collect { items -> _uiState.update { it.copy(removedMemories = items) } }
+        }
         // First Keystore access is slow and can fail, so it happens off the main thread.
         viewModelScope.launch {
             val (resolvedKey, embeddingKey) = withContext(Dispatchers.IO) {
@@ -408,19 +418,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             prewarmIfPossible()
             startEmbeddingMigrationIfNeeded()
-        }
-    }
-
-    init {
-        viewModelScope.launch {
-            memoryStore.items
-                .catch { e -> Log.e("AssistantError", "Failed to read memory", e) }
-                .collect { items -> _uiState.update { it.copy(memories = items) } }
-        }
-        viewModelScope.launch {
-            memoryStore.removedByAssistant
-                .catch { e -> Log.e("AssistantError", "Failed to read removed memory", e) }
-                .collect { items -> _uiState.update { it.copy(removedMemories = items) } }
         }
     }
 
