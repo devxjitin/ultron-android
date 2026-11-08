@@ -13,8 +13,8 @@ import com.google.firebase.auth.FirebaseAuth
 class UltronApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // The Schedule page reads this list; it is a small local file.
-        runCatching { com.assistant.app.data.ScheduledPrompts.load(this) }
+        // The Schedule feature is gone; clear what an earlier version left behind.
+        runCatching { com.assistant.app.data.LegacyScheduleCleanup.run(this) }
         if (runCatching { FirebaseApp.getApps(this).isEmpty() }.getOrDefault(true)) return
         runCatching { AppCheckInstaller.install() }.onFailure { Log.w(TAG, "App Check setup failed", it) }
         runCatching {
