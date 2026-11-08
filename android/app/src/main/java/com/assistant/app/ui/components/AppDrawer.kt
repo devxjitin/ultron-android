@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
@@ -76,6 +77,7 @@ enum class NavTab(val label: String, val icon: ImageVector) {
     SETTINGS("Settings", AssistantIcons.Settings),
     USAGE("Usage", Icons.Outlined.Insights),
     STORAGE("Storage", Icons.Outlined.Inventory2),
+    DOWNLOADS("Downloads", Icons.Outlined.Download),
     DEVELOPER("Developer", Icons.Outlined.Code),
     HELP("Help & support", Icons.AutoMirrored.Outlined.HelpOutline),
     ABOUT("About", Icons.Outlined.Info)
@@ -90,7 +92,7 @@ private val RowHeight = 40.dp
 private val DrawerGroups: List<Pair<String?, List<NavTab>>> = listOf(
     null to listOf(NavTab.HOME),
     "Assistant" to listOf(NavTab.SKILLS, NavTab.CONNECTORS, NavTab.SCHEDULE),
-    "Your data" to listOf(NavTab.KNOWLEDGE, NavTab.MEMORY, NavTab.HISTORY),
+    "Your data" to listOf(NavTab.KNOWLEDGE, NavTab.MEMORY, NavTab.HISTORY, NavTab.DOWNLOADS),
     "Insights" to listOf(NavTab.USAGE, NavTab.STORAGE),
     "App" to listOf(NavTab.SETTINGS, NavTab.HELP, NavTab.ABOUT)
 )

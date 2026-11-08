@@ -572,6 +572,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onStorageTapped() = openPage(AppPage.STORAGE)
 
+    fun onDownloadsTapped() = openPage(AppPage.DOWNLOADS)
+
     fun onSkillsTapped() = openPage(AppPage.SKILLS)
 
     // The voice session carries the skill list in its setup, so a change starts a fresh warm session.
