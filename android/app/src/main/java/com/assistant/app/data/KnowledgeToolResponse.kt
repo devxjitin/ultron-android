@@ -49,7 +49,7 @@ object KnowledgeToolResponse {
     fun failed(category: SearchFailureCategory): String {
         val advice = when (category) {
             SearchFailureCategory.CONFIG ->
-                "Knowledge search needs its setup checked in Developer settings."
+                "Knowledge search needs its setup checked in Settings."
             SearchFailureCategory.INDEX ->
                 "The knowledge index is not ready. It may need to be rebuilt from the Knowledge page."
             SearchFailureCategory.REINDEX_REQUIRED ->

@@ -173,34 +173,13 @@ fun SettingsPage(
         if (destination != null) destination() else onDismiss()
     }
     val activeBranch = when (page) {
-        AppPage.SETTINGS -> 0
-        AppPage.DEVELOPER -> 1
+        AppPage.SETTINGS, AppPage.DEVELOPER -> 0
         AppPage.KNOWLEDGE -> 2
         else -> 3
     }
-    // Scoped to this page only: slightly smaller text than the app-wide typography.
-    val base = androidx.compose.material3.MaterialTheme.typography
-    val compactTypography = base.copy(
-        titleLarge = base.titleLarge.copy(fontSize = 20.sp),
-        bodyLarge = base.bodyLarge.copy(fontSize = 15.sp, lineHeight = 22.sp),
-        bodyMedium = base.bodyMedium.copy(fontSize = 13.sp, lineHeight = 19.sp),
-        labelLarge = base.labelLarge.copy(fontSize = 13.sp)
-    )
-    androidx.compose.material3.MaterialTheme(
-        colorScheme = androidx.compose.material3.MaterialTheme.colorScheme,
-        typography = compactTypography
-    ) {
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-        key(activeBranch) {
-        val contentScrollState = rememberScrollState()
-        Column(modifier = Modifier.weight(1f).verticalScroll(contentScrollState)) {
-            when (activeBranch) {
-                0 -> GeneralSettingsContent(
-                    settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
-                    onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected
-                )
-                1 -> Column {
-                    PageLabel("Identity", Modifier.padding(top = 0.dp))
+    val developerContent: @Composable () -> Unit = {
+        Column {
+                    PageLabel("Developer · Identity", Modifier.padding(top = 0.dp))
                     PageCard {
                     Text("Assistant name", color = AssistantTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
                     OutlinedTextField(
@@ -316,6 +295,33 @@ fun SettingsPage(
                         }
                     }
                     }
+                }
+    }
+    // Scoped to this page only: slightly smaller text than the app-wide typography.
+    val base = androidx.compose.material3.MaterialTheme.typography
+    val compactTypography = base.copy(
+        titleLarge = base.titleLarge.copy(fontSize = 20.sp),
+        bodyLarge = base.bodyLarge.copy(fontSize = 15.sp, lineHeight = 22.sp),
+        bodyMedium = base.bodyMedium.copy(fontSize = 13.sp, lineHeight = 19.sp),
+        labelLarge = base.labelLarge.copy(fontSize = 13.sp)
+    )
+    androidx.compose.material3.MaterialTheme(
+        colorScheme = androidx.compose.material3.MaterialTheme.colorScheme,
+        typography = compactTypography
+    ) {
+    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+        key(activeBranch) {
+        val contentScrollState = rememberScrollState()
+        Column(modifier = Modifier.weight(1f).verticalScroll(contentScrollState)) {
+            when (activeBranch) {
+                0 -> Column {
+                    GeneralSettingsContent(
+                        settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
+                        onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected
+                    )
+                    // The old Developer page now lives at the end of Settings.
+                    Spacer(Modifier.height(24.dp))
+                    developerContent()
                 }
                 2 -> Column {
                     Text(
@@ -443,7 +449,7 @@ fun SettingsPage(
                 }
             }
         }
-        if (activeBranch == 1 && developerChangesPending) {
+        if (activeBranch == 0 && developerChangesPending) {
             Spacer(Modifier.height(12.dp))
             androidx.compose.material3.Button(
                 onClick = {
@@ -480,7 +486,7 @@ fun SettingsPage(
             containerColor = AssistantSurfaceElevated,
             tonalElevation = 6.dp,
             title = { Text("Save changes?") },
-            text = { Text("You have unsaved Developer settings. Save them before leaving?") },
+            text = { Text("You have unsaved settings. Save them before leaving?") },
             confirmButton = {
                 TextButton(enabled = !isSavingDeveloper, onClick = {
                     onSaveDeveloperChanges(
