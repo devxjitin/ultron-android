@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.18.5 - 2026-11-08
+
+### Improved
+- Adding or re-indexing a big document in Knowledge is much faster: the text is prepared in batches instead of one piece at a time.
+
 ## 1.18.4 - 2026-11-08
 
 ### Improved
