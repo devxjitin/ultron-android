@@ -86,7 +86,8 @@ if ($Mode -ne "Publish") {
     Write-Host "Building version $VersionName ($versionCode), commit $sourceCommit..."
     Push-Location $android
     try {
-        & $gradlew assembleOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --build-cache --profile --console=plain
+        # lintVital repeats the lint the checks already ran and took ~2.5 min of the build.
+        & $gradlew assembleOta -x lintVitalOta "-PappVersionCode=$versionCode" "-PappVersionName=$VersionName" --build-cache --profile --console=plain
         $built = $LASTEXITCODE
     } finally { Pop-Location }
     if ($built -ne 0) { throw "Build failed; nothing was published." }

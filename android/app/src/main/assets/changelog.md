@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.19.1 - 2026-11-08
+
+### Improved
+- Updates now reach your phone sooner after a change is made: the update is built while it is being checked instead of afterwards. Nothing in the app looks or works differently.
+
 ## 1.19.0 - 2026-11-08
 
 ### Improved

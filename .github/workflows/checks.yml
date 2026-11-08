@@ -75,6 +75,7 @@ jobs:
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-memory
       - name: Unit tests and lint
         working-directory: android
         run: ./gradlew testDebugUnitTest lintDebug -PappVersionCode=1 --build-cache --profile --console=plain

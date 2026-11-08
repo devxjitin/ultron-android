@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       current: ${{ steps.latest.outputs.current }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,15 +50,19 @@ jobs:
           else
             echo "current=true" >> "$GITHUB_OUTPUT"
           fi
+      # Same change selection the checks use, so the APK build can start alongside them.
+      - id: plan
+        run: python scripts/ci_changes.py
 
   validate:
     needs: preflight
     if: needs.preflight.outputs.current == 'true'
     uses: ./.github/workflows/checks.yml
 
-  publish:
-    needs: [preflight, validate]
-    if: needs.preflight.outputs.current == 'true' && needs.validate.outputs.publish == 'true'
+  # Builds while the checks run; nothing goes live until both have passed.
+  build:
+    needs: preflight
+    if: needs.preflight.outputs.current == 'true' && needs.preflight.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -88,6 +93,7 @@ jobs:
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-memory
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
@@ -100,9 +106,15 @@ jobs:
           # Version and notes come from android/app/src/main/assets/changelog.md unless notes are typed for a manual run.
           if ($env:DISPATCH_NOTES) { ./scripts/publish-update.ps1 -Mode Build -Notes $env:DISPATCH_NOTES }
           else { ./scripts/publish-update.ps1 -Mode Build }
-      - name: Publish verified OTA APK
-        shell: pwsh
-        run: ./scripts/publish-update.ps1 -Mode Publish
+      - name: Keep the built APK for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-apk
+          path: |
+            android/app/build/outputs/apk/ota/app-ota.apk
+            android/app/build/outputs/apk/ota/ota-manifest.json
+          if-no-files-found: error
+          retention-days: 3
       - name: Save OTA timing profile
         if: always()
         uses: actions/upload-artifact@v4
@@ -111,3 +123,27 @@ jobs:
           path: android/build/reports/profile/
           if-no-files-found: ignore
           retention-days: 7
+
+  publish:
+    needs: [preflight, validate, build]
+    if: needs.preflight.outputs.current == 'true' && needs.validate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: ota-apk
+          path: android/app/build/outputs/apk/ota
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Publish verified OTA APK
+        shell: pwsh
+        run: ./scripts/publish-update.ps1 -Mode Publish
