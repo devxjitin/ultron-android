@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.ui.components.AboutPage
+import com.assistant.app.ui.components.DownloadsPage
 import com.assistant.app.ui.components.StoragePage
 import com.assistant.app.ui.components.SkillsPage
 import com.assistant.app.data.SkillRegistry
@@ -136,6 +137,7 @@ fun AssistantScreen(
     onUpdateNow: () -> Unit = {},
     onUsageTapped: () -> Unit = {},
     onStorageTapped: () -> Unit = {},
+    onDownloadsTapped: () -> Unit = {},
     onSkillsTapped: () -> Unit = {},
     onSkillToggled: (String, Boolean) -> Unit = { _, _ -> },
     onSkillSaved: (String, String, String) -> String? = { _, _, _ -> null },
@@ -248,6 +250,7 @@ fun AssistantScreen(
                         NavTab.HOME -> guardedNav(onHomeTapped)
                         NavTab.USAGE -> guardedNav(onUsageTapped)
                         NavTab.STORAGE -> guardedNav(onStorageTapped)
+                        NavTab.DOWNLOADS -> guardedNav(onDownloadsTapped)
                         NavTab.SKILLS -> guardedNav(onSkillsTapped)
                         NavTab.KNOWLEDGE -> guardedNav(onKnowledgeTapped)
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
@@ -380,7 +383,7 @@ fun AssistantScreen(
                 )
             }
 
-            if (tab in listOf(NavTab.SKILLS, NavTab.USAGE, NavTab.STORAGE, NavTab.ABOUT)) {
+            if (tab in listOf(NavTab.SKILLS, NavTab.USAGE, NavTab.STORAGE, NavTab.DOWNLOADS, NavTab.ABOUT)) {
                 val pageModifier = Modifier.padding(top = topReserve)
                 when (tab) {
                     NavTab.SKILLS -> {
@@ -388,6 +391,7 @@ fun AssistantScreen(
                         SkillsPage(skills, onSkillToggled, onSkillSaved, onSkillDeleted, pageModifier)
                     }
                     NavTab.USAGE -> UsagePage(uiState.usageDays, pageModifier)
+                    NavTab.DOWNLOADS -> DownloadsPage(pageModifier)
                     NavTab.STORAGE -> StoragePage(
                         memoryCount = uiState.memories.size,
                         knowledgeCount = uiState.knowledgeDocuments.size,

@@ -373,6 +373,7 @@ class MainActivity : ComponentActivity() {
                         onUpdateNow = { viewModel.onUpdateNow() },
                         onUsageTapped = { viewModel.onUsageTapped() },
                         onStorageTapped = { viewModel.onStorageTapped() },
+                        onDownloadsTapped = { viewModel.onDownloadsTapped() },
                         onSkillsTapped = { viewModel.onSkillsTapped() },
                         onSkillToggled = { name, on -> viewModel.onSkillToggled(name, on) },
                         onSkillSaved = { name, description, body -> viewModel.onSkillSaved(name, description, body) },

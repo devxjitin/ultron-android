@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.17.0 - 2026-11-08
+
+### Added
+- Downloads, in the menu under Your data. It lists everything Ultron has downloaded, such as YouTube videos and audio. Tap a file to play it, or share or delete it. The files are saved in Downloads/Ultron, so they also show in your phone's Files app, and Open in Files takes you there.
+
 ## 1.16.2 - 2026-11-08
 
 ### Changed
