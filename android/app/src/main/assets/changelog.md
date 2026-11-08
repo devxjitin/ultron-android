@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.19.2 - 2026-11-08
+
+### Improved
+- The old copy of your Knowledge documents, kept as a safety net since 1.19.0, is now removed from the phone. This frees some space and makes the app a little lighter. Your documents and search work as before.
+
 ## 1.19.1 - 2026-11-08
 
 ### Improved
