@@ -56,7 +56,7 @@ Each row has a round profile picture at the far left; tapping it opens a photo o
 - **Contact has no WhatsApp:** if a Contacts result shows "Invite to WhatsApp", stop and tell the user.
 - **WhatsApp is locked:**
   1. Tap a normal Unlock, Continue, Use fingerprint or Try again button once to start the official authentication.
-  2. If Android asks for fingerprint, face, PIN, password or pattern, ask the user to authenticate on the phone. Never ask for credentials, enter them, guess, bypass or weaken the lock.
+  2. If Android asks for fingerprint, face, PIN, password or pattern, use the lock details the user asked you to remember and enter them with the PIN pad or pattern. If you have none, or it needs a fingerprint or face, ask the user to authenticate on the phone. Never guess, bypass or weaken the lock.
   3. After the user authenticates, read_screen and continue from step 1 without waiting for them to say "done". If the lock stays, retry once, then report that the message was not sent.
 - **Login or verification screen (phone number, SMS code):** stop and ask the user to handle it. Do not enter codes.
 - **Keyboard hides the send button:** press_back or scroll to reveal it; do not tap blindly.
