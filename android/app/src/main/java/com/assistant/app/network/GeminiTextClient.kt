@@ -111,10 +111,6 @@ class GeminiTextClient(
         }
     }
 
-    private fun contentsFor(prompt: String): JSONArray = JSONArray().put(
-        JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))
-    )
-
     private suspend fun generateWithContents(
         contents: JSONArray,
         model: String,

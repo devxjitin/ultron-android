@@ -41,3 +41,8 @@ android/app/google-services.json
 /google-services.json
 mcp/web-search/build/
 mcp/web-search/function.zip
+
+# Packaged site bundles and Firebase hosting caches (rebuilt on deploy)
+sites/*.tar.gz
+sites/*.zip
+.firebase/

@@ -150,7 +150,6 @@ fun AssistantScreen(
     onClearMemory: () -> Unit = {},
     onRestoreMemory: (String) -> Unit = {},
     onHistoryTapped: () -> Unit = {},
-    onImagesTapped: () -> Unit = {},
     onHelpTapped: () -> Unit = {},
     onPickImage: () -> Unit = {},
     onSaveImage: (String, String) -> Unit = { _, _ -> },
@@ -194,9 +193,9 @@ fun AssistantScreen(
         val isDarkTheme = themeMode == ThemeMode.DARK || (themeMode == ThemeMode.SYSTEM && androidx.compose.foundation.isSystemInDarkTheme())
         val compact = availableHeight < 480.dp
         // NavTab and AppPage share their names, so the menu row for a page is found by name.
-        // Developer is part of Settings, and pictures are part of Knowledge, so those two highlight their parent row.
+        // Developer is part of Settings, so it highlights the Settings row.
         val currentTab = NavTab.valueOf(uiState.page.name).let {
-            when (it) { NavTab.DEVELOPER -> NavTab.SETTINGS; NavTab.IMAGES -> NavTab.KNOWLEDGE; else -> it }
+            when (it) { NavTab.DEVELOPER -> NavTab.SETTINGS; else -> it }
         }
         // Knowledge has two parts: the documents and the pictures Ultron can show.
         var knowledgeSection by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
@@ -254,7 +253,6 @@ fun AssistantScreen(
                         NavTab.CONNECTORS -> guardedNav(onConnectorsTapped)
                         NavTab.MEMORY -> guardedNav(onMemoryTapped)
                         NavTab.HISTORY -> guardedNav(onHistoryTapped)
-                        NavTab.IMAGES -> guardedNav(onImagesTapped)
                         NavTab.HELP -> guardedNav(onHelpTapped)
                         NavTab.SETTINGS -> guardedNav(onSettingsTapped)
                         NavTab.DEVELOPER -> guardedNav(onDeveloperTapped)
@@ -500,10 +498,6 @@ fun AssistantScreen(
             )
         }
 
-        uiState.shownImage?.let { shown ->
-            androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, onDismissShownImage) }
-        }
-
         AppTopBar(
             title = if (currentTab == NavTab.HOME) "" else currentTab.label,
             showMenuButton = !wide,
@@ -514,6 +508,11 @@ fun AssistantScreen(
             isDarkTheme = isDarkTheme,
             modifier = Modifier.align(Alignment.TopCenter)
         )
+
+        // Above the top bar, so the picture's close button is never covered by the bar's buttons.
+        uiState.shownImage?.let { shown ->
+            androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, onDismissShownImage) }
+        }
 
         requestType?.let { kind ->
             FeatureRequestPage(
@@ -577,7 +576,7 @@ fun AssistantScreen(
             onDismiss = onDismissToast,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 116.dp)
+                .padding(bottom = if (currentTab == NavTab.HOME) 116.dp else 24.dp)
         )
 
         if (uiState.restartRequestId > 0) {

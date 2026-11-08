@@ -5,7 +5,7 @@
   "hosting": {
     "site": "ultronapp-admin",
     "public": "ultronapp",
-    "ignore": ["README.md", "firebase.json", "**/.*"],
+    "ignore": ["README.md", "firebase.json", "demo.js", "**/.*"],
     "headers": [
       { "source": "**", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
     ]

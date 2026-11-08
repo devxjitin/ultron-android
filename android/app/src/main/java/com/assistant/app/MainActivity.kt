@@ -363,7 +363,6 @@ class MainActivity : ComponentActivity() {
                         onClearMemory = { viewModel.onClearMemory() },
                         onRestoreMemory = { viewModel.onRestoreMemory(it) },
                         onHistoryTapped = { viewModel.onHistoryTapped() },
-                        onImagesTapped = { viewModel.onImagesTapped() },
                         onHelpTapped = { viewModel.onHelpTapped() },
                         onPickImage = { imagePickerLauncher.launch("image/*") },
                         onSaveImage = { title, description -> viewModel.onSaveImage(title, description) },
