@@ -190,10 +190,12 @@ class DeviceToolRunner(
             DeviceTool.SEARCH_CONTACT -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
-                val found = findContacts(name, 5)
-                if (found.isEmpty()) "status=not_found\nNo contact matches \"$name\"."
-                else "status=ok\n" + found.joinToString("\n") { "${it.first}: ${it.second}" }
+                val found = ContactMatcher.search(name, loadContacts(), 5)
+                if (found.isEmpty()) "status=not_found\nNo contact matches \"$name\", not even a similar spelling. Ask the user to say the name again or spell it."
+                else "status=ok\nBest matches first; the saved name may be spelled differently from what was said.\n" +
+                    found.joinToString("\n") { "${it.name}: ${it.number}" }
             }
+            DeviceTool.MAKE_CALL -> makeCall(text("name"), text("number"))
             DeviceTool.FETCH_WEBPAGE ->
                 WebExtractClient.read(text("url") ?: return MISSING, (number("max_chars") ?: 12_000).coerceIn(1_000, 50_000))
             DeviceTool.GET_WEATHER -> weather(text("place"), (number("days") ?: 3).coerceIn(1, 7))
@@ -400,15 +402,18 @@ class DeviceToolRunner(
             DeviceTool.CONTACT_BIRTHDAY -> {
                 missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
                 val name = text("name") ?: return MISSING
-                val rows = mutableListOf<String>()
+                val birthdays = mutableListOf<ContactEntry>()
                 app.contentResolver.query(
                     ContactsContract.Data.CONTENT_URI,
-                    arrayOf(ContactsContract.Data.DISPLAY_NAME, ContactsContract.CommonDataKinds.Event.START_DATE),
-                    "${ContactsContract.Data.MIMETYPE}=? AND ${ContactsContract.CommonDataKinds.Event.TYPE}=? AND ${ContactsContract.Data.DISPLAY_NAME} LIKE ?",
-                    arrayOf(ContactsContract.CommonDataKinds.Event.CONTENT_ITEM_TYPE, ContactsContract.CommonDataKinds.Event.TYPE_BIRTHDAY.toString(), "%$name%"), null
+                    arrayOf(ContactsContract.Data.CONTACT_ID, ContactsContract.Data.DISPLAY_NAME, ContactsContract.CommonDataKinds.Event.START_DATE),
+                    "${ContactsContract.Data.MIMETYPE}=? AND ${ContactsContract.CommonDataKinds.Event.TYPE}=?",
+                    arrayOf(ContactsContract.CommonDataKinds.Event.CONTENT_ITEM_TYPE, ContactsContract.CommonDataKinds.Event.TYPE_BIRTHDAY.toString()), null
                 )?.use { cursor ->
-                    while (cursor.moveToNext() && rows.size < 5) rows.add("${cursor.getString(0)}: ${cursor.getString(1)}")
+                    while (cursor.moveToNext()) {
+                        birthdays.add(ContactEntry(cursor.getLong(0), cursor.getString(1).orEmpty(), cursor.getString(2).orEmpty()))
+                    }
                 }
+                val rows = ContactMatcher.search(name, birthdays, 5).map { "${it.name}: ${it.number}" }
                 if (rows.isEmpty()) "status=not_found\nNo birthday saved for \"$name\"."
                 else "status=ok\n" + rows.joinToString("\n") + "\n(A date starting with -- has no year.)"
             }
@@ -490,19 +495,43 @@ class DeviceToolRunner(
     private val extras by lazy { PhoneExtras(app) { intent -> start(intent) } }
 
     /** Name and number pairs for contacts whose name matches [name]. */
-    private fun findContacts(name: String, limit: Int): List<Pair<String, String>> {
-        val uri = Uri.withAppendedPath(ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI, Uri.encode(name))
+    /** Every saved phone number with its contact, so the name can be matched by sound and spelling instead of by Android's exact filter. */
+    private fun loadContacts(): List<ContactEntry> {
         val projection = arrayOf(
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-            ContactsContract.CommonDataKinds.Phone.NUMBER
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.STARRED, ContactsContract.CommonDataKinds.Phone.TYPE
         )
-        val results = LinkedHashSet<Pair<String, String>>()
-        app.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            while (cursor.moveToNext() && results.size < limit) {
-                results.add(cursor.getString(0).orEmpty() to cursor.getString(1).orEmpty())
+        val rows = ArrayList<ContactEntry>()
+        app.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, null, null, null)?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val number = cursor.getString(2).orEmpty()
+                if (number.isBlank()) continue
+                rows.add(ContactEntry(cursor.getLong(0), cursor.getString(1).orEmpty(), number, cursor.getInt(3) == 1, cursor.getInt(4)))
             }
         }
-        return results.toList()
+        return rows
+    }
+
+    /** Calls a saved contact by name, or a number, straight away. Needs the Calls connector's phone permission. */
+    private fun makeCall(name: String?, number: String?): String {
+        var target = number?.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }?.takeIf { it.count { c -> c.isDigit() } >= 3 }
+        var label = number.orEmpty()
+        if (target == null) {
+            val spoken = name ?: return MISSING
+            missingPermission(Manifest.permission.READ_CONTACTS)?.let { return it }
+            when (val match = ContactMatcher.match(spoken, loadContacts())) {
+                ContactMatch.None -> return "status=not_found\nNo contact sounds like \"$spoken\". Ask the user to say the name again, or for the number."
+                is ContactMatch.Many -> return "status=ambiguous\nSeveral contacts fit: " + match.names.joinToString("; ") +
+                    ". Ask the user which one, then call make_call again with that exact name. Nothing was dialled."
+                is ContactMatch.One -> {
+                    label = match.name
+                    target = match.numbers.first().number.filter { it.isDigit() || it == '+' }
+                }
+            }
+        }
+        missingPermission(Manifest.permission.CALL_PHONE)?.let { return it }
+        start(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", target, null)))
+        return "status=ok\nCalling $label."
     }
 
     private fun upcomingEvents(days: Int): String {
@@ -1416,7 +1445,7 @@ class DeviceToolRunner(
         const val INVALID_LEVEL = "status=invalid\nUse action increase, decrease, or set with a percent."
         /** Tools that query contacts, calendar, files, usage stats, notifications or apps. */
         val BLOCKING_TOOLS = setOf(
-            DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.UPCOMING_EVENTS,
+            DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.MAKE_CALL, DeviceTool.UPCOMING_EVENTS,
             DeviceTool.CALENDAR_CONFLICTS, DeviceTool.MOST_USED_APPS, DeviceTool.APP_USAGE, DeviceTool.STORAGE_MEMORY,
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
