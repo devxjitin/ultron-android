@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.4 - 2026-11-09
+
+### Changed
+- A running voice session stays quietly in the background when you open Settings, Skills or any other page. The status bar with Mute and Stop is gone from those pages; Stop it from the notification or on Home.
+
 ## 1.23.3 - 2026-11-09
 
 ### Fixed
