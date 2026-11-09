@@ -12,7 +12,6 @@ import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
 import com.assistant.app.audio.MicStreamer
-import com.assistant.app.data.NO_GEMINI_KEY_MESSAGE
 import com.assistant.app.data.knowledgeKeyFor
 import com.assistant.app.data.AccessGate
 import com.assistant.app.data.UntrustedContent
@@ -29,10 +28,6 @@ import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
 import com.assistant.app.data.KnowledgeBaseProvider
 import com.assistant.app.data.DeveloperSaveFailedException
-import com.assistant.app.data.KnowledgeToolResponse
-import com.assistant.app.data.SearchFailureCategory
-import com.assistant.app.data.classifySearchFailure
-import com.assistant.app.data.requiresEmbeddingMigration
 import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.PhoneConnectors
 import com.assistant.app.data.MEMORY_FORGET_TOOL
@@ -45,12 +40,10 @@ import com.assistant.app.data.MemoryStore
 import com.assistant.app.data.memoriesForPrompt
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
-import com.assistant.app.data.validateFormattedDataset
 import com.assistant.app.data.AssistantOptions
 import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.data.RagDocumentStore
-import com.assistant.app.data.RagSearchEngine
 import com.assistant.app.network.ToolDeclarations
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
@@ -98,10 +91,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         /** How long the app must stay in front, and settings stay unchanged, before a warm session is opened. */
         const val PREWARM_DELAY_MS = 2_000L
         const val MAX_PICKED_IMAGE_BYTES = 25 * 1024 * 1024
-        /** One quick retry for transient knowledge-search failures; keeps worst case well under the 15 s model watchdog. */
-        private const val SEARCH_RETRY_LIMIT = 1
-        private const val SEARCH_RETRY_DELAY_MS = 500L
-        private const val MAX_SEARCH_QUERY_CHARS = 500
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
         /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
@@ -150,14 +139,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val settingsStore = AppSettingsStore(application)
     private val memoryStore = MemoryStore(application)
     private val usageStore = UsageStore(application)
-    private val ragDocumentStore = RagDocumentStore(application)
-    /** Serializes add/update/delete of knowledge documents so two concurrently triggered
-     *  operations (e.g. an in-progress edit's Save and a separately launched .md upload) never
-     *  overlap and clobber each other's isSavingKnowledgeDocument/progress/error UI state. */
-    private val knowledgeDocMutex = Mutex()
-    // Declared before the init block, which starts the first collection.
-    private var knowledgeDocumentsJob: Job? = null
-    private val embeddingMigrationRunning = java.util.concurrent.atomic.AtomicBoolean(false)
     private var idleTimeoutJob: Job? = null
     private var turnTimeoutJob: Job? = null
     private var speakingWatchdogJob: Job? = null
@@ -181,11 +162,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      * failure leaves the rest for the next pass, so a conversation is never held up by it.
      */
     private fun indexConversationHistory() {
-        if (resolveEmbeddingApiKey().isBlank() || historyIndexJob?.isActive == true) return
+        if (knowledge.embeddingKey().isBlank() || historyIndexJob?.isActive == true) return
         historyIndexJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val indexer = ConversationHistoryIndexer(conversationHistoryStore) { text ->
-                    embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.DOCUMENT).embedding
+                    knowledge.embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.DOCUMENT).embedding
                 }
                 while (indexer.indexPending() > 0) Unit
             } catch (e: CancellationException) {
@@ -196,22 +177,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Knowledge import and search use the optional Knowledge key when one is saved, otherwise the main Gemini key. */
-    private fun resolveEmbeddingApiKey(): String =
-        knowledgeKeyFor(apiKeyStore.getEmbeddingApiKey(), apiKeyStore.getApiKey())
-
-    private var cachedEmbeddingClient: Pair<String, GeminiEmbeddingClient>? = null
-    private fun embeddingClient(): GeminiEmbeddingClient {
-        val key = resolveEmbeddingApiKey()
-        if (key.isBlank()) throw UserMessageException(NO_GEMINI_KEY_MESSAGE)
-        return cachedEmbeddingClient?.takeIf { it.first == key }?.second
-            ?: GeminiEmbeddingClient(key).also { cachedEmbeddingClient = key to it }
-    }
-    private fun searchEngine() = RagSearchEngine(
-        documentStore = ragDocumentStore,
-        embeddingClient = embeddingClient(),
-        retrievalChunkLimit = _uiState.value.settings.retrievalChunkLimit
-    )
 
     @Volatile private var lastSpeechAtElapsedMs = 0L
 
@@ -263,6 +228,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         source = AppUpdaterSource(application),
         showToast = { message, type -> showToast(message, type) },
         isVoiceSessionActive = { isSessionActive(_uiState.value.voiceState) }
+    )
+
+    private val knowledge = KnowledgeManager(
+        scope = viewModelScope,
+        state = _uiState,
+        storeProvider = { RagDocumentStore(application) },
+        resolveKey = { knowledgeKeyFor(apiKeyStore.getEmbeddingApiKey(), apiKeyStore.getApiKey()) },
+        showToast = { message, type -> showToast(message, type) },
+        auxiliaryUsage = { purpose -> auxiliaryUsage(purpose) }
     )
 
     /** Mic level while listening, playback level while speaking. Kept out of [uiState] because it changes
@@ -413,7 +387,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     prewarmIfPossible()
                 }
         }
-        collectKnowledgeDocuments()
+        knowledge.collectDocuments()
         viewModelScope.launch {
             memoryStore.items
                 .catch { e -> Log.e("AssistantError", "Failed to read memory", e) }
@@ -438,66 +412,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             prewarmIfPossible()
-            startEmbeddingMigrationIfNeeded()
+            knowledge.startEmbeddingMigrationIfNeeded()
         }
     }
 
     @Volatile private var keysLoaded = false
 
-    /** Re-embeds chunks stored under an older embedding model, in the background and never inside a
-     *  live tool call. Until it finishes, searches answer "not ready". Safe to call repeatedly. */
-    private fun startEmbeddingMigrationIfNeeded() {
-        if (!embeddingMigrationRunning.compareAndSet(false, true)) return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (resolveEmbeddingApiKey().isBlank()) return@launch
-                if (!requiresEmbeddingMigration(ragDocumentStore.allChunks())) return@launch
-                Log.i("AssistantSearch", "Embedding migration started")
-                ragDocumentStore.reindexAll(embeddingClient())
-                Log.i("AssistantSearch", "Embedding migration finished")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("AssistantError", "Background embedding migration failed", e)
-            } finally {
-                embeddingMigrationRunning.set(false)
-            }
-        }
-    }
-
-    /** A failed flow ends its collection, so this is started again after a knowledge reset. */
-    private fun collectKnowledgeDocuments() {
-        knowledgeDocumentsJob?.cancel()
-        knowledgeDocumentsJob = viewModelScope.launch {
-            ragDocumentStore.documents
-                .catch { e ->
-                    Log.e("AssistantError", "Failed to read knowledge documents", e)
-                    // Decode failures are IllegalStateException; storage I/O errors are not resettable data problems.
-                    if (e is IllegalStateException) {
-                        _uiState.update { it.copy(knowledgeDocuments = emptyList(), knowledgeStoreCorrupt = true) }
-                    }
-                }
-                .collect { docs ->
-                    _uiState.update { it.copy(knowledgeDocuments = docs, knowledgeStoreCorrupt = false) }
-                }
-        }
-    }
-
     /** Recovery from unreadable knowledge data: deletes all documents and the index. */
-    fun onResetKnowledge() {
-        viewModelScope.launch {
-            try {
-                knowledgeDocMutex.withLock { ragDocumentStore.resetKnowledge() }
-                collectKnowledgeDocuments()
-                showToast("Knowledge reset")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("AssistantError", "Failed to reset knowledge", e)
-                showToast("Couldn't reset knowledge. Please try again.", AppNotificationType.ERROR)
-            }
-        }
-    }
+    fun onResetKnowledge() = knowledge.resetKnowledge()
 
     /** The Gemini key the user typed in Settings; blank until they add one. There is no built-in access. */
     private fun resolveApiKey(): String = apiKeyStore.getApiKey().orEmpty()
@@ -1006,7 +928,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onClearEmbeddingApiKey() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { apiKeyStore.clearEmbeddingApiKey() }
-            cachedEmbeddingClient = null
+            knowledge.forgetEmbeddingClient()
             _uiState.update { it.copy(currentEmbeddingApiKey = "") }
             showToast("Knowledge API key removed")
         }
@@ -1118,7 +1040,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {
         ConversationHistoryTools(
             store = conversationHistoryStore,
-            embedQuery = { text -> embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.QUERY).embedding },
+            embedQuery = { text -> knowledge.embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.QUERY).embedding },
             currentSessionId = historySessionId
         ).run(tool, args)
     }
@@ -1146,8 +1068,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 // Only now that everything is persisted does the UI/runtime state change.
                 if (embeddingKeyChange != null) {
-                    cachedEmbeddingClient = null
-                    startEmbeddingMigrationIfNeeded()
+                    knowledge.onEmbeddingKeyChanged()
                 }
                 _uiState.update {
                     it.copy(
@@ -1179,186 +1100,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun onAddKnowledgeDocument(title: String, text: String) {
-        if (title.isBlank() || text.isBlank()) return
-        viewModelScope.launch {
-            knowledgeDocMutex.withLock {
-                _uiState.update {
-                    it.copy(
-                        isSavingKnowledgeDocument = true,
-                        knowledgePreparationStage = KnowledgePreparationStage.PREPARING,
-                        savingKnowledgeDocumentTarget = ADD_DOCUMENT_TARGET_ID,
-                        knowledgeDocumentError = null,
-                        uploadedChunks = 0,
-                        totalChunks = 0
-                    )
-                }
-                try {
-                    ragDocumentStore.addDocument(title, text, embeddingClient()) { done, total ->
-                        _uiState.update { it.copy(uploadedChunks = done, totalChunks = total) }
-                    }
-                    _uiState.update {
-                        it.copy(
-                            isSavingKnowledgeDocument = false,
-                            knowledgePreparationStage = null,
-                            savingKnowledgeDocumentTarget = null,
-                            uploadedChunks = 0,
-                            totalChunks = 0
-                        )
-                    }
-                    showToast("Document added")
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val error = UserFacingError.forThrowable("Knowledge document save", e)
-                    showToast(error, AppNotificationType.ERROR)
-                    _uiState.update {
-                        it.copy(
-                            isSavingKnowledgeDocument = false,
-                            knowledgePreparationStage = null,
-                            uploadedChunks = 0,
-                            totalChunks = 0,
-                            knowledgeDocumentError = error
-                        )
-                    }
-                }
-            }
-        }
-    }
+    fun onAddKnowledgeDocument(title: String, text: String) = knowledge.addDocument(title, text)
 
     /** Imports a visual PDF through Gemini before embedding its structured paragraph output. */
-    fun onImportKnowledgePdf(title: String, pdfBytes: ByteArray) {
-        if (title.isBlank() || pdfBytes.isEmpty()) return
-        viewModelScope.launch {
-            knowledgeDocMutex.withLock {
-                _uiState.update {
-                    it.copy(
-                        isSavingKnowledgeDocument = true,
-                        knowledgePreparationStage = KnowledgePreparationStage.ANALYZING,
-                        savingKnowledgeDocumentTarget = ADD_DOCUMENT_TARGET_ID,
-                        knowledgeDocumentError = null,
-                        uploadedChunks = 0,
-                        totalChunks = 0
-                    )
-                }
-                try {
-                    val embeddingKey = resolveEmbeddingApiKey()
-                    if (embeddingKey.isBlank()) throw UserMessageException(NO_GEMINI_KEY_MESSAGE)
-                    val formattedText = GeminiTextClient(
-                        apiKey = embeddingKey,
-                        onUsage = auxiliaryUsage(UsageStore.PURPOSE_PDF),
-                        documentFormatPrompt = _uiState.value.settings.documentFormatPrompt,
-                        documentFormatModel = AssistantOptions.DATASET_MODEL
-                    ).formatKnowledgePdf(pdfBytes, _uiState.value.settings.retrievalChunkLimit)
-                    if (formattedText.isBlank()) throw UserMessageException("We couldn't read this document. Please try another file.")
-                    val dataset = validateFormattedDataset(formattedText)
-                    _uiState.update { it.copy(knowledgePreparationStage = KnowledgePreparationStage.PREPARING) }
-                    ragDocumentStore.addDocument(title, dataset, embeddingClient()) { done, total ->
-                        _uiState.update { it.copy(uploadedChunks = done, totalChunks = total) }
-                    }
-                    _uiState.update {
-                        it.copy(
-                            isSavingKnowledgeDocument = false,
-                            knowledgePreparationStage = null,
-                            savingKnowledgeDocumentTarget = null,
-                            uploadedChunks = 0,
-                            totalChunks = 0
-                        )
-                    }
-                    showToast("Document imported")
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val error = UserFacingError.forThrowable("Knowledge document import", e)
-                    showToast(error, AppNotificationType.ERROR)
-                    _uiState.update {
-                        it.copy(
-                            isSavingKnowledgeDocument = false,
-                            knowledgePreparationStage = null,
-                            uploadedChunks = 0,
-                            totalChunks = 0,
-                            knowledgeDocumentError = error
-                        )
-                    }
-                }
-            }
-        }
-    }
+    fun onImportKnowledgePdf(title: String, pdfBytes: ByteArray) = knowledge.importPdf(title, pdfBytes)
 
-    fun onUpdateKnowledgeDocument(id: String, title: String, text: String) {
-        if (title.isBlank() || text.isBlank()) return
-        viewModelScope.launch {
-            knowledgeDocMutex.withLock {
-                _uiState.update {
-                    it.copy(
-                        isSavingKnowledgeDocument = true,
-                        knowledgePreparationStage = KnowledgePreparationStage.PREPARING,
-                        savingKnowledgeDocumentTarget = id,
-                        knowledgeDocumentError = null,
-                        uploadedChunks = 0,
-                        totalChunks = 0
-                    )
-                }
-                try {
-                    val result = ragDocumentStore.updateDocument(id, title, text, embeddingClient()) { done, total ->
-                        _uiState.update { it.copy(uploadedChunks = done, totalChunks = total) }
-                    }
-                    _uiState.update {
-                        it.copy(
-                            isSavingKnowledgeDocument = false,
-                            knowledgePreparationStage = null,
-                            savingKnowledgeDocumentTarget = null,
-                            uploadedChunks = 0,
-                            totalChunks = 0
-                        )
-                    }
-                    if (result != null) {
-                        showToast("Document updated")
-                    } else {
-                        showToast("Document was deleted before the update finished")
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val error = UserFacingError.forThrowable("Knowledge document update", e)
-                    showToast(error, AppNotificationType.ERROR)
-                    _uiState.update {
-                        it.copy(
-                            isSavingKnowledgeDocument = false,
-                            knowledgePreparationStage = null,
-                            uploadedChunks = 0,
-                            totalChunks = 0,
-                            knowledgeDocumentError = error
-                        )
-                    }
-                }
-            }
-        }
-    }
+    fun onUpdateKnowledgeDocument(id: String, title: String, text: String) = knowledge.updateDocument(id, title, text)
 
-    fun onDeleteKnowledgeDocument(id: String) {
-        viewModelScope.launch {
-            try {
-                knowledgeDocMutex.withLock { ragDocumentStore.deleteDocument(id) }
-                showToast("Document deleted")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("AssistantError", "Failed to delete knowledge document", e)
-                showToast("Couldn't delete that document. Please try again.", AppNotificationType.ERROR)
-            }
-        }
-    }
+    fun onDeleteKnowledgeDocument(id: String) = knowledge.deleteDocument(id)
 
-    fun onDismissKnowledgeDocumentError() {
-        _uiState.update {
-            it.copy(
-                knowledgeDocumentError = null,
-                knowledgePreparationStage = null,
-                savingKnowledgeDocumentTarget = null
-            )
-        }
-    }
+    fun onDismissKnowledgeDocumentError() = knowledge.dismissDocumentError()
 
     fun onPdfFileUploadFailed() {
         showToast("Choose a PDF file up to 10 MB.", AppNotificationType.ERROR)
@@ -1664,48 +1415,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             SkillRegistry.use(call.args.optString("skill"), call.args.optString("task"))
                         } else if (call.name != "search_knowledge_base") {
                             "status=unknown_tool\nThere is no tool named ${call.name}. Do not call it again; tell the user you cannot do that with the tools you have."
-                        } else try {
-                            val query = call.args.optString("query").trim().take(MAX_SEARCH_QUERY_CHARS)
-                            if (query.isEmpty()) {
-                                trace?.event("tool_empty_query")
-                                KnowledgeToolResponse.invalidQuery()
-                            } else if (resolveEmbeddingApiKey().isBlank()) {
-                                // Not a failed lookup and not proof of absence: search just isn't configured.
-                                trace?.event("tool_not_configured")
-                                KnowledgeToolResponse.notConfigured()
-                            } else {
-                                var attempt = 0
-                                var outcome: String? = null
-                                while (outcome == null) {
-                                    try {
-                                        val chunks = searchEngine().search(query, trace)
-                                        outcome = KnowledgeToolResponse.results(chunks)
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (e: Exception) {
-                                        val category = classifySearchFailure(e)
-                                        if (category == SearchFailureCategory.REINDEX_REQUIRED) {
-                                            startEmbeddingMigrationIfNeeded()
-                                        }
-                                        // Ids and categories only -- never the query, documents or keys.
-                                        Log.w("AssistantSearch", "search failed id=${call.id} category=$category " +
-                                            "error=${e.javaClass.simpleName} attempt=${attempt + 1}")
-                                        if (category.transient && attempt < SEARCH_RETRY_LIMIT) {
-                                            attempt++
-                                            trace?.event("tool_retry", mapOf("category" to category.name))
-                                            delay(SEARCH_RETRY_DELAY_MS)
-                                        } else {
-                                            trace?.failure()
-                                            trace?.event("tool_failed", mapOf("category" to category.name))
-                                            outcome = KnowledgeToolResponse.failed(category)
-                                        }
-                                    }
-                                }
-                                checkNotNull(outcome)
-                            }
-                        } catch (e: CancellationException) {
-                            trace?.event("tool_canceled")
-                            throw e
+                        } else {
+                            knowledge.runSearchTool(call.args.optString("query"), call.id, trace)
                         }
                         if (BuildConfig.DEBUG) {
                             Log.d("AssistantLatency", "knowledge-search=${SystemClock.elapsedRealtime() - searchStartedAt}ms")
