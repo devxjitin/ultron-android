@@ -4,7 +4,7 @@ Route (behind the Ultron HTTP API; the Firebase ID token was already checked by 
   POST /v1/requests  {"type": "skill"|"connector"|"bug", "name", "details", "examples"?, "email"?, "appVersion"?, "device"?}
   -> 200 {"id", "emailed"}; 400 {"error"} for a bad form; 429 {"error": "too_many"} after DAILY_LIMIT requests a day.
 
-Every request is stored first (DynamoDB), then emailed with Amazon SES. If the email cannot be sent the request is still
+Every request is stored first (DynamoDB), then emailed with Resend. If the email cannot be sent the request is still
 kept and the answer says "emailed": false, so nothing the user wrote is lost.
 
 Items in the table (key "id" S):
@@ -12,7 +12,7 @@ Items in the table (key "id" S):
   a counter:   id "limit#<uid>#<yyyymmdd>", count N, expiresAt N  (how many requests that user sent that day; DynamoDB's
                time-to-live setting on expiresAt deletes it a couple of days later, so counters do not pile up)
 
-Env vars: TABLE, DEVELOPER_EMAIL (who gets the mail), SENDER_EMAIL (a verified SES identity), FIREBASE_PROJECT_NUMBER and
+Env vars: TABLE, DEVELOPER_EMAIL (who gets the mail), SENDER_EMAIL (an address on a domain verified in Resend), RESEND_API_KEY_PARAM (the SSM parameter that holds the Resend API key), FIREBASE_PROJECT_NUMBER and
 APP_CHECK_MODE (see appcheck.py: only the genuine app may send requests, so scripts with a free anonymous account cannot).
 """
 import base64
@@ -33,7 +33,7 @@ LIMITS = {"name": 80, "details": 1500, "examples": 600, "email": 120, "appVersio
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 _table = None
-_ses = None
+_mailer = None
 
 
 def _db():
@@ -45,11 +45,11 @@ def _db():
 
 
 def _mail():
-    global _ses
-    if _ses is None:
-        import boto3
-        _ses = boto3.client("ses")
-    return _ses
+    global _mailer
+    if _mailer is None:
+        from resend_mail import ResendMail  # Imported here so the offline tests, which replace _mailer, never load it.
+        _mailer = ResendMail()
+    return _mailer
 
 
 def _resp(status, body):
@@ -152,7 +152,7 @@ def submit(event):
     try:
         _email(form, request_id)
         emailed = True
-    except Exception:  # SES not set up, sender not verified, throttled: the request is stored, the developer can still read it.
+    except Exception:  # Resend key missing, sender not verified, throttled: the request is stored, the developer can still read it.
         emailed = False
     return _resp(200, {"id": request_id, "emailed": emailed})
 

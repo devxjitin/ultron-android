@@ -17,8 +17,9 @@ token belongs to a verified admin email):
 
 {id} is the key's SHA-256, the same value as "id" in the list. Items are the ones mcp/license reads and writes.
 
-Env vars: TABLE, ADMIN_EMAILS (comma separated; empty locks everyone out). For the key email: SENDER_EMAIL (a verified
-SES identity such as no-reply@devxjitin.dev), SUPPORT_EMAIL (where buyers can write) and DOWNLOAD_URL (the app download page).
+Env vars: TABLE, ADMIN_EMAILS (comma separated; empty locks everyone out). For the key email: SENDER_EMAIL (an address on a
+domain verified in Resend, such as no-reply@devxjitin.dev), RESEND_API_KEY_PARAM (the SSM parameter that
+holds the Resend API key), SUPPORT_EMAIL (where buyers can write) and DOWNLOAD_URL (the app download page).
 """
 import base64
 import hashlib
@@ -44,15 +45,15 @@ TEXT_FIELDS = {"name": 80, "email": 120, "phone": 30, "note": 300, "plan": 40}
 REQUIRED_DETAILS = ("name", "email", "phone")
 
 _table = None
-_ses = None
+_mailer = None
 
 
 def _mail():
-    global _ses
-    if _ses is None:
-        import boto3  # Same reason as _db: the offline tests replace _ses.
-        _ses = boto3.client("ses")
-    return _ses
+    global _mailer
+    if _mailer is None:
+        from resend_mail import ResendMail  # Imported here so the offline tests, which replace _mailer, never load it.
+        _mailer = ResendMail()
+    return _mailer
 
 
 def _db():
@@ -178,12 +179,12 @@ def _make_keys(count, fields, plan, days, now, amount=0):
 
 
 def _send_keys(keys, items):
-    """Emails [keys] to the buyer on [items][0]. Returns True when SES accepted it and records emailedAt."""
+    """Emails [keys] to the buyer on [items][0]. Returns True when Resend accepted it and records emailedAt."""
     first = items[0]
     try:
         paid = sum(int(i.get("amount", 0)) for i in items)
         _mail().send_email(**_key_email(first.get("name", ""), first["email"], keys, first["plan"], first["durationDays"], paid))
-    except Exception:  # SES not set up, sender not verified, throttled: the admin still has the keys on screen.
+    except Exception:  # Resend key missing, sender not verified, throttled: the admin still has the keys on screen.
         return False
     sent_at = int(time.time())
     for item in items:
@@ -254,7 +255,7 @@ def reissue(event, now, license_id):
 
 
 def _key_email(name, to, keys, plan, days, paid=0):
-    """The SES arguments for the mail that carries the activation key(s) to the buyer."""
+    """The SES-shaped arguments (see resend_mail.py) for the mail that carries the activation key(s) to the buyer."""
     sender = os.environ["SENDER_EMAIL"]
     support = os.environ.get("SUPPORT_EMAIL", "")
     download = os.environ.get("DOWNLOAD_URL", "")

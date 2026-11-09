@@ -60,7 +60,11 @@ Parameters:
   RequestSenderEmail:
     Type: String
     Default: ""
-    Description: An Amazon SES verified email address or domain identity that the request emails and the activation key emails are sent from, for example no-reply@devxjitin.dev. While SES is in sandbox it only delivers to verified addresses, so ask AWS for production access.
+    Description: The address the request emails and the activation key emails are sent from, on a domain verified in Resend, for example no-reply@devxjitin.dev.
+  ResendApiKeyParam:
+    Type: String
+    Default: /ultron/resend-api-key
+    Description: Name of the SSM SecureString parameter that holds the Resend API key (sending access). Create it before deploying; it is never stored in this template.
   SupportEmail:
     Type: String
     Default: ""
@@ -331,6 +335,7 @@ Resources:
           TABLE: !Ref LicensesTable
           ADMIN_EMAILS: !Ref AdminEmails
           SENDER_EMAIL: !Ref RequestSenderEmail
+          RESEND_API_KEY_PARAM: !Ref ResendApiKeyParam
           SUPPORT_EMAIL: !Ref SupportEmail
           DOWNLOAD_URL: !Ref DownloadUrl
       Policies:
@@ -339,8 +344,8 @@ Resources:
               Action: [dynamodb:Scan, dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
               Resource: !GetAtt LicensesTable.Arn
             - Effect: Allow
-              Action: [ses:SendEmail]
-              Resource: "*"
+              Action: [ssm:GetParameter]
+              Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ResendApiKeyParam}"
       Events:
         List:
           Type: HttpApi
@@ -416,6 +421,7 @@ Resources:
           TABLE: !Ref RequestsTable
           DEVELOPER_EMAIL: !Ref DeveloperEmail
           SENDER_EMAIL: !Ref RequestSenderEmail
+          RESEND_API_KEY_PARAM: !Ref ResendApiKeyParam
           FIREBASE_PROJECT_NUMBER: !Ref FirebaseProjectNumber
           APP_CHECK_MODE: !Ref AppCheckMode
       Policies:
@@ -424,8 +430,8 @@ Resources:
               Action: [dynamodb:PutItem, dynamodb:UpdateItem]
               Resource: !GetAtt RequestsTable.Arn
             - Effect: Allow
-              Action: [ses:SendEmail]
-              Resource: "*"
+              Action: [ssm:GetParameter]
+              Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ResendApiKeyParam}"
       Events:
         Submit:
           Type: HttpApi
