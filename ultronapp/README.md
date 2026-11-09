@@ -30,10 +30,13 @@ It is plain HTML and ES modules, so there is nothing to build.
      RequestSenderEmail=no-reply@devxjitin.dev SupportEmail=devxjitin@gmail.com DownloadUrl=https://ultron.devxjitin.dev
    ```
    (see the header of `infra/api.yaml` for the package step).
-3. Set up the key emails in Amazon SES, in the same region as the stack: verify the `devxjitin.dev` domain (the DKIM records,
-   plus SPF and a DMARC record in DNS) so `no-reply@devxjitin.dev` can send, then ask AWS for production access. While SES is
-   in sandbox it only delivers to verified addresses, so real buyers would not get their key. If an email fails, the key is
-   still shown on screen to copy and the app says the email did not go out.
+3. Set up the key emails in Resend (resend.com): verify the `devxjitin.dev` domain there (the DKIM and SPF records in DNS) so
+   `no-reply@devxjitin.dev` can send. Create an API key with sending access and store it once, before step 2, as an SSM
+   SecureString in the same region as the stack (the stack reads it by name and never holds the key itself):
+   ```bash
+   aws ssm put-parameter --name /ultron/resend-api-key --type SecureString --value <the key>
+   ```
+   If an email fails, the key is still shown on screen to copy and the app says the email did not go out.
 4. Firebase console, Authentication, Settings, Authorized domains: add the domain Ultronapp is served from.
 5. Host it:
    ```bash

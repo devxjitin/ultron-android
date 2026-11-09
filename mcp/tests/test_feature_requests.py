@@ -1,4 +1,4 @@
-"""Offline tests for the feature-requests Lambda. DynamoDB and SES are replaced by fakes.
+"""Offline tests for the feature-requests Lambda. DynamoDB and the mailer are replaced by fakes.
 
 Run from the repository root:  python -m unittest discover -s mcp/tests -v
 """
@@ -58,7 +58,7 @@ GOOD = {"type": "connector", "name": "Spotify", "details": "Play songs and playl
 class FeatureRequestTest(unittest.TestCase):
     def setUp(self):
         fr._table = FakeTable()
-        fr._ses = FakeMail()
+        fr._mailer = FakeMail()
 
     def call(self, body, **kw):
         response = fr.lambda_handler(event(body, **kw), None)
@@ -71,7 +71,7 @@ class FeatureRequestTest(unittest.TestCase):
         stored = fr._table.items[body["id"]]
         self.assertEqual("Spotify", stored["name"])
         self.assertEqual("user-1", stored["uid"])
-        mail = fr._ses.sent[0]
+        mail = fr._mailer.sent[0]
         self.assertEqual(["dev@example.com"], mail["Destination"]["ToAddresses"])
         self.assertEqual(["me@example.com"], mail["ReplyToAddresses"])
         self.assertIn("Connector request: Spotify", mail["Message"]["Subject"]["Data"])
@@ -96,7 +96,7 @@ class FeatureRequestTest(unittest.TestCase):
             os.environ.pop("APP_CHECK_MODE")
 
     def test_a_failed_email_still_keeps_the_request(self):
-        fr._ses = FakeMail(fail=True)
+        fr._mailer = FakeMail(fail=True)
         status, body = self.call(GOOD)
         self.assertEqual(200, status)
         self.assertFalse(body["emailed"])
@@ -111,8 +111,8 @@ class FeatureRequestTest(unittest.TestCase):
 
     def test_subject_cannot_be_split_into_header_lines(self):
         self.call({**GOOD, "name": "Evil\r\nBcc: x@example.com"})
-        self.assertNotIn("\n", fr._ses.sent[0]["Message"]["Subject"]["Data"])
-        self.assertNotIn("\r", fr._ses.sent[0]["Message"]["Subject"]["Data"])
+        self.assertNotIn("\n", fr._mailer.sent[0]["Message"]["Subject"]["Data"])
+        self.assertNotIn("\r", fr._mailer.sent[0]["Message"]["Subject"]["Data"])
 
     def test_one_user_can_send_only_a_few_a_day(self):
         for _ in range(fr.DAILY_LIMIT):
@@ -132,7 +132,7 @@ class FeatureRequestTest(unittest.TestCase):
         })
         self.assertEqual(200, status)
         self.assertEqual("bug", fr._table.items[body["id"]]["type"])
-        mail = fr._ses.sent[0]
+        mail = fr._mailer.sent[0]
         self.assertEqual("[Ultron] Bug: Mic stops", mail["Message"]["Subject"]["Data"])
         text = mail["Message"]["Body"]["Text"]["Data"]
         self.assertIn("What happened:", text)
@@ -142,7 +142,7 @@ class FeatureRequestTest(unittest.TestCase):
     def test_requests_without_a_device_leave_it_out(self):
         status, _ = self.call(GOOD)
         self.assertEqual(200, status)
-        self.assertNotIn("Device:", fr._ses.sent[0]["Message"]["Body"]["Text"]["Data"])
+        self.assertNotIn("Device:", fr._mailer.sent[0]["Message"]["Body"]["Text"]["Data"])
 
 if __name__ == "__main__":
     unittest.main()

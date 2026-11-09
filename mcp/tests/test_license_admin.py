@@ -94,7 +94,7 @@ class AdminTests(unittest.TestCase):
         self.table = FakeTable()
         adm._table = self.table
         self.mail = FakeMail()
-        adm._ses = self.mail
+        adm._mailer = self.mail
 
     def create(self, **body):
         code, answer = call(request("POST", "/v1/admin/licenses", {**BUYER, **body}))
@@ -245,7 +245,7 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(0, answer["licenses"][0]["emailedAt"])
 
     def test_a_failed_email_still_returns_the_key(self):
-        adm._ses = FakeMail(fail=True)
+        adm._mailer = FakeMail(fail=True)
         answer = self.create()
         self.assertFalse(answer["emailed"])
         self.assertEqual(1, len(answer["keys"]))
