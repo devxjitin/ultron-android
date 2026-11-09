@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.19.12 - 2026-11-09
+
+### Changed
+- Every new voice session now starts fresh. Earlier conversations are no longer carried into it, although Ultron can still look them up if you ask about something from before.
+
 ## 1.19.11 - 2026-11-09
 
 ### Fixed
