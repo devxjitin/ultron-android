@@ -322,7 +322,7 @@ class DeviceToolRunner(
             DeviceTool.LIST_APPS -> extras.listApps(text("filter"))
             DeviceTool.OPEN_URL -> extras.openUrl(text("url") ?: return MISSING)
             DeviceTool.SHARE_TEXT -> extras.shareText(text("text") ?: return MISSING)
-            DeviceTool.SHARE_FILE -> shareFile(number("number"), text("app"), text("phone"))
+            DeviceTool.SHARE_FILE -> shareFile(number("number"), text("app"), text("phone"), text("caption"))
             DeviceTool.POWER_MENU -> globalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, "Power menu")
             DeviceTool.SPLIT_SCREEN -> globalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, "Split screen")
             DeviceTool.SWIPE -> {
@@ -1394,7 +1394,7 @@ class DeviceToolRunner(
     }
 
     /** Sends a search_files result into another app; for WhatsApp a phone number opens that person's chat straight away. */
-    private fun shareFile(number: Int?, appName: String?, phone: String?): String {
+    private suspend fun shareFile(number: Int?, appName: String?, phone: String?, caption: String?): String {
         fileAccessMissing()?.let { return it }
         val file = number?.let { lastFiles.getOrNull(it - 1) }
             ?: return "status=invalid\nCall search_files first and give a number from its list."
@@ -1408,14 +1408,29 @@ class DeviceToolRunner(
         }
         val (packageName, label) = findLauncherApp(appName) ?: return "status=not_found\nNo installed app matches \"$appName\"."
         send.setPackage(packageName)
+        if (caption != null) send.putExtra(Intent.EXTRA_TEXT, caption)
         val digits = phone?.filter { it.isDigit() }?.takeIf { it.length >= 8 }
         val direct = digits != null && packageName.startsWith("com.whatsapp")
         // WhatsApp reads this extra and opens the chat of that number instead of its own contact picker.
         if (direct) send.putExtra("jid", "$digits@s.whatsapp.net")
         start(send)
-        return "status=ok\n$label opened with ${file.name} ready. " +
-            (if (direct) "It should be in that person's chat: read_screen, check the name, then press Send."
-            else "Pick the person in $label's list, then press Send.")
+        if (!direct) {
+            return "status=opened\n$label opened with ${file.name}, NOT sent yet. Pick the person in $label's list, press Send, " +
+                "and say it was sent only after read_screen shows the file in the chat."
+        }
+        // The chat of that exact number is open, so the tool presses Send itself and checks the preview closed.
+        val service = AssistantAccessibilityService.instance
+            ?: return "status=opened\n$label opened with ${file.name}, NOT sent yet. Press Send with the screen tools and confirm it before saying it was sent."
+        return when (withContext(Dispatchers.Main) { service.pressSendInPreview(packageName) }) {
+            AssistantAccessibilityService.SendOutcome.SENT ->
+                "status=sent\n${file.name} was sent to that number in $label. Tell the user it is sent."
+            AssistantAccessibilityService.SendOutcome.STILL_OPEN ->
+                "status=not_sent\nSend was pressed but the $label preview is still open, so it may not have gone. " +
+                    "read_screen, press the Send button again if needed, and do not say it was sent until the file shows in the chat."
+            AssistantAccessibilityService.SendOutcome.NO_BUTTON ->
+                "status=not_sent\n$label did not show a Send button for ${file.name}. read_screen and look_at_screen, press Send, " +
+                    "and say it was sent only after the file shows in the chat."
+        }
     }
 
     private fun showPicture(query: String?, fileNumber: Int?, action: String?): String {

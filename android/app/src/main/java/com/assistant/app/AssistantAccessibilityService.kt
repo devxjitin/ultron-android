@@ -162,17 +162,77 @@ class AssistantAccessibilityService : AccessibilityService() {
     /** Clicks the [occurrence]-th (1-based) element whose text or description contains [text]. */
     suspend fun clickByText(text: String, occurrence: Int): String {
         val root = frontRoot() ?: return "status=unavailable\nThe screen cannot be read right now."
-        val matches = root.findAccessibilityNodeInfosByText(text).orEmpty()
+        // Visible controls whose label is exactly the wanted text come first, then other visible ones, so "Send" reaches the
+        // Send button before a "Send to" heading or a hint that merely contains the word.
+        val matches = root.findAccessibilityNodeInfosByText(text).orEmpty().sortedBy { node ->
+            val label = node.text?.toString() ?: node.contentDescription?.toString().orEmpty()
+            (if (node.isVisibleToUser) 0 else 4) + (if (label.trim().equals(text.trim(), ignoreCase = true)) 0 else 2) +
+                (if (hasClickableSelfOrParent(node)) 0 else 1)
+        }
         val node = matches.getOrNull(occurrence - 1)
             ?: return "status=not_found\nNothing on screen matches \"$text\". Call read_screen to see what is there."
+        val shown = (node.text?.toString() ?: node.contentDescription?.toString()).orEmpty().take(40)
         var clickable: AccessibilityNodeInfo? = node
         while (clickable != null && !clickable.isClickable) clickable = clickable.parent
         if (clickable != null && clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-            return "status=ok\nClicked \"$text\"."
+            return "status=ok\nClicked \"$shown\". Call read_screen to confirm what changed before saying it worked."
         }
         val bounds = Rect().also(node::getBoundsInScreen)
-        return if (!bounds.isEmpty && tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())) "status=ok\nTapped \"$text\"."
-        else "status=failed\nCould not click \"$text\"."
+        return if (!bounds.isEmpty && tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())) {
+            "status=ok\nTapped \"$shown\". Call read_screen to confirm what changed before saying it worked."
+        } else "status=failed\nCould not click \"$text\"."
+    }
+
+    private fun hasClickableSelfOrParent(node: AccessibilityNodeInfo): Boolean {
+        var current: AccessibilityNodeInfo? = node
+        while (current != null) {
+            if (current.isClickable) return true
+            current = current.parent
+        }
+        return false
+    }
+
+    /** What happened to a file that was handed to another app's preview. */
+    enum class SendOutcome { SENT, STILL_OPEN, NO_BUTTON }
+
+    /**
+     * Presses the green Send control on a preview screen that [pkg] opened for a shared file, then checks that the preview
+     * went away. The button is found by its own id first (`<pkg>:id/send`), then by a control whose text or description is
+     * exactly "Send"; a looser text match could hit "Send to" headings or hints and report a send that never happened.
+     */
+    suspend fun pressSendInPreview(pkg: String): SendOutcome {
+        var button: AccessibilityNodeInfo? = null
+        repeat(16) {
+            if (button == null) {
+                delay(500)
+                button = findSendControl(pkg)
+            }
+        }
+        val target = button ?: return SendOutcome.NO_BUTTON
+        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) || run {
+            val bounds = Rect().also(target::getBoundsInScreen)
+            !bounds.isEmpty && tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+        }
+        if (!clicked) return SendOutcome.STILL_OPEN
+        repeat(12) {
+            delay(500)
+            val root = frontRoot()
+            if (root?.packageName?.toString() == pkg && findSendControl(pkg) == null) return SendOutcome.SENT
+        }
+        return SendOutcome.STILL_OPEN
+    }
+
+    /** The visible Send control of [pkg] when that app is in front, else null. */
+    private fun findSendControl(pkg: String): AccessibilityNodeInfo? {
+        val root = frontRoot() ?: return null
+        if (root.packageName?.toString() != pkg) return null
+        val byId = root.findAccessibilityNodeInfosByViewId("$pkg:id/send").orEmpty().firstOrNull { it.isVisibleToUser }
+        val node = byId ?: root.findAccessibilityNodeInfosByText("Send").orEmpty().firstOrNull {
+            it.isVisibleToUser && (it.text?.toString().equals("Send", ignoreCase = true) || it.contentDescription?.toString().equals("Send", ignoreCase = true))
+        } ?: return null
+        var clickable: AccessibilityNodeInfo? = node
+        while (clickable != null && !clickable.isClickable) clickable = clickable.parent
+        return clickable ?: node
     }
 
     /** Taps the element with this number from the latest [readScreen]. */

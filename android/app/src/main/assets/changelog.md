@@ -3,6 +3,13 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.3 - 2026-11-09
+
+### Fixed
+- Opening Settings, Skills or any other page no longer ends a running voice session. A slim bar under the top bar shows its state with Mute and Stop.
+- Sending a file on WhatsApp now presses Send for you and only says "sent" once the preview has closed. If Send did not go through, it tells you instead of claiming success.
+- Tapping a button by its text now prefers the real button over a heading or hint that only contains the word.
+
 ## 1.23.2 - 2026-11-09
 
 ### Changed

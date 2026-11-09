@@ -26,9 +26,8 @@ Used by every task that needs a chat. Input: the contact name as heard, or digit
 Used by send_photo, send_video, send_document and send_audio.
 1. search_files with the user's words and the right kind. One clear result: use it. Several fit: name the top two or three briefly and ask which. Never send a file the user did not pick or clearly describe.
 2. search_contact for the number with its country code (as in Route A). Several fit: ask which.
-3. share_file with the file's number, app "WhatsApp" and phone. WhatsApp opens that chat with the file in a preview. No number (the person is only in WhatsApp, or Contacts is off): share_file without phone, then on "Send to" click_on_text "Search", type_text the name, read_screen, click the right person (ask if several fit), and click_on_text "Send" or the green arrow to reach the preview.
-4. read_screen: the preview or header must show the intended contact; if not, press_back and fix it.
-5. Caption only if the user gave one: click_on_text "Add a caption", type_text it.
-6. Send: click_on_text "Send"; if that fails click_screen_item on Send, or look_at_screen and tap_screen_position on the green arrow at the bottom right.
-7. read_screen: the file is the newest bubble. Then report in one sentence.
+3. share_file with the file's number, app "WhatsApp", phone, and caption only if the user gave one. With a phone the chat opens directly and share_file presses Send itself. Report the file as sent only when the result says status=sent. For status=not_sent follow its text: read_screen, press Send yourself, and say it was sent only after the file shows as the newest bubble.
+4. No number (the person is only in WhatsApp, or Contacts is off): share_file without phone returns status=opened, so nothing is sent yet. On "Send to" click_on_text "Search", type_text the name, read_screen, click the right person (ask if several fit), and click_on_text "Send" or the green arrow to reach the preview. read_screen: the preview or header must show the intended contact; if not, press_back and fix it. Add a caption only if the user gave one: click_on_text "Add a caption", type_text it.
+5. Send: click_on_text "Send"; if that fails click_screen_item on Send, or look_at_screen and tap_screen_position on the green arrow at the bottom right.
+6. read_screen: the file is the newest bubble. Only then report it in one sentence. Never say "sent" while the preview is still on screen.
 Never send photos of documents, IDs or cards unless that is exactly what was asked.
