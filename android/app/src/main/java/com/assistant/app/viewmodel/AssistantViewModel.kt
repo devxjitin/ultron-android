@@ -94,36 +94,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
         /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
-        /** No conversational activity (transcript text or a turn boundary) for this long while
-         *  a session is active auto-stops it and clears saved history, so a later session
-         *  doesn't inherit a stale leftover conversation or an abandoned open mic. */
-        const val idleTimeoutMs: Long = 120_000L
-        /** Hard cap on one session, counted from the user's mic tap. It then stops and the user
-         *  taps the mic to start again; auto-reconnects inside the cap don't extend it. */
-        const val maxSessionMs: Long = 15 * 60_000L
-        /** How long before [maxSessionMs] the user is told the session is about to end. */
-        const val SESSION_WARNING_MS = 60_000L
         /** After a server go-away notice: how long the current reply may finish first, and the margin kept before the deadline. */
         const val GO_AWAY_DEFAULT_WAIT_MS = 8_000L
         const val GO_AWAY_MARGIN_MS = 2_000L
-        /** How long to wait, once the user has finished speaking (local UI heuristic) or a
-         *  tool response has been sent back, for the model to produce SOMETHING -- audio,
-         *  another tool call, or turnComplete. The Live protocol has no server-side "I'm still
-         *  thinking" heartbeat, so a turn that silently never resumes (seen live: server
-         *  transcribes the input, then sends nothing at all -- no audio/toolCall/error/close)
-         *  would otherwise leave the UI stuck on PROCESSING until the unrelated 2-minute
-         *  [idleTimeoutMs] silently resets the whole session with no explanation. */
-        const val turnResponseTimeoutMs: Long = 15_000L
-        /** SPEAKING with no new audio chunk and no playback progress for this long means the turn
-         *  ended without the idle signal that normally returns the UI to LISTENING. */
-        const val SPEAKING_STALL_MS = 10_000L
-        /** Rough mic-RMS floor above which audio is treated as "the user is talking" rather than
-         *  ambient noise, for the LISTENING -> PROCESSING heuristic below. A guess, not measured
-         *  against real kiosk-room noise -- may need tuning on-device. */
-        const val SPEECH_AMPLITUDE_THRESHOLD = 0.02f
-        /** How long the mic has to stay quiet (after having heard real speech) before assuming
-         *  the user is done talking and the assistant is now "thinking". */
-        const val SILENCE_TO_PROCESSING_MS = 900L
     }
 
     private val conversationStore = ConversationStore(application)
@@ -138,13 +111,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val settingsStore = AppSettingsStore(application)
     private val memoryStore = MemoryStore(application)
     private val usageStore = UsageStore(application)
-    private var idleTimeoutJob: Job? = null
-    private var turnTimeoutJob: Job? = null
-    private var speakingWatchdogJob: Job? = null
-    private var lastAudioChunkAtMs = 0L
     private var reconnectJob: Job? = null
     private var sessionStartJob: Job? = null
-    private var sessionLimitJob: Job? = null
     /** Latest server handle for the active conversation, used only to resume it after an
      *  automatic reconnect; cleared whenever the user starts or stops a session. */
     private var sessionResumptionHandle: String? = null
@@ -177,11 +145,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
 
-    @Volatile private var lastSpeechAtElapsedMs = 0L
-
-    /** Speech-detection state for the LISTENING -> PROCESSING heuristic; see [onMicAmplitude]. */
-    private var lastLoudAtMillis = 0L
-    private var hasHeardSpeechThisTurn = false
     private val audioManager = application.getSystemService(Application.AUDIO_SERVICE) as AudioManager
     private val audio: AudioRouting = AudioRouting(audioManager, object : AudioFocusListener {
         /** Something else needs the speaker/mic -- most commonly an incoming call. Stop cleanly
@@ -236,6 +199,24 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         resolveKey = { knowledgeKeyFor(apiKeyStore.getEmbeddingApiKey(), apiKeyStore.getApiKey()) },
         showToast = { message, type -> showToast(message, type) },
         auxiliaryUsage = { purpose -> auxiliaryUsage(purpose) }
+    )
+
+    private val speech = SpeechDetector()
+
+    private val timers = SessionTimers(
+        scope = viewModelScope,
+        onIdleTimeout = { if (_uiState.value.voiceState != VoiceState.IDLE) stopSession() },
+        onTurnTimeout = { onTurnTimedOut() },
+        onSessionWarning = {
+            if (isSessionActive(_uiState.value.voiceState)) showToast("This session ends in 1 minute.", AppNotificationType.INFO)
+        },
+        onSessionLimit = {
+            val state = _uiState.value.voiceState
+            if (state != VoiceState.IDLE && state != VoiceState.ERROR) {
+                showToast("Session ended after 15 minutes. Tap the mic to start again.")
+                stopSession()
+            }
+        }
     )
 
     /** Mic level while listening, playback level while speaking. Kept out of [uiState] because it changes
@@ -948,7 +929,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         scope = viewModelScope,
         state = _uiState,
         isCurrent = { client -> liveClient === client },
-        startTurnTimeout = { startTurnTimeout() },
+        startTurnTimeout = { timers.startTurnTimeout() },
         displayName = ToolRunner::displayName,
         execute = { call, trace -> toolRunner.run(call, trace) }
     )
@@ -1079,7 +1060,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             silentTurnRetried = false
             voiceUsageStartMs = SystemClock.elapsedRealtime()
             sessionResumptionHandle = null
-            startSessionLimitTimer()
+            timers.startSessionLimit()
         }
 
         // A stale warm session may have been silently timed out server-side -- discard it
@@ -1145,21 +1126,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Ends the session [maxSessionMs] after the user started it; they tap the mic to begin again. */
-    private fun startSessionLimitTimer() {
-        sessionLimitJob?.cancel()
-        sessionLimitJob = viewModelScope.launch {
-            delay(maxSessionMs - SESSION_WARNING_MS)
-            if (isSessionActive(_uiState.value.voiceState)) showToast("This session ends in 1 minute.", AppNotificationType.INFO)
-            delay(SESSION_WARNING_MS)
-            val state = _uiState.value.voiceState
-            if (state != VoiceState.IDLE && state != VoiceState.ERROR) {
-                showToast("Session ended after 15 minutes. Tap the mic to start again.")
-                stopSession()
-            }
-        }
-    }
-
     private fun connectLiveSession(
         apiKey: String,
         systemInstruction: String,
@@ -1210,14 +1176,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (liveClient !== client) return
                 // A tool result can be followed by a separate model turn. Its first audio is the
                 // proof that the original visitor interaction has resumed.
-                lastAudioChunkAtMs = SystemClock.elapsedRealtime()
+                timers.noteAudioChunk()
                 silentTurnRetried = false
-                cancelTurnTimeout()
+                timers.cancelTurnTimeout()
                 val turn = client.latency.turn()
                 val firstAudio = turn?.audioReceived(receivedAtMs) == true
                 if (!pausedByCall) audioPlayer?.enqueue(pcm, turn.takeIf { firstAudio })
                 if (_uiState.value.voiceState != VoiceState.SPEAKING) {
-                    val speechAt = lastSpeechAtElapsedMs
+                    val speechAt = speech.lastSpeechAtMs
                     if (BuildConfig.DEBUG && speechAt > 0L) {
                         Log.d("AssistantLatency", "last-speech-to-first-audio=${SystemClock.elapsedRealtime() - speechAt}ms")
                     }
@@ -1228,7 +1194,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                         micStreamer?.setMuted(true)
                     }
                     _uiState.update { it.copy(voiceState = VoiceState.SPEAKING) }
-                    startSpeakingWatchdog()
+                    timers.startSpeakingWatchdog(
+                        isSpeaking = { _uiState.value.voiceState == VoiceState.SPEAKING },
+                        playbackHead = { audioPlayer?.playbackHeadFrames() },
+                        hasPendingTools = { tools.hasPending },
+                        onStalled = {
+                            Log.w("AssistantError", "Speaking stalled for ${SessionTimers.SPEAKING_STALL_MS}ms; returning to listening")
+                            finalizeTurnIfAny()
+                            micStreamer?.setMuted(false)
+                            speech.reset()
+                            audioPlayer?.clearQueueForInterruption()
+                            _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
+                        }
+                    )
                 }
             }
 
@@ -1240,29 +1218,28 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // Server transcription also counts as speech: quiet short queries may never
                 // cross the local amplitude threshold used only for the UI/watchdog.
                 if (_uiState.value.voiceState == VoiceState.LISTENING) {
-                    hasHeardSpeechThisTurn = true
-                    lastLoudAtMillis = SystemClock.elapsedRealtime()
+                    speech.markSpeech()
                 }
                 userTextBuffer.append(text)
-                resetIdleTimeout()
+                timers.resetIdle()
             }
 
             override fun onOutputTranscript(text: String) {
                 if (liveClient !== client) return
                 assistantTextBuffer.append(text)
-                resetIdleTimeout()
+                timers.resetIdle()
             }
 
             override fun onTurnComplete() {
                 if (liveClient !== client) return
                 client.latency.complete()
-                cancelTurnTimeout()
+                timers.cancelTurnTimeout()
                 if (tools.hasPending) {
                     // The model has yielded for local retrieval. Its eventual audio belongs to
                     // the same user/assistant transcript pair, so do not persist it yet. The filler
                     // it spoke ("one moment") still drains and hands the mic back, so a slow tool
                     // does not leave the screen on Speaking with the mic muted.
-                    resetIdleTimeout()
+                    timers.resetIdle()
                     audioPlayer?.notifyTurnComplete()
                     return
                 }
@@ -1274,7 +1251,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 // A full turn actually completed -- this session is genuinely working, so the
                 // reconnect-loop guard can relax again.
                 consecutiveAutoReconnects = 0
-                resetIdleTimeout()
+                timers.resetIdle()
                 // Don't unmute yet -- AudioPlayer still has buffered/queued audio to actually
                 // play out. Unmuting here would let the mic pick the tail of the assistant's own
                 // reply back up as if it were the user talking. AudioPlayer's onPlaybackIdle
@@ -1286,11 +1263,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             override fun onInterrupted() {
                 if (liveClient !== client) return
                 client.latency.cancel("interrupted")
-                cancelTurnTimeout()
+                timers.cancelTurnTimeout()
                 // Running tools are not cancelled here: the server names the calls it abandons in
                 // toolCallCancellation. A non-blocking call (a text being sent) is still wanted after
                 // the user talks over the filler, and dropping it lost the result the model waits for.
-                resetIdleTimeout()
+                timers.resetIdle()
                 // Close out the interrupted reply as its own turn so it isn't merged with
                 // whatever the user says next.
                 finalizeTurnIfAny()
@@ -1302,8 +1279,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             override fun onToolCall(calls: List<GeminiLiveClient.FunctionCall>) {
                 if (liveClient !== client) return
                 silentTurnRetried = false
-                cancelTurnTimeout()
-                resetIdleTimeout()
+                timers.cancelTurnTimeout()
+                timers.resetIdle()
                 recordUsage(UsageDay("", toolCalls = calls.size))
                 tools.onToolCalls(client, calls)
             }
@@ -1434,8 +1411,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             return
         }
-        resetIdleTimeout()
-        resetSpeechDetection()
+        timers.resetIdle()
+        speech.reset()
 
         var player: AudioPlayer? = null
         val createdPlayer = AudioPlayer(
@@ -1450,7 +1427,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 client.latency.playbackIdle()
                 // Playback has actually finished (or was interrupted) -- safe to unmute now.
                 micStreamer?.setMuted(false)
-                resetSpeechDetection()
+                speech.reset()
                 // PROCESSING is included so a turn that completes with no audio (empty reply)
                 // also returns to LISTENING here, instead of staying stuck until fresh speech
                 // or the 2-minute idle timeout.
@@ -1518,8 +1495,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             retryQuestion = null
             if (client.sendText(question)) {
                 userTextBuffer.append(question)
-                hasHeardSpeechThisTurn = true
-                startTurnTimeout()
+                speech.markSpeechWithoutClock()
+                timers.startTurnTimeout()
                 _uiState.update { it.copy(voiceState = VoiceState.PROCESSING) }
             } else {
                 silentTurnRetried = false
@@ -1567,8 +1544,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         recordVoiceUsage()
         sessionStartJob?.cancel()
         sessionStartJob = null
-        sessionLimitJob?.cancel()
-        sessionLimitJob = null
+        timers.cancelSessionLimit()
         sessionResumptionHandle = null
         reconnectJob?.cancel()
         reconnectJob = null
@@ -1678,12 +1654,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         goAwayJob?.cancel()
         goAwayJob = null
         pendingGoAway = null
-        speakingWatchdogJob?.cancel()
-        speakingWatchdogJob = null
+        timers.cancelSpeakingWatchdog()
         liveClient?.latency?.close(if (userInitiatedStop) "stopped" else "failed")
         tools.shutdown()
-        cancelIdleTimeout()
-        cancelTurnTimeout()
+        timers.cancelIdle()
+        timers.cancelTurnTimeout()
         micStreamer?.stop()
         micStreamer = null
         _uiState.update { it.copy(isMicMuted = false) }
@@ -1700,71 +1675,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         assistantTextBuffer.clear()
     }
 
-    /** Restarts the idle-timeout countdown -- called whenever there's a sign of real
-     *  conversational activity. If nothing resets it for [idleTimeoutMs], the session is
-     *  auto-stopped and history cleared so the next session starts clean. */
-    private fun resetIdleTimeout() {
-        idleTimeoutJob?.cancel()
-        idleTimeoutJob = viewModelScope.launch {
-            delay(idleTimeoutMs)
-            if (_uiState.value.voiceState != VoiceState.IDLE) {
-                stopSession()
-            }
-        }
-    }
-
-    private fun cancelIdleTimeout() {
-        idleTimeoutJob?.cancel()
-        idleTimeoutJob = null
-    }
-
-    /** Starts (restarting if one's already running) the [turnResponseTimeoutMs] watchdog for
-     *  the reply currently being awaited -- see the constant's doc for why this exists. */
-    private fun startTurnTimeout() {
-        turnTimeoutJob?.cancel()
-        turnTimeoutJob = viewModelScope.launch {
-            delay(turnResponseTimeoutMs)
-            onTurnTimedOut()
-        }
-    }
-
-    /** Safety net for the SPEAKING state: if audio stops arriving and the track stops advancing
-     *  without the normal turn-complete/idle signal, return to LISTENING instead of freezing. */
-    private fun startSpeakingWatchdog() {
-        speakingWatchdogJob?.cancel()
-        speakingWatchdogJob = viewModelScope.launch {
-            var lastHead = -1L
-            var lastProgressAt = SystemClock.elapsedRealtime()
-            while (true) {
-                delay(2_000L)
-                if (_uiState.value.voiceState != VoiceState.SPEAKING) return@launch
-                val head = audioPlayer?.playbackHeadFrames() ?: return@launch
-                val now = SystemClock.elapsedRealtime()
-                if (head != lastHead || tools.hasPending) {
-                    lastHead = head
-                    lastProgressAt = now
-                }
-                if (now - maxOf(lastProgressAt, lastAudioChunkAtMs) >= SPEAKING_STALL_MS) {
-                    Log.w("AssistantError", "Speaking stalled for ${SPEAKING_STALL_MS}ms; returning to listening")
-                    finalizeTurnIfAny()
-                    micStreamer?.setMuted(false)
-                    resetSpeechDetection()
-                    audioPlayer?.clearQueueForInterruption()
-                    _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-                    return@launch
-                }
-            }
-        }
-    }
-
-    private fun cancelTurnTimeout() {
-        turnTimeoutJob?.cancel()
-        turnTimeoutJob = null
-    }
-
-    /** Fires when [turnResponseTimeoutMs] elapses with no audio/toolCall/turnComplete/error
+    /** Fires when the reply watchdog (see [SessionTimers]) elapses with no audio/toolCall/turnComplete/error
      *  for the turn currently being waited on -- surfaces a real error instead of leaving the UI
-     *  stuck on PROCESSING until the much longer, silent [idleTimeoutMs] eventually resets it. */
+     *  stuck on PROCESSING until the much longer, silent idle timeout eventually resets it. */
     private fun onTurnTimedOut() {
         if (_uiState.value.voiceState != VoiceState.PROCESSING) return
         // No input transcript arrived for this turn: the local amplitude heuristic fired on noise
@@ -1772,7 +1685,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // coming. Quietly resume listening instead of killing the session with an error.
         if (userTextBuffer.isBlank()) {
             liveClient?.latency?.cancel("noise_timeout")
-            resetSpeechDetection()
+            speech.reset()
             _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
             return
         }
@@ -1781,7 +1694,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // doesn't have to tap the mic and repeat themselves.
         val question = userTextBuffer.toString().trim()
         if (!silentTurnRetried && question.isNotEmpty() && isNetworkAvailable()) {
-            Log.w("AssistantError", "No reply after ${turnResponseTimeoutMs}ms; reconnecting and asking again")
+            Log.w("AssistantError", "No reply after ${SessionTimers.TURN_RESPONSE_TIMEOUT_MS}ms; reconnecting and asking again")
             silentTurnRetried = true
             retryQuestion = question
             // Resuming would put us back into the server session that stopped answering.
@@ -1793,7 +1706,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         silentTurnRetried = false
         retryQuestion = null
-        Log.w("AssistantError", "Turn timed out after ${turnResponseTimeoutMs}ms with no server response")
+        Log.w("AssistantError", "Turn timed out after ${SessionTimers.TURN_RESPONSE_TIMEOUT_MS}ms with no server response")
         releaseResources()
         _uiState.update {
             it.copy(
@@ -1803,48 +1716,31 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Approximates "the user has stopped talking and the assistant hasn't replied yet" purely
-     *  from mic RMS, since the Live protocol doesn't expose a distinct end-of-user-turn signal to
-     *  this client. Loud enough audio counts as speech and resets the silence clock (and reverts
-     *  PROCESSING back to LISTENING if the user starts talking again); once real speech has been
-     *  heard this turn and the mic then stays quiet for [SILENCE_TO_PROCESSING_MS], switches to
-     *  PROCESSING so the UI doesn't look stuck while the assistant is generating a reply. */
+    /** Mic level handling; [SpeechDetector] decides, this acts on it. */
     private fun onMicAmplitude(amp: Float) {
         if (_uiState.value.isMicMuted) return
-        if (_uiState.value.voiceState != VoiceState.SPEAKING) _voiceLevel.value = amp
-        val now = SystemClock.elapsedRealtime()
-        if (amp >= SPEECH_AMPLITUDE_THRESHOLD) {
-            if (_uiState.value.voiceState == VoiceState.LISTENING ||
-                _uiState.value.voiceState == VoiceState.PROCESSING
-            ) liveClient?.latency?.turn()?.speech(now, "rms")
-            lastLoudAtMillis = now
-            lastSpeechAtElapsedMs = SystemClock.elapsedRealtime()
-            hasHeardSpeechThisTurn = true
-            if (_uiState.value.voiceState == VoiceState.PROCESSING) {
-                cancelTurnTimeout()
-                _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
+        val voiceState = _uiState.value.voiceState
+        if (voiceState != VoiceState.SPEAKING) _voiceLevel.value = amp
+        when (val result = speech.onAmplitude(amp, voiceState)) {
+            is SpeechDetector.Result.Speech -> {
+                if (result.inConversation) liveClient?.latency?.turn()?.speech(result.at, "rms")
+                if (result.wasProcessing) {
+                    timers.cancelTurnTimeout()
+                    _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
+                }
             }
-            return
+            is SpeechDetector.Result.SilenceEnded -> {
+                Log.i("AssistantLatency", "local speech end after ${result.silenceMs}ms silence")
+                liveClient?.latency?.turn()?.event("local_silence_detected", mapOf(
+                    "silence_ms" to result.silenceMs
+                ))
+                // UI/watchdog only. Keep streaming and let server VAD finalize the turn, as
+                // stopping here can discard short speech and clip the next utterance.
+                timers.startTurnTimeout()
+                _uiState.update { it.copy(voiceState = VoiceState.PROCESSING) }
+            }
+            SpeechDetector.Result.Quiet -> Unit
         }
-        if (_uiState.value.voiceState == VoiceState.LISTENING &&
-            hasHeardSpeechThisTurn &&
-            now - lastLoudAtMillis >= SILENCE_TO_PROCESSING_MS
-        ) {
-            Log.i("AssistantLatency", "local speech end after ${now - lastLoudAtMillis}ms silence")
-            liveClient?.latency?.turn()?.event("local_silence_detected", mapOf(
-                "silence_ms" to (now - lastLoudAtMillis)
-            ))
-            // UI/watchdog only. Keep streaming and let server VAD finalize the turn, as
-            // stopping here can discard short speech and clip the next utterance.
-            startTurnTimeout()
-            _uiState.update { it.copy(voiceState = VoiceState.PROCESSING) }
-        }
-    }
-
-    private fun resetSpeechDetection() {
-        lastLoudAtMillis = SystemClock.elapsedRealtime()
-        hasHeardSpeechThisTurn = false
-        lastSpeechAtElapsedMs = 0L
     }
 
     /** Silences Ultron for the length of a phone call (ringing or answered) without ending the session. */
@@ -1853,7 +1749,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         pausedByCall = true
         micStreamer?.setCallPaused(true)
         audioPlayer?.clearQueueForInterruption()
-        cancelIdleTimeout()
+        timers.cancelIdle()
         callWatchJob?.cancel()
         callWatchJob = viewModelScope.launch {
             // The call ends when the audio mode leaves ringing/in-call. Two clean checks in a row avoid
@@ -1875,7 +1771,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // The call took the audio mode and focus; claim them back for the voice session.
         audio.reclaim()
         micStreamer?.setCallPaused(false)
-        resetIdleTimeout()
+        timers.resetIdle()
         _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
     }
 
