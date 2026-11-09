@@ -361,8 +361,20 @@ enum class DeviceTool(
 
     SEARCH_CONTACT(
         "search_contact", "Search contacts", "Find a contact's number by name.",
-        "Searches the user's contacts by name and returns matching names and phone numbers.",
-        listOf(ToolParam("name", ToolParamType.STRING, "Full or partial contact name."))
+        "Searches the user's contacts by name and returns matching names and phone numbers. Spoken names are often spelled " +
+            "differently from the saved ones (Raahul, Rahul, राहुल, Mummy, Mom), so pass the name as heard in any script; " +
+            "it matches by sound and spelling and returns the best matches first.",
+        listOf(ToolParam("name", ToolParamType.STRING, "Full or partial contact name as heard."))
+    ),
+    MAKE_CALL(
+        "make_call", "Call someone", "Call a contact by name, or a number.",
+        "Places a phone call right away, with no screen taps. Use it whenever the user asks to call, ring or phone someone " +
+            "(\"Rahul ko call karo\"). Give the name as heard, in any script, and it finds the closest saved contact; if several fit " +
+            "it tells you, then ask which one. Give number instead of name only when the user said digits.",
+        listOf(
+            ToolParam("name", ToolParamType.STRING, "Contact name as heard.", required = false),
+            ToolParam("number", ToolParamType.STRING, "Phone number, only when the user said digits.", required = false)
+        )
     ),
     CREATE_CONTACT(
         "create_contact", "Add a contact", "Open a new-contact form (you press save).",

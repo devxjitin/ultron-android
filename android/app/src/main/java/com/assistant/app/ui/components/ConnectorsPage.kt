@@ -153,6 +153,7 @@ private val ConnectorIcons: Map<String, ImageVector> = mapOf(
     "reminders" to Icons.Outlined.Schedule,
     "calendar" to Icons.Outlined.CalendarMonth,
     "contacts" to Icons.Outlined.Contacts,
+    "calls" to Icons.Outlined.Call,
     "notifications" to Icons.Outlined.Notifications,
     "location" to Icons.Outlined.LocationOn,
     "app_usage" to Icons.Outlined.QueryStats,

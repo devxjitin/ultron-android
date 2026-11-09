@@ -134,6 +134,12 @@ object ConnectorRegistry {
             tools = listOf(DeviceTool.SEARCH_CONTACT, DeviceTool.CONTACT_BIRTHDAY, DeviceTool.CREATE_CONTACT)
         ),
         ConnectorSpec(
+            id = "calls", name = "Calls", description = "Call a contact by name.",
+            subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
+            permissions = listOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS), access = SpecialAccess.NONE, defaultOn = false,
+            tools = listOf(DeviceTool.MAKE_CALL)
+        ),
+        ConnectorSpec(
             id = "location", name = "Location", description = "Know where you are and get directions.",
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), access = SpecialAccess.NONE, defaultOn = false,
@@ -216,6 +222,11 @@ object ConnectorRegistry {
             "Finds a contact's number and birthday, and opens a form to save a new contact.",
             "Contacts access.",
             "Shared only when you ask."
+        ),
+        "calls" to ConnectorInfo(
+            "Calls the contact you name straight away, even when it is spelled differently on your phone. If two contacts fit, it asks which.",
+            "Phone and Contacts access.",
+            "The call is placed on your phone and the name is matched on your phone. Nothing is sent except what you say to Gemini."
         ),
         "location" to ConnectorInfo(
             "Tells you where you are and starts directions in your maps app.",

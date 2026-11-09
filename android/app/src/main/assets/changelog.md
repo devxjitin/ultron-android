@@ -3,6 +3,15 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.20.0 - 2026-11-09
+
+### Added
+- A new Calls connector: say who to call and Ultron dials them at once, with no taps. It is off until you add it in Connectors.
+
+### Fixed
+- Contacts are now found even when the name is spelled differently from how it was heard, such as Raahul for Rahul, Mummy for Mom, or a Hindi spelling. If two contacts fit, Ultron asks which one.
+- Ultron no longer says it can only open the Play Store: it now searches and installs apps through the screen when Screen control is on.
+
 ## 1.19.12 - 2026-11-09
 
 ### Changed
