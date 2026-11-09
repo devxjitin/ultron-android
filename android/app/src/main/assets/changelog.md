@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.2 - 2026-11-09
+
+### Changed
+- WhatsApp is now one group with 17 small skills, one job each: send a message, photo, video, document, audio, current or live location; voice and video calls; read and reply; search a chat; see who posted a status, view one, and post a text, photo or video status.
+- The assistant's own ability list now names every WhatsApp task, so it finds the right one when you ask.
+
 ## 1.23.1 - 2026-11-09
 
 ### Changed
