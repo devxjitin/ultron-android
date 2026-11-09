@@ -1,8 +1,6 @@
 package com.assistant.app.viewmodel
 
 import android.app.Application
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
 import org.json.JSONObject
 import android.net.Uri
@@ -221,18 +219,36 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var lastLoudAtMillis = 0L
     private var hasHeardSpeechThisTurn = false
     private val audioManager = application.getSystemService(Application.AUDIO_SERVICE) as AudioManager
-    private var audioFocusRequest: AudioFocusRequest? = null
-    // The mode/routing this session's audio actually owns -- saved only once focus is granted
-    // and this session has genuinely changed them, so release can restore whatever was active
-    // before (which may not be NORMAL/speaker-off, e.g. another app already in a call).
-    private var previousAudioMode: Int? = null
-    private var previousSpeakerphoneOn: Boolean? = null
-    private var usedCommunicationDevice = false
-    /** Voice-call volume before this session raised it from 0, restored when the session ends. */
-    private var previousVoiceCallVolume: Int? = null
-    private var raisedVoiceCallVolume: Int? = null
-    /** True while a short audio-focus loss has the mic paused; cleared when focus returns. */
-    private var pausedByFocusLoss = false
+    private val audio: AudioRouting = AudioRouting(audioManager, object : AudioFocusListener {
+        /** Something else needs the speaker/mic -- most commonly an incoming call. Stop cleanly
+         *  instead of continuing to stream mic audio into a session nobody can hear or respond to. */
+        override fun onFocusLost() {
+            if (_uiState.value.voiceState != VoiceState.IDLE) {
+                if (audio.isPhoneCallMode() && isSessionActive(_uiState.value.voiceState)) pauseForCall() else stopSession()
+            }
+        }
+
+        /** A short interruption (navigation prompt, notification sound): pause the mic and carry on afterwards. */
+        override fun onFocusLostTemporarily() {
+            // A ringing or answered phone call also arrives as a short loss, but it needs the
+            // speaker, mic and audio mode this session holds, so Ultron is silenced until the call ends.
+            if (audio.isPhoneCallMode() && isSessionActive(_uiState.value.voiceState)) {
+                pauseForCall()
+            } else if (isSessionActive(_uiState.value.voiceState)) {
+                audio.pausedByFocusLoss = true
+                micStreamer?.setMuted(true)
+            }
+        }
+
+        override fun onFocusGained() {
+            if (audio.pausedByFocusLoss) {
+                audio.pausedByFocusLoss = false
+                if (_uiState.value.voiceState != VoiceState.SPEAKING || _uiState.value.settings.bargeInEnabled) {
+                    micStreamer?.setMuted(false)
+                }
+            }
+        }
+    })
 
     /** True while a phone call rings or runs: Ultron stays connected but silent, and picks up again afterwards. */
     private var pausedByCall = false
@@ -1844,7 +1860,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             SupervisorJob() + Dispatchers.Main +
                 CoroutineExceptionHandler { _, e -> Log.e("AssistantError", "Uncaught tool error", e) }
         )
-        if (!acquireCommunicationAudio()) {
+        if (!audio.acquire()) {
             releaseResources()
             _uiState.update {
                 it.copy(
@@ -2300,39 +2316,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         lastSpeechAtElapsedMs = 0L
     }
 
-    /** Something else needs the speaker/mic -- most commonly an incoming call. Stop cleanly
-     *  instead of continuing to stream mic audio into a session nobody can hear or respond to. */
-    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
-        when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                if (_uiState.value.voiceState != VoiceState.IDLE) {
-                    if (isPhoneCallMode() && isSessionActive(_uiState.value.voiceState)) pauseForCall() else stopSession()
-                }
-            }
-            // A short interruption (navigation prompt, notification sound): pause the mic and carry on afterwards.
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // A ringing or answered phone call also arrives as a short loss, but it needs the
-                // speaker, mic and audio mode this session holds, so Ultron is silenced until the call ends.
-                if (isPhoneCallMode() && isSessionActive(_uiState.value.voiceState)) {
-                    pauseForCall()
-                } else if (isSessionActive(_uiState.value.voiceState)) {
-                    pausedByFocusLoss = true
-                    micStreamer?.setMuted(true)
-                }
-            }
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                if (pausedByFocusLoss) {
-                    pausedByFocusLoss = false
-                    if (_uiState.value.voiceState != VoiceState.SPEAKING || _uiState.value.settings.bargeInEnabled) {
-                        micStreamer?.setMuted(false)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun isPhoneCallMode() = audioManager.mode == AudioManager.MODE_RINGTONE || audioManager.mode == AudioManager.MODE_IN_CALL
-
     /** Silences Ultron for the length of a phone call (ringing or answered) without ending the session. */
     private fun pauseForCall() {
         if (pausedByCall) return
@@ -2347,7 +2330,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             var clear = 0
             while (clear < 2) {
                 delay(1_000)
-                clear = if (isPhoneCallMode()) 0 else clear + 1
+                clear = if (audio.isPhoneCallMode()) 0 else clear + 1
             }
             resumeAfterCall()
         }
@@ -2359,98 +2342,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         callWatchJob = null
         if (!isSessionActive(_uiState.value.voiceState)) return
         // The call took the audio mode and focus; claim them back for the voice session.
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        routeToSpeaker()
-        audioFocusRequest?.let { audioManager.requestAudioFocus(it) }
+        audio.reclaim()
         micStreamer?.setCallPaused(false)
         resetIdleTimeout()
         _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
     }
 
-    /** Requests audio focus first, before touching any routing -- returns false (having changed
-     *  nothing) if it's denied, e.g. an incoming call already holds it. Only on a grant does it
-     *  go on to claim MODE_IN_COMMUNICATION/speakerphone/volume, so a denied session never starts
-     *  recording/playback into audio nobody can hear or that steps on another app. */
-    private fun acquireCommunicationAudio(): Boolean {
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
-            .setOnAudioFocusChangeListener(audioFocusChangeListener)
-            .build()
-        if (audioManager.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            return false
-        }
-        audioFocusRequest = request
-
-        // MicStreamer records with VOICE_COMMUNICATION for platform echo cancellation, which needs
-        // the device in communication audio mode -- otherwise the audio policy engine can leave
-        // the very first playback (AudioTrack) silent while routing settles. That mode defaults
-        // routing to the earpiece (phone-call behavior), so speakerphone is forced on explicitly
-        // or nothing is audible on a kiosk tablet.
-        previousAudioMode = audioManager.mode
-        previousSpeakerphoneOn = audioManager.isSpeakerphoneOn
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        routeToSpeaker()
-        // MODE_IN_COMMUNICATION routes assistant playback through the voice-call volume curve on
-        // some OEMs, not the media one -- since this app never makes a real call, that stream's
-        // volume can sit at 0 (never touched by the user's normal volume-button use), making
-        // the assistant's reply completely silent even though everything else (queueing,
-        // AudioTrack state, speakerphone routing) is working. Raise it to an audible floor if
-        // it's muted.
-        val voiceCallMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-        if (audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL) == 0) {
-            val raised = (voiceCallMax * 0.7f).toInt().coerceAtLeast(1)
-            previousVoiceCallVolume = 0
-            raisedVoiceCallVolume = raised
-            audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, raised, 0)
-        }
-        return true
-    }
-
-    /** Sends communication-mode audio to the built-in speaker. A phone call resets this routing, so it is also done again when a call ends. */
-    private fun routeToSpeaker() {
-        usedCommunicationDevice = false
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            // isSpeakerphoneOn is deprecated and unreliable on Android 12+; pick the built-in speaker explicitly.
-            val speaker = audioManager.availableCommunicationDevices
-                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-            usedCommunicationDevice = speaker != null && audioManager.setCommunicationDevice(speaker)
-        }
-        if (!usedCommunicationDevice) audioManager.isSpeakerphoneOn = true
-    }
-
     private fun releaseCommunicationAudio() {
-        audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-        audioFocusRequest = null
-        // Restore whatever mode/routing was active before this session claimed it -- not always
-        // NORMAL/speaker-off (e.g. another app may already have been mid-call).
-        pausedByFocusLoss = false
+        audio.release()
         pausedByCall = false
         callWatchJob?.cancel()
         callWatchJob = null
-        if (usedCommunicationDevice && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            audioManager.clearCommunicationDevice()
-            usedCommunicationDevice = false
-        } else {
-            previousSpeakerphoneOn?.let { audioManager.isSpeakerphoneOn = it }
-        }
-        previousAudioMode?.let { audioManager.mode = it }
-        // Only undo the raise if the user (or the volume tool) has not changed the volume since.
-        previousVoiceCallVolume?.let {
-            runCatching {
-                if (audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL) == raisedVoiceCallVolume) {
-                    audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, it, 0)
-                }
-            }
-        }
-        previousVoiceCallVolume = null
-        raisedVoiceCallVolume = null
-        previousSpeakerphoneOn = null
-        previousAudioMode = null
     }
 
     /** Called when the Activity actually stops (not just loses focus, e.g. a permission
