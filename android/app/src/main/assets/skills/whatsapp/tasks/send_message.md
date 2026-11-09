@@ -12,7 +12,14 @@ description: Send a WhatsApp text message to a contact on an Android phone by op
 
 If either input is missing or unclear, ask before touching the phone.
 
-## Steps
+## Choose the route first
+
+1. **Is WhatsApp installed?** open_app "WhatsApp" fails with not_found when it is missing: then say WhatsApp is not installed on this phone, offer to install it from the Play Store, and stop. Use regular WhatsApp unless the user said "business"; if a chooser appears, click_on_text WhatsApp.
+2. **Route A, fast (number known).** Use it when the user said digits, or search_contact (give the name as heard; it matches spelling and sound) returns one clear contact. Several fit: ask which. Take the number with its country code (use the number's own +code; if it has none, add the code the user's other numbers use, such as +91 for Indian numbers; if unsure, ask). open_url "https://wa.me/<digits only>" with no text in the link, so Hindi and emoji are typed later and cannot break. read_screen: the header must show that contact's name or number, and WhatsApp must not say the number is not on WhatsApp (then tell the user). Then go to step 5.
+3. **Route B (no number).** When the person is not in the phone contacts (a WhatsApp-only chat, an unsaved number shown as ~Name, a group member), or the Contacts connector is off, use steps 1 to 4 below: WhatsApp's own search finds chats and unsaved people.
+4. If a message just arrived from this person and the user is answering it, reply_to_notification is quicker than either route.
+
+## Steps (Route B)
 
 1. **Open WhatsApp and read the screen.** open_app "WhatsApp", then read_screen. If an app-lock screen appears, follow **WhatsApp is locked** below. WhatsApp may restore the last open chat instead of the chat list.
    - **A chat is already open:** compare only its header with the contact. If it is a clear match, keep it and go to step 5. Otherwise press_back to the chat list and continue.
@@ -21,12 +28,12 @@ If either input is missing or unclear, ask before touching the phone.
 
 2. **Find the contact.**
    - If a row in the Chats list matches, open it (see **Opening a chat row**).
-   - Otherwise click_on_text "Search", type_text the **first name only**, then read_screen. Prefer a match under **Chats** over **Contacts**. Ignore groups unless the user asked for one.
+   - Otherwise click_on_text "Search", type_text the **first name only** (if search_contact knew the saved name, use that spelling), then read_screen. Prefer a match under **Chats** over **Contacts**. Ignore groups unless the user asked for one.
 
 3. **Resolve ambiguity before opening anything.**
    - One clear match: continue.
    - Several people with the same first name (for example "Rahul Sharma" and "Rahul Office"): stop and ask which one. Do not guess.
-   - No match: retry once with another spelling or the last name; if still nothing, tell the user the contact was not found. Never message a similar-looking name.
+   - No match: retry once with another spelling or the last name; if still nothing, say the name is not in the phone or in WhatsApp and ask for the number, then use Route A. Never message a similar-looking name.
 
 4. **Open and verify the chat.** Open the row, then read_screen and check that the **header shows the intended contact**. If not, press_back and fix it. If a profile photo or contact-info card opened instead, press_back once and open the row again.
 
