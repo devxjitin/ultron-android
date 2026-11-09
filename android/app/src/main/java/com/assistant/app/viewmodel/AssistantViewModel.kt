@@ -174,6 +174,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         SkillRegistry.load(application)
+        loadWhatsNew()
         // The notification mirrors the session: "listening" (with a Stop button) while one is
         // active, "ready" otherwise. A reconnect passes through RESETTING, so it never flickers.
         AppForegroundService.onStopRequested = stopFromNotification
@@ -609,6 +610,35 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onInstallUpdate() = updates.onInstallUpdate()
 
     fun onDismissUpdate() = updates.onDismissUpdate()
+
+    /** After an update, shows what changed since the version the user last saw. A fresh install shows nothing. */
+    private fun loadWhatsNew() {
+        viewModelScope.launch {
+            runCatching {
+                val app = getApplication<Application>()
+                val current = BuildConfig.VERSION_NAME
+                val lastSeen = settingsStore.lastSeenVersion()
+                val info = app.packageManager.getPackageInfo(app.packageName, 0)
+                // Never shown before: only a phone that was updated (not freshly installed) has something to show.
+                val updated = info.lastUpdateTime - info.firstInstallTime > 60_000L
+                if (lastSeen == null && !updated) {
+                    settingsStore.setLastSeenVersion(current)
+                    return@runCatching
+                }
+                val entries = withContext(Dispatchers.IO) {
+                    com.assistant.app.data.Changelog.parse(app.assets.open("changelog.md").bufferedReader().use { it.readText() })
+                }
+                val toShow = com.assistant.app.data.WhatsNew.entriesToShow(entries, lastSeen, current)
+                if (toShow.isEmpty()) settingsStore.setLastSeenVersion(current)
+                else _uiState.update { it.copy(whatsNew = toShow) }
+            }.onFailure { Log.w("AssistantUpdate", "What's new failed: ${it.javaClass.simpleName}") }
+        }
+    }
+
+    fun onDismissWhatsNew() {
+        _uiState.update { it.copy(whatsNew = emptyList()) }
+        viewModelScope.launch { runCatching { settingsStore.setLastSeenVersion(BuildConfig.VERSION_NAME) } }
+    }
 
     private var voiceUsageStartMs = 0L
 

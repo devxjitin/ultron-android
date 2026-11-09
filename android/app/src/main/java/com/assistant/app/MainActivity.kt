@@ -170,6 +170,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        UpdatedReceiver.clearNotification(this)
         installSplashScreen()
         super.onCreate(savedInstanceState)
         // Know the theme before the first frame so the window never flashes the other one.
@@ -347,6 +348,7 @@ class MainActivity : ComponentActivity() {
                             onConnectorsTapped = { viewModel.onConnectorsTapped() },
                             onInstallUpdate = { viewModel.onInstallUpdate() },
                             onDismissUpdate = { viewModel.onDismissUpdate() },
+                            onDismissWhatsNew = { viewModel.onDismissWhatsNew() },
                             onCheckForUpdates = { viewModel.checkForUpdate(manual = true) },
                             onUpdateNow = { viewModel.onUpdateNow() },
                             onUsageTapped = { viewModel.onUsageTapped() },

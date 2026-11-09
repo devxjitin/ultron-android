@@ -416,6 +416,7 @@ fun AssistantScreen(
         ) {
             MicButton(
                 voiceState = uiState.voiceState,
+                contextTokens = uiState.liveContextTokens,
                 onClick = {
                     when {
                         hasMicPermission -> actions.onMicTapped()
@@ -458,6 +459,8 @@ fun AssistantScreen(
                 onBack = { requestType = null }
             )
         }
+
+        com.assistant.app.ui.components.WhatsNewCard(uiState.whatsNew, actions.onDismissWhatsNew)
 
         uiState.updateInfo?.let { update ->
             val progress = uiState.updateDownloadProgress

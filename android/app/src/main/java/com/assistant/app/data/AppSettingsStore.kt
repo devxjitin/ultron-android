@@ -120,6 +120,7 @@ data class AssistantSettings(
 /** Persists the user's Live-session customization choices (voice, language, prompt, etc). */
 class AppSettingsStore(private val context: Context) {
 
+    private val lastSeenVersionKey = stringPreferencesKey("last_seen_version")
     private val liveModelKey = stringPreferencesKey("live_model")
     private val voiceKey = stringPreferencesKey("voice_name")
     private val micSensitivityKey = stringPreferencesKey("mic_sensitivity")
@@ -163,6 +164,13 @@ class AppSettingsStore(private val context: Context) {
                 ?: DEFAULT_RETRIEVAL_CHUNK_LIMIT,
             enabledDeviceTools = effectiveDeviceTools(prefs[toolOverridesKey])
         )
+    }
+
+    /** The newest app version whose "What's new" card the user has already seen; null before the first one. */
+    suspend fun lastSeenVersion(): String? = context.settingsDataStore.data.first()[lastSeenVersionKey]
+
+    suspend fun setLastSeenVersion(version: String) {
+        context.settingsDataStore.edit { it[lastSeenVersionKey] = version }
     }
 
     suspend fun setLiveModel(id: String) {

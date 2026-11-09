@@ -25,6 +25,7 @@ class AssistantActions(
     val onConnectorsTapped: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
     val onDismissUpdate: () -> Unit = {},
+    val onDismissWhatsNew: () -> Unit = {},
     val onCheckForUpdates: () -> Unit = {},
     val onUpdateNow: () -> Unit = {},
     val onUsageTapped: () -> Unit = {},
