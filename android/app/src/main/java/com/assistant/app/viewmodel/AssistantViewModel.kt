@@ -2,7 +2,6 @@ package com.assistant.app.viewmodel
 
 import android.app.Application
 import android.media.AudioManager
-import org.json.JSONObject
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -10,11 +9,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
-import com.assistant.app.audio.AudioPlayer
-import com.assistant.app.audio.MicStreamer
 import com.assistant.app.data.knowledgeKeyFor
 import com.assistant.app.data.AccessGate
-import com.assistant.app.data.UntrustedContent
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationHistoryIndexer
@@ -26,43 +22,23 @@ import com.assistant.app.data.ConversationStore
 import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
-import com.assistant.app.data.KnowledgeBaseProvider
 import com.assistant.app.data.DeveloperSaveFailedException
 import com.assistant.app.data.DeviceTool
-import com.assistant.app.data.PhoneConnectors
-import com.assistant.app.data.MEMORY_FORGET_TOOL
-import com.assistant.app.data.MEMORY_SAVE_TOOL
 import com.assistant.app.data.Personalities
-import com.assistant.app.data.SET_PERSONALITY_TOOL
 import com.assistant.app.data.SkillRegistry
-import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.data.MemoryStore
-import com.assistant.app.data.memoriesForPrompt
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
-import com.assistant.app.data.AssistantOptions
-import com.assistant.app.data.AssistantSettings
 import com.assistant.app.data.MicSensitivity
 import com.assistant.app.data.RagDocumentStore
-import com.assistant.app.network.ToolDeclarations
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import org.json.JSONArray
 import com.assistant.app.network.GeminiEmbeddingClient
-import com.assistant.app.network.GeminiLiveClient
-import com.assistant.app.network.LiveClient
 import com.assistant.app.network.GeminiTextClient
-import com.assistant.app.util.UserFacingError
 import com.assistant.app.util.UserInputException
-import com.assistant.app.util.UserMessageException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,8 +50,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** [AssistantUiState.savingKnowledgeDocumentTarget] value while a brand-new document (no id
@@ -87,16 +61,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private companion object {
         /** Outlives the ViewModel, so usage counted while it is being cleared is still saved. */
         val usageScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        const val WARM_SESSION_TTL_MS = 4 * 60 * 1000L
-        /** How long the app must stay in front, and settings stay unchanged, before a warm session is opened. */
-        const val PREWARM_DELAY_MS = 2_000L
         const val MAX_PICKED_IMAGE_BYTES = 25 * 1024 * 1024
         private const val MAX_PENDING_ANNOUNCEMENTS = 5
         /** Past exchanges shown on the History page at first, and added by each "Show older". */
         private const val PAST_CONVERSATION_PAGE = 50
-        /** After a server go-away notice: how long the current reply may finish first, and the margin kept before the deadline. */
-        const val GO_AWAY_DEFAULT_WAIT_MS = 8_000L
-        const val GO_AWAY_MARGIN_MS = 2_000L
     }
 
     private val conversationStore = ConversationStore(application)
@@ -104,25 +72,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val conversationHistoryStore by lazy {
         ConversationHistoryStore(RagDocumentStore.sharedObjectBoxStore(application))
     }
-    /** Groups the exchanges of one mic session; a reconnect inside the session keeps it. */
-    private var historySessionId = java.util.UUID.randomUUID().toString()
     private var historyIndexJob: Job? = null
     private val apiKeyStore = ApiKeyStore(application)
     private val settingsStore = AppSettingsStore(application)
     private val memoryStore = MemoryStore(application)
     private val usageStore = UsageStore(application)
-    private var reconnectJob: Job? = null
-    private var sessionStartJob: Job? = null
-    /** Latest server handle for the active conversation, used only to resume it after an
-     *  automatic reconnect; cleared whenever the user starts or stops a session. */
-    private var sessionResumptionHandle: String? = null
-    private var prewarmJob: Job? = null
-    /** A server "going away" notice that waits for the current reply to finish before reconnecting. */
-    private var pendingGoAway: (() -> Unit)? = null
-    private var goAwayJob: Job? = null
-    private var isForeground = false
-    /** True while a session keeps running after the app left the screen. */
-    private var backgroundSessionAllowed = false
 
     /**
      * Embeds saved exchanges that are not searchable yet, in the background. Does nothing without a key, and a
@@ -146,40 +100,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
 
     private val audioManager = application.getSystemService(Application.AUDIO_SERVICE) as AudioManager
-    private val audio: AudioRouting = AudioRouting(audioManager, object : AudioFocusListener {
-        /** Something else needs the speaker/mic -- most commonly an incoming call. Stop cleanly
-         *  instead of continuing to stream mic audio into a session nobody can hear or respond to. */
-        override fun onFocusLost() {
-            if (_uiState.value.voiceState != VoiceState.IDLE) {
-                if (audio.isPhoneCallMode() && isSessionActive(_uiState.value.voiceState)) pauseForCall() else stopSession()
-            }
-        }
 
-        /** A short interruption (navigation prompt, notification sound): pause the mic and carry on afterwards. */
-        override fun onFocusLostTemporarily() {
-            // A ringing or answered phone call also arrives as a short loss, but it needs the
-            // speaker, mic and audio mode this session holds, so Ultron is silenced until the call ends.
-            if (audio.isPhoneCallMode() && isSessionActive(_uiState.value.voiceState)) {
-                pauseForCall()
-            } else if (isSessionActive(_uiState.value.voiceState)) {
-                audio.pausedByFocusLoss = true
-                micStreamer?.setMuted(true)
-            }
-        }
-
-        override fun onFocusGained() {
-            if (audio.pausedByFocusLoss) {
-                audio.pausedByFocusLoss = false
-                if (_uiState.value.voiceState != VoiceState.SPEAKING || _uiState.value.settings.bargeInEnabled) {
-                    micStreamer?.setMuted(false)
-                }
-            }
-        }
-    })
-
-    /** True while a phone call rings or runs: Ultron stays connected but silent, and picks up again afterwards. */
-    private var pausedByCall = false
-    private var callWatchJob: Job? = null
 
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
@@ -201,65 +122,32 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         auxiliaryUsage = { purpose -> auxiliaryUsage(purpose) }
     )
 
-    private val speech = SpeechDetector()
-
-    private val timers = SessionTimers(
-        scope = viewModelScope,
-        onIdleTimeout = { if (_uiState.value.voiceState != VoiceState.IDLE) stopSession() },
-        onTurnTimeout = { onTurnTimedOut() },
-        onSessionWarning = {
-            if (isSessionActive(_uiState.value.voiceState)) showToast("This session ends in 1 minute.", AppNotificationType.INFO)
-        },
-        onSessionLimit = {
-            val state = _uiState.value.voiceState
-            if (state != VoiceState.IDLE && state != VoiceState.ERROR) {
-                showToast("Session ended after 15 minutes. Tap the mic to start again.")
-                stopSession()
-            }
-        }
-    )
-
     /** Mic level while listening, playback level while speaking. Kept out of [uiState] because it changes
      *  ~25 times a second and only the voice ribbon needs it; putting it in the state recomposed the whole screen. */
     private val _voiceLevel = MutableStateFlow(0f)
     val voiceLevel: StateFlow<Float> = _voiceLevel.asStateFlow()
 
-    private var liveClient: LiveClient? = null
-    private var micStreamer: MicStreamer? = null
-    private var audioPlayer: AudioPlayer? = null
-    /** A session opened ahead of time (while idle, before the user taps the mic) so the model
-     *  has already ingested the persona + knowledge-base system instruction by the time the
-     *  first real command arrives -- that ingestion is what makes the very first turn slow. */
-    private var warmClient: LiveClient? = null
-    private var isPrewarmReady = false
-    /** Set when the user taps the mic while a warm session is still connecting (not yet ready);
-     *  makes its setupComplete promote straight into a real, streaming session instead of just
-     *  sitting there ready-and-unused. */
-    private var activateWarmOnReady = false
-    /** When the current [warmClient] was opened -- if nobody taps the mic before this goes
-     *  stale, the server may have quietly timed out its side, so it's discarded and a fresh
-     *  cold connect is used instead of promoting a possibly-dead socket. */
-    private var warmClientCreatedAtMillis = 0L
+    private val session: VoiceSessionController = VoiceSessionController(
+        application = application,
+        scope = viewModelScope,
+        uiState = _uiState,
+        voiceLevel = _voiceLevel,
+        audioManager = audioManager,
+        settingsStore = settingsStore,
+        conversationStore = conversationStore,
+        memoryStore = memoryStore,
+        historyStoreProvider = { conversationHistoryStore },
+        resolveApiKey = { resolveApiKey() },
+        hasGeminiAccess = { hasGeminiAccess() },
+        execute = { call, trace -> toolRunner.run(call, trace) },
+        showToast = { message, type -> showToast(message, type) },
+        recordUsage = { recordUsage(it) },
+        recordVoiceUsage = { recordVoiceUsage() },
+        markVoiceUsageStart = { voiceUsageStartMs = SystemClock.elapsedRealtime() },
+        openDeveloperPage = { openPage(AppPage.DEVELOPER) },
+        indexConversationHistory = { indexConversationHistory() }
+    )
 
-    private val userTextBuffer = StringBuilder()
-    private val assistantTextBuffer = StringBuilder()
-
-    /** True only when the user tapped the mic to stop -- distinguishes a deliberate stop from
-     *  the server closing the connection on its own (session/time limit), which should
-     *  auto-reconnect instead of going idle. */
-    private var userInitiatedStop = false
-
-    /** Guards against a reconnect loop if the server keeps closing the connection immediately;
-     *  reset only once a turn actually completes (not just on setupComplete -- a server that
-     *  accepts setup and then immediately closes would otherwise reset this every time and
-     *  never trip the cap). */
-    private var consecutiveAutoReconnects = 0
-    private val maxAutoReconnects = 3
-    /** A question the server heard but never answered. It is asked again, as text, on a fresh connection. */
-    private var retryQuestion: String? = null
-    /** Set once the current question has been asked again, so a server that stays silent ends in an error, not a loop. */
-    private var silentTurnRetried = false
-    private val reconnectBackoffMs = listOf(500L, 2000L, 5000L)
 
     private fun notificationStatus(state: VoiceState, tool: String?, last: ConversationTurn?): Pair<String, String> {
         fun clip(t: String) = t.trim().replace(Regex("""\s+"""), " ").let { if (it.length > 140) it.take(140) + "…" else it }
@@ -276,11 +164,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun isSessionActive(state: VoiceState) = state != VoiceState.IDLE && state != VoiceState.ERROR
-
     // Kept as fields so onCleared can tell whether the static hooks still point at this instance: after a restart the
     // new view model registers before the old one is cleared, and the old one must not wipe the new one's hooks.
-    private val stopFromNotification: () -> Unit = { stopSession() }
+    private val stopFromNotification: () -> Unit = { session.stopSession() }
     private val muteFromNotification: () -> Unit = { onMuteToggled() }
     private val notificationAnnouncer: (String, String, String) -> Unit = { app, title, text ->
         viewModelScope.launch { announceNotification(app, title, text) }
@@ -307,7 +193,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             while (true) {
                 delay(UpdateManager.CHECK_INTERVAL_MS)
-                if (isForeground) checkForUpdate(manual = false)
+                if (session.isForeground) checkForUpdate(manual = false)
             }
         }
         viewModelScope.launch {
@@ -319,7 +205,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.map { isSessionActive(it.voiceState) }.distinctUntilChanged().collect { active ->
                 AppForegroundService.setListening(getApplication(), active)
                 if (!active) {
-                    backgroundSessionAllowed = false
+                    session.backgroundSessionAllowed = false
                 }
             }
         }
@@ -348,8 +234,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             settings = settings
                         )
                     }
-                    micStreamer?.setSensitivity(settings.micSensitivity)
-                    prewarmIfPossible()
+                    session.setMicSensitivity(settings.micSensitivity)
+                    session.prewarmIfPossible()
                 }
         }
         knowledge.collectDocuments()
@@ -368,7 +254,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             val (resolvedKey, embeddingKey) = withContext(Dispatchers.IO) {
                 resolveApiKey() to apiKeyStore.getEmbeddingApiKey().orEmpty()
             }
-            keysLoaded = true
+            session.keysLoaded = true
             _uiState.update {
                 it.copy(
                     hasApiKey = hasGeminiAccess(),
@@ -376,12 +262,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     currentEmbeddingApiKey = embeddingKey
                 )
             }
-            prewarmIfPossible()
+            session.prewarmIfPossible()
             knowledge.startEmbeddingMigrationIfNeeded()
         }
     }
-
-    @Volatile private var keysLoaded = false
 
     /** Recovery from unreadable knowledge data: deletes all documents and the index. */
     fun onResetKnowledge() = knowledge.resetKnowledge()
@@ -393,10 +277,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onMicTapped() {
         when (_uiState.value.voiceState) {
-            VoiceState.IDLE, VoiceState.ERROR -> startSession()
+            VoiceState.IDLE, VoiceState.ERROR -> session.startSession()
             // stopSession() clears history first and only then re-prewarms; a second prewarm from
             // here could read the not-yet-cleared history into the next warm session.
-            else -> stopSession()
+            else -> session.stopSession()
         }
     }
 
@@ -411,9 +295,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var assistPending = false
 
     private fun startPendingAssist() {
-        if (!assistPending || !AccessGate.unlocked || !isForeground) return
+        if (!assistPending || !AccessGate.unlocked || !session.isForeground) return
         assistPending = false
-        if (!isSessionActive(_uiState.value.voiceState)) startSession()
+        if (!isSessionActive(_uiState.value.voiceState)) session.startSession()
     }
 
     /** Phone notifications waiting until Ultron is quiet and listening, oldest first. */
@@ -425,7 +309,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private fun announceNotification(app: String, title: String, text: String) {
         if (!_uiState.value.settings.announceNotificationsEnabled) return
-        if (!isSessionActive(_uiState.value.voiceState) || _uiState.value.isMicMuted || pausedByCall) return
+        if (!isSessionActive(_uiState.value.voiceState) || _uiState.value.isMicMuted || session.pausedByCall) return
         val line = "$app: ${title.take(80)}" + if (text.isNotBlank()) " - ${text.take(160)}" else ""
         if (pendingAnnouncements.size >= MAX_PENDING_ANNOUNCEMENTS) pendingAnnouncements.removeFirst()
         pendingAnnouncements.addLast(line)
@@ -433,7 +317,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun flushAnnouncements() {
-        val client = liveClient ?: return
+        val client = session.liveClient ?: return
         if (_uiState.value.voiceState != VoiceState.LISTENING || pendingAnnouncements.isEmpty()) return
         val lines = pendingAnnouncements.takeLast(3) // anything older than the three newest is stale by now
         pendingAnnouncements.clear()
@@ -449,7 +333,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val state = _uiState.value.voiceState
         if (state == VoiceState.IDLE || state == VoiceState.ERROR) return
         val muted = !_uiState.value.isMicMuted
-        micStreamer?.setUserMuted(muted)
+        session.setUserMuted(muted)
         if (muted) _voiceLevel.value = 0f
         _uiState.update { it.copy(isMicMuted = muted) }
     }
@@ -489,15 +373,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // The voice session carries the skill list in its setup, so a change starts a fresh warm session.
     fun onSkillToggled(name: String, enabled: Boolean) {
         SkillRegistry.setEnabled(name, enabled)
-        invalidateWarmSessionAndReprewarm()
+        session.invalidateWarmSessionAndReprewarm()
     }
 
     fun onSkillSaved(name: String, description: String, body: String): String? =
-        SkillRegistry.save(name, description, body).also { if (it == null) invalidateWarmSessionAndReprewarm() }
+        SkillRegistry.save(name, description, body).also { if (it == null) session.invalidateWarmSessionAndReprewarm() }
 
     fun onSkillDeleted(name: String) {
         SkillRegistry.delete(name)
-        invalidateWarmSessionAndReprewarm()
+        session.invalidateWarmSessionAndReprewarm()
     }
 
 
@@ -515,7 +399,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (page == AppPage.STORAGE || page == AppPage.KNOWLEDGE) refreshImages()
         val current = _uiState.value
         if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
-            stopSession()
+            session.stopSession()
         }
         _uiState.update { it.copy(page = page) }
     }
@@ -619,14 +503,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onMemoryEnabledToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Memory on" else "Memory off") {
             settingsStore.setMemoryEnabled(enabled)
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
     fun onAddMemory(text: String) {
         viewModelScope.launch {
             try {
-                if (memoryStore.add(text)) invalidateWarmSessionAndReprewarm()
+                if (memoryStore.add(text)) session.invalidateWarmSessionAndReprewarm()
                 else showToast("Already remembered", AppNotificationType.INFO)
             } catch (e: CancellationException) {
                 throw e
@@ -638,20 +522,20 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onUpdateMemory(id: String, text: String) {
-        launchPersist("Memory updated") { memoryStore.update(id, text); invalidateWarmSessionAndReprewarm() }
+        launchPersist("Memory updated") { memoryStore.update(id, text); session.invalidateWarmSessionAndReprewarm() }
     }
 
     fun onDeleteMemory(id: String) {
-        launchPersist("Memory deleted") { memoryStore.remove(id); invalidateWarmSessionAndReprewarm() }
+        launchPersist("Memory deleted") { memoryStore.remove(id); session.invalidateWarmSessionAndReprewarm() }
     }
 
     /** Brings back a note the assistant had removed. */
     fun onRestoreMemory(id: String) {
-        launchPersist("Memory restored") { memoryStore.restore(id); invalidateWarmSessionAndReprewarm() }
+        launchPersist("Memory restored") { memoryStore.restore(id); session.invalidateWarmSessionAndReprewarm() }
     }
 
     fun onClearMemory() {
-        launchPersist("Memory cleared") { memoryStore.clear(); invalidateWarmSessionAndReprewarm() }
+        launchPersist("Memory cleared") { memoryStore.clear(); session.invalidateWarmSessionAndReprewarm() }
     }
 
     private var pastConversationLimit = PAST_CONVERSATION_PAGE
@@ -705,7 +589,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onConnectorToolsEnabled(tools: List<DeviceTool>, enabled: Boolean, name: String) {
         launchPersist(if (enabled) "$name connected" else "$name removed") {
             tools.forEach { settingsStore.setDeviceToolEnabled(it, enabled) }
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
@@ -799,7 +683,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Voice/language/prompt settings only take effect on the *next* session (only [warmClient]
-     *  is invalidated -- an already-active [liveClient] keeps whatever was live when it
+     *  is invalidated -- an already-active [VoiceSessionController.liveClient] keeps whatever was live when it
      *  connected). Appends a clarifying suffix to the save confirmation whenever a session is
      *  currently active/connecting, so the toast doesn't imply the live conversation changed. */
     private fun settingsAppliedMessage(base: String): String {
@@ -821,7 +705,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             _uiState.update { it.copy(hasApiKey = hasAccess, currentApiKey = "") }
             showToast("API key removed")
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
@@ -837,35 +721,35 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun onLiveModelSelected(id: String) {
         launchPersist(settingsAppliedMessage("Model updated")) {
             settingsStore.setLiveModel(id)
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
     fun onOwnerNameChanged(name: String) {
         launchPersist(settingsAppliedMessage("Name saved")) {
             settingsStore.setOwnerName(name)
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
     fun onVoiceSelected(voiceName: String) {
         launchPersist(settingsAppliedMessage("Voice updated")) {
             settingsStore.setVoice(voiceName)
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
     fun onPersonalitySelected(id: String) {
         launchPersist(settingsAppliedMessage("Personality: ${Personalities.byId(id).label}")) {
             settingsStore.setPersonality(id)
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
     fun onLanguageSelected(code: String) {
         launchPersist(settingsAppliedMessage("Language updated")) {
             settingsStore.setLanguageCode(code)
-            invalidateWarmSessionAndReprewarm()
+            session.invalidateWarmSessionAndReprewarm()
         }
     }
 
@@ -909,7 +793,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     )
 
-    private val toolRunner = ToolRunner(
+    private val toolRunner: ToolRunner = ToolRunner(
         state = _uiState,
         memoryStore = memoryStore,
         settingsStore = settingsStore,
@@ -919,23 +803,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             ConversationHistoryTools(
                 store = conversationHistoryStore,
                 embedQuery = { text -> knowledge.embeddingClient().embed(text, GeminiEmbeddingClient.TaskType.QUERY).embedding },
-                currentSessionId = historySessionId
+                currentSessionId = session.historySessionId
             )
         },
-        onPersonalityChanged = { invalidateWarmSessionAndReprewarm() }
+        onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() }
     )
-
-    private val tools = ToolDispatcher(
-        scope = viewModelScope,
-        state = _uiState,
-        isCurrent = { client -> liveClient === client },
-        startTurnTimeout = { timers.startTurnTimeout() },
-        displayName = ToolRunner::displayName,
-        execute = { call, trace -> toolRunner.run(call, trace) }
-    )
-
-    /** The last few exchanges are replayed into every new Live session; anything older is looked up with the history tools. */
-    private fun sessionStartHistory(history: List<ConversationTurn>) = KnowledgeBaseProvider.liveHistoryTurns(history)
 
     fun onSaveDeveloperChanges(
         apiKey: String,
@@ -1013,822 +885,34 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onKnowledgePdfPicked(title: String, bytes: ByteArray) = onImportKnowledgePdf(title, bytes)
 
-    /** A warm session was opened with whatever settings were current at the time -- if the user
-     *  changes voice/language/prompt afterward, that warm session no longer
-     *  reflects their choice. Discard it and open a new one with the fresh settings instead of
-     *  leaving a stale one to be silently promoted on the next mic tap. */
-    private fun invalidateWarmSessionAndReprewarm() {
-        cancelInFlightPrewarm()
-        warmClient?.close()
-        warmClient = null
-        isPrewarmReady = false
-        activateWarmOnReady = false
-        prewarmIfPossible()
-    }
-
-    /** True when the device has a validated internet connection; assumes online if the check fails. */
-    private fun isNetworkAvailable(): Boolean = try {
-        val manager = getApplication<Application>()
-            .getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork)
-        capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    } catch (e: Exception) {
-        true
-    }
-
-    private fun startSession(isAutoReconnect: Boolean = false) {
-        userInitiatedStop = false
-        // A locked app (signed out or no active plan) never opens a Gemini session.
-        if (!AccessGate.unlocked) return
-
-        val apiKey = resolveApiKey()
-        if (!hasGeminiAccess()) {
-            _uiState.update {
-                it.copy(
-                    voiceState = VoiceState.ERROR,
-                    errorMessage = "The assistant isn't set up yet. Add a Gemini API key in Settings."
-                )
-            }
-            // Send the user to Settings so they can add a key.
-            openPage(AppPage.DEVELOPER)
-            return
-        }
-
-        if (!isAutoReconnect) {
-            historySessionId = java.util.UUID.randomUUID().toString()
-            retryQuestion = null
-            silentTurnRetried = false
-            voiceUsageStartMs = SystemClock.elapsedRealtime()
-            sessionResumptionHandle = null
-            timers.startSessionLimit()
-        }
-
-        // A stale warm session may have been silently timed out server-side -- discard it
-        // rather than promote a socket that's likely dead, and fall through to a cold connect.
-        if (warmClient != null && System.currentTimeMillis() - warmClientCreatedAtMillis > WARM_SESSION_TTL_MS) {
-            warmClient?.close()
-            warmClient = null
-            isPrewarmReady = false
-        }
-
-        // A pre-warmed session already has the (slow to ingest) system instruction loaded --
-        // consume it instead of opening a fresh connection, skipping straight to LISTENING.
-        if (!isAutoReconnect && warmClient != null) {
-            val client = warmClient!!
-            if (isPrewarmReady) {
-                warmClient = null
-                isPrewarmReady = false
-                liveClient = client
-                _uiState.update { it.copy(errorMessage = null) }
-                beginStreaming(client, reusedWarm = true)
-            } else {
-                // Still connecting -- its own setupComplete will promote it once ready.
-                activateWarmOnReady = true
-                _uiState.update {
-                    it.copy(voiceState = VoiceState.CONNECTING, errorMessage = null)
-                }
-            }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                voiceState = if (isAutoReconnect) VoiceState.RESETTING else VoiceState.CONNECTING,
-                errorMessage = null
-            )
-        }
-
-        sessionStartJob?.cancel()
-        sessionStartJob = viewModelScope.launch {
-            // Read settings and history directly from their stores rather than the mirrored
-            // _uiState copies -- right after a settings change or a history clear (New
-            // conversation/Stop), those mirrors can still be one collector-tick stale, which
-            // would otherwise bake stale/cleared data into this cold connect's system
-            // instruction. See prewarmIfPossible() for the same reasoning.
-            val history = conversationStore.recentTurns.first()
-            val settings = settingsStore.settings.first()
-            // The user may have tapped Stop again while this suspended -- don't open a session
-            // they no longer want.
-            if (userInitiatedStop) return@launch
-            if (!isForeground && !backgroundSessionAllowed) return@launch
-            val systemInstruction = KnowledgeBaseProvider.buildSystemInstruction(
-                settings.systemPrompt,
-                AssistantOptions.languageLabel(settings.languageCode),
-                settings.assistantName,
-                AssistantOptions.voiceGender(settings.voiceName),
-                if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                ownerName = settings.ownerName
-            )
-            connectLiveSession(
-                apiKey, systemInstruction, settings, sessionStartHistory(history),
-                resumeHandle = if (isAutoReconnect) sessionResumptionHandle else null
-            )
-        }
-    }
-
-    private fun connectLiveSession(
-        apiKey: String,
-        systemInstruction: String,
-        settings: AssistantSettings,
-        history: List<KnowledgeBaseProvider.HistoryTurn>,
-        isWarm: Boolean = false,
-        resumeHandle: String? = null
-    ) {
-        val client: LiveClient = GeminiLiveClient(apiKey, settings.liveModel)
-        client.latency.event("session_origin", mapOf("mode" to when {
-            isWarm -> "prewarm"
-            _uiState.value.voiceState == VoiceState.RESETTING -> "reconnect"
-            else -> "cold"
-        }))
-        if (isWarm) {
-            warmClient = client
-            warmClientCreatedAtMillis = System.currentTimeMillis()
-        } else {
-            liveClient = client
-        }
-
-        // True as long as this client is still the one either field is pointing at -- i.e. it
-        // hasn't since been replaced, promoted-and-superseded, or discarded. Guards every
-        // callback below against acting on a stale session (e.g. a late onClosed arriving after
-        // the user already started a different session, which previously could tear down the
-        // NEW session's resources instead of being ignored).
-        fun isCurrent(): Boolean = liveClient === client || warmClient === client
-
-        client.connect(systemInstruction, settings, history, object : GeminiLiveClient.Listener {
-
-            override fun onSetupComplete() {
-                if (!isCurrent()) return
-                if (isWarm && !activateWarmOnReady) {
-                    // Nobody asked for it yet -- stay connected and idle, ready for the next tap.
-                    isPrewarmReady = true
-                    return
-                }
-                if (isWarm) {
-                    warmClient = null
-                    isPrewarmReady = false
-                    activateWarmOnReady = false
-                }
-                liveClient = client
-                beginStreaming(client, reusedWarm = isWarm)
-            }
-
-            override fun onAudioChunk(pcm: ByteArray, receivedAtMs: Long) {
-                if (liveClient !== client) return
-                // A tool result can be followed by a separate model turn. Its first audio is the
-                // proof that the original visitor interaction has resumed.
-                timers.noteAudioChunk()
-                silentTurnRetried = false
-                timers.cancelTurnTimeout()
-                val turn = client.latency.turn()
-                val firstAudio = turn?.audioReceived(receivedAtMs) == true
-                if (!pausedByCall) audioPlayer?.enqueue(pcm, turn.takeIf { firstAudio })
-                if (_uiState.value.voiceState != VoiceState.SPEAKING) {
-                    val speechAt = speech.lastSpeechAtMs
-                    if (BuildConfig.DEBUG && speechAt > 0L) {
-                        Log.d("AssistantLatency", "last-speech-to-first-audio=${SystemClock.elapsedRealtime() - speechAt}ms")
-                    }
-                    // Barge-in on: leave the mic live (VOICE_COMMUNICATION's echo cancellation
-                    // is relied on to keep the assistant's own voice from being picked up as
-                    // input) so the user can interrupt it mid-reply. Barge-in off: mute as before.
-                    if (!_uiState.value.settings.bargeInEnabled) {
-                        micStreamer?.setMuted(true)
-                    }
-                    _uiState.update { it.copy(voiceState = VoiceState.SPEAKING) }
-                    timers.startSpeakingWatchdog(
-                        isSpeaking = { _uiState.value.voiceState == VoiceState.SPEAKING },
-                        playbackHead = { audioPlayer?.playbackHeadFrames() },
-                        hasPendingTools = { tools.hasPending },
-                        onStalled = {
-                            Log.w("AssistantError", "Speaking stalled for ${SessionTimers.SPEAKING_STALL_MS}ms; returning to listening")
-                            finalizeTurnIfAny()
-                            micStreamer?.setMuted(false)
-                            speech.reset()
-                            audioPlayer?.clearQueueForInterruption()
-                            _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-                        }
-                    )
-                }
-            }
-
-            override fun onInputTranscript(text: String) {
-                if (liveClient !== client) return
-                if (_uiState.value.voiceState == VoiceState.LISTENING ||
-                    _uiState.value.voiceState == VoiceState.PROCESSING
-                ) client.latency.turn()?.speech(SystemClock.elapsedRealtime(), "transcript_arrival")
-                // Server transcription also counts as speech: quiet short queries may never
-                // cross the local amplitude threshold used only for the UI/watchdog.
-                if (_uiState.value.voiceState == VoiceState.LISTENING) {
-                    speech.markSpeech()
-                }
-                userTextBuffer.append(text)
-                timers.resetIdle()
-            }
-
-            override fun onOutputTranscript(text: String) {
-                if (liveClient !== client) return
-                assistantTextBuffer.append(text)
-                timers.resetIdle()
-            }
-
-            override fun onTurnComplete() {
-                if (liveClient !== client) return
-                client.latency.complete()
-                timers.cancelTurnTimeout()
-                if (tools.hasPending) {
-                    // The model has yielded for local retrieval. Its eventual audio belongs to
-                    // the same user/assistant transcript pair, so do not persist it yet. The filler
-                    // it spoke ("one moment") still drains and hands the mic back, so a slow tool
-                    // does not leave the screen on Speaking with the mic muted.
-                    timers.resetIdle()
-                    audioPlayer?.notifyTurnComplete()
-                    return
-                }
-                // Every tool response was already sent and the model has now finished its follow-up turn,
-                // possibly with no audio at all, so the turn ends here.
-                // The reply to every tool is done, so no tool name may stay on screen into the next request.
-                _uiState.update { it.copy(activeTool = null) }
-                finalizeTurnIfAny()
-                // A full turn actually completed -- this session is genuinely working, so the
-                // reconnect-loop guard can relax again.
-                consecutiveAutoReconnects = 0
-                timers.resetIdle()
-                // Don't unmute yet -- AudioPlayer still has buffered/queued audio to actually
-                // play out. Unmuting here would let the mic pick the tail of the assistant's own
-                // reply back up as if it were the user talking. AudioPlayer's onPlaybackIdle
-                // callback (passed in beginStreaming) does the real unmute once playback has
-                // drained.
-                audioPlayer?.notifyTurnComplete()
-            }
-
-            override fun onInterrupted() {
-                if (liveClient !== client) return
-                client.latency.cancel("interrupted")
-                timers.cancelTurnTimeout()
-                // Running tools are not cancelled here: the server names the calls it abandons in
-                // toolCallCancellation. A non-blocking call (a text being sent) is still wanted after
-                // the user talks over the filler, and dropping it lost the result the model waits for.
-                timers.resetIdle()
-                // Close out the interrupted reply as its own turn so it isn't merged with
-                // whatever the user says next.
-                finalizeTurnIfAny()
-                // clearQueueForInterruption() itself fires onPlaybackIdle once the track is
-                // flushed, which is the same callback that unmutes the mic and sets LISTENING.
-                audioPlayer?.clearQueueForInterruption()
-            }
-
-            override fun onToolCall(calls: List<GeminiLiveClient.FunctionCall>) {
-                if (liveClient !== client) return
-                silentTurnRetried = false
-                timers.cancelTurnTimeout()
-                timers.resetIdle()
-                recordUsage(UsageDay("", toolCalls = calls.size))
-                tools.onToolCalls(client, calls)
-            }
-
-            override fun onToolCallCancellation(ids: List<String>) {
-                if (liveClient !== client) return
-                tools.onCancellation(client, ids)
-            }
-
-            override fun onGoAway(timeLeftMs: Long, closeNow: () -> Unit) {
-                val busy = liveClient === client && (
-                    _uiState.value.voiceState == VoiceState.SPEAKING ||
-                        _uiState.value.voiceState == VoiceState.PROCESSING ||
-                        tools.hasPending)
-                if (!busy) {
-                    closeNow()
-                    return
-                }
-                // Reconnecting now would cut Ultron off mid-sentence. Wait for the reply to end, but never past
-                // the time the server gave (minus a safety margin).
-                pendingGoAway = closeNow
-                goAwayJob?.cancel()
-                val waitMs = if (timeLeftMs < 0) GO_AWAY_DEFAULT_WAIT_MS else (timeLeftMs - GO_AWAY_MARGIN_MS).coerceAtLeast(0L)
-                goAwayJob = viewModelScope.launch {
-                    delay(waitMs)
-                    runPendingGoAway()
-                }
-            }
-
-            override fun onResumptionHandle(handle: String) {
-                // A warm session has no conversation yet, so only the live one's handle counts.
-                if (liveClient === client) sessionResumptionHandle = handle
-            }
-
-            override fun onError(message: String) {
-                if (!isCurrent()) return
-                // A rejected setup may be the stale handle; the next start begins fresh anyway.
-                sessionResumptionHandle = null
-                client.latency.close("failed")
-                if (isWarm && warmClient === client && !activateWarmOnReady) {
-                    // Background prewarm failed before anyone asked for it -- discard silently,
-                    // a normal cold connect will run next time the mic is tapped.
-                    warmClient = null
-                    isPrewarmReady = false
-                    return
-                }
-                if (isWarm) {
-                    warmClient = null
-                    isPrewarmReady = false
-                    activateWarmOnReady = false
-                }
-                releaseResources()
-                _uiState.update {
-                    it.copy(
-                        voiceState = VoiceState.ERROR,
-                        errorMessage = message
-                    )
-                }
-            }
-
-            override fun onClosed() {
-                if (!isCurrent()) return
-                client.latency.close("disconnected")
-                if (isWarm && warmClient === client && !activateWarmOnReady) {
-                    warmClient = null
-                    isPrewarmReady = false
-                    return
-                }
-                if (isWarm) {
-                    warmClient = null
-                    isPrewarmReady = false
-                    activateWarmOnReady = false
-                }
-                releaseResources()
-                val currentState = _uiState.value.voiceState
-                when {
-                    currentState == VoiceState.ERROR -> Unit // already surfaced by onError
-                    currentState == VoiceState.IDLE -> Unit // already stopped/never started streaming
-                    userInitiatedStop -> _uiState.update {
-                        it.copy(voiceState = VoiceState.IDLE)
-                    }
-                    !isNetworkAvailable() -> _uiState.update {
-                        it.copy(
-                            voiceState = VoiceState.ERROR,
-                            errorMessage = "No internet connection. Please check Wi-Fi and try again."
-                        )
-                    }
-                    consecutiveAutoReconnects >= maxAutoReconnects -> _uiState.update {
-                        it.copy(
-                            voiceState = VoiceState.ERROR,
-                            errorMessage = "Session kept disconnecting. Please try again."
-                        )
-                    }
-                    else -> {
-                        // Server closed the connection on its own (session/time limit) --
-                        // reconnect automatically, backing off a bit more each consecutive time.
-                        consecutiveAutoReconnects++
-                        _uiState.update {
-                            it.copy(voiceState = VoiceState.RESETTING)
-                        }
-                        val delayMs = reconnectBackoffMs.getOrElse(consecutiveAutoReconnects - 1) { reconnectBackoffMs.last() }
-                        reconnectJob?.cancel()
-                        reconnectJob = viewModelScope.launch {
-                            delay(delayMs)
-                            if ((isForeground || backgroundSessionAllowed) && !userInitiatedStop) startSession(isAutoReconnect = true)
-                        }
-                    }
-                }
-            }
-        }, resumeHandle)
-    }
-
-    private fun beginStreaming(client: LiveClient, reusedWarm: Boolean = false) {
-        if (liveClient !== client) return
-        client.latency.event("stream_start", mapOf(
-            "language" to _uiState.value.settings.languageCode,
-            "reused_warm" to reusedWarm,
-            "connection_age_ms" to (client.latency.now() - client.latency.createdAtMs)
-        ))
-        tools.openScope()
-        if (!audio.acquire()) {
-            releaseResources()
-            _uiState.update {
-                it.copy(
-                    voiceState = VoiceState.ERROR,
-                    errorMessage = "Couldn't use the microphone or speaker right now. Please try again."
-                )
-            }
-            return
-        }
-        timers.resetIdle()
-        speech.reset()
-
-        var player: AudioPlayer? = null
-        val createdPlayer = AudioPlayer(
-            onPlaybackAmplitude = amplitude@{ amp ->
-                if (liveClient !== client || audioPlayer !== player) return@amplitude
-                _voiceLevel.value = amp
-            },
-            onPlaybackIdle = playbackIdle@{
-                // AudioTrack callbacks can arrive after a reconnect or after this player was
-                // stopped. They must not unmute the current session's mic or change its UI.
-                if (liveClient !== client || audioPlayer !== player) return@playbackIdle
-                client.latency.playbackIdle()
-                // Playback has actually finished (or was interrupted) -- safe to unmute now.
-                micStreamer?.setMuted(false)
-                speech.reset()
-                // PROCESSING is included so a turn that completes with no audio (empty reply)
-                // also returns to LISTENING here, instead of staying stuck until fresh speech
-                // or the 2-minute idle timeout.
-                if (_uiState.value.voiceState == VoiceState.SPEAKING ||
-                    _uiState.value.voiceState == VoiceState.PROCESSING
-                ) {
-                    _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-                }
-                if (!tools.hasPending) runPendingGoAway()
-            },
-            onPlaybackFailure = playbackFailure@{ message ->
-                if (liveClient !== client || audioPlayer !== player) return@playbackFailure
-                releaseResources()
-                _uiState.update {
-                    it.copy(
-                        voiceState = VoiceState.ERROR,
-                        errorMessage = message
-                    )
-                }
-            },
-            latency = client.latency
-        )
-        player = createdPlayer
-        if (!createdPlayer.start()) {
-            releaseResources()
-            _uiState.update {
-                it.copy(
-                    voiceState = VoiceState.ERROR,
-                    errorMessage = "Couldn't play audio right now. Please try again."
-                )
-            }
-            return
-        }
-        audioPlayer = createdPlayer
-
-        val mic = MicStreamer(
-            onChunk = { chunk -> client.sendAudioChunk(chunk) },
-            // A queued event from an earlier session's mic must not touch this session's state.
-            onAmplitude = { amp ->
-                if (liveClient === client && audioPlayer === createdPlayer) onMicAmplitude(amp)
-            },
-            onError = micError@{ message ->
-                if (liveClient !== client || audioPlayer !== createdPlayer) return@micError
-                releaseResources()
-                _uiState.update {
-                    it.copy(
-                        voiceState = VoiceState.ERROR,
-                        errorMessage = message
-                    )
-                }
-            },
-            sensitivity = _uiState.value.settings.micSensitivity
-        )
-        // mic.start() returning false means it already called onError above (releasing
-        // resources and publishing ERROR) -- must not fall through and overwrite that with
-        // LISTENING, or assign a streamer whose AudioRecord never actually started.
-        if (!mic.start()) return
-        micStreamer = mic
-
-        _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-        client.latency.event("stream_ready")
-
-        // Re-ask the question the previous connection never answered.
-        retryQuestion?.let { question ->
-            retryQuestion = null
-            if (client.sendText(question)) {
-                userTextBuffer.append(question)
-                speech.markSpeechWithoutClock()
-                timers.startTurnTimeout()
-                _uiState.update { it.copy(voiceState = VoiceState.PROCESSING) }
-            } else {
-                silentTurnRetried = false
-            }
-        }
-    }
-
-    private fun finalizeTurnIfAny() {
-        val userText = userTextBuffer.toString().trim()
-        val assistantText = assistantTextBuffer.toString().trim()
-        userTextBuffer.clear()
-        assistantTextBuffer.clear()
-
-        if (userText.isNotEmpty() || assistantText.isNotEmpty()) {
-            val sessionId = historySessionId
-            viewModelScope.launch {
-                // Best-effort: a failure to persist recent history (e.g. storage full) must not
-                // crash the live conversation over what's only a "remember the last few turns"
-                // convenience -- log it and move on, same as background prewarm failures.
-                try {
-                    val turn = ConversationTurn(userText, assistantText)
-                    conversationStore.appendTurn(turn)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e("AssistantError", "Failed to save conversation turn", e)
-                }
-                // Past conversations: keep this exchange for good and make it searchable in the background.
-                try {
-                    withContext(Dispatchers.IO) {
-                        val id = conversationHistoryStore.append(sessionId, userText, assistantText, System.currentTimeMillis())
-                        Log.i("AssistantMemory", "saved=${id != null} total=${conversationHistoryStore.count()}")
-                    }
-                    indexConversationHistory()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e("AssistantError", "Failed to save to long-term memory", e)
-                }
-            }
-        }
-    }
-
-    private fun stopSession() {
-        recordVoiceUsage()
-        sessionStartJob?.cancel()
-        sessionStartJob = null
-        timers.cancelSessionLimit()
-        sessionResumptionHandle = null
-        reconnectJob?.cancel()
-        reconnectJob = null
-        userInitiatedStop = true
-        consecutiveAutoReconnects = 0
-        // If a warm session was mid-connect and about to be promoted, cancel that -- it'll just
-        // finish connecting in the background and sit ready for the next tap instead.
-        activateWarmOnReady = false
-        releaseResources()
-        // Discard any partial turn -- a manual stop mid-turn means it was never finalized, and
-        // leaving buffered text around would otherwise bleed into whatever turn comes next.
-        userTextBuffer.clear()
-        assistantTextBuffer.clear()
-        retryQuestion = null
-        silentTurnRetried = false
-        _uiState.update {
-            it.copy(voiceState = VoiceState.IDLE)
-        }
-        // The history stays on the device for a while (see ConversationStore.HISTORY_TTL_MS), so the
-        // next session can pick the conversation up, e.g. "make that one 7 o'clock".
-        rewarmAfterStop()
-    }
-
-    /** Discards any warm session -- it was built before this conversation's last turns -- and
-     *  prewarms a new one, which reads the history again and so includes them. */
-    private fun rewarmAfterStop() {
-        cancelInFlightPrewarm()
-        warmClient?.close()
-        warmClient = null
-        isPrewarmReady = false
-        viewModelScope.launch { prewarmIfPossible() }
-    }
-
-    /** True while a prewarm coroutine is between its synchronous entry checks and actually
-     *  setting [warmClient] -- guards against two overlapping callers (e.g. the ViewModel's own
-     *  init block and MainActivity's onStart firing back-to-back on cold launch) both passing
-     *  the "no warm client yet" check and opening two warm connections. */
-    private var prewarmInFlight = false
-
-    /** Bumped whenever settings, memory or history change; a prewarm that read its inputs under an
-     *  older generation is dropped instead of becoming a warm session built from stale data. */
-    private var prewarmGeneration = 0
-
-    private fun cancelInFlightPrewarm() {
-        prewarmGeneration++
-        prewarmJob?.cancel()
-        prewarmJob = null
-        prewarmInFlight = false
-    }
-
-    /** Opens a session ahead of time so its (slow) system-instruction ingestion is already done
-     *  by the time the user actually taps the mic. No-op if one is already warm/warming, the app
-     *  has no key yet, or a real session is already active. */
-    private fun prewarmIfPossible() {
-        if (!keysLoaded) return
-        if (!AccessGate.unlocked) return
-        if (!isForeground) return
-        if (warmClient != null || prewarmInFlight) return
-        if (_uiState.value.voiceState != VoiceState.IDLE) return
-        val apiKey = resolveApiKey()
-        if (!hasGeminiAccess()) return
-
-        prewarmInFlight = true
-        val generation = prewarmGeneration
-        prewarmJob = viewModelScope.launch {
-            try {
-                // Wait a moment first: many warm sessions were never used (the app was only passing through, or a
-                // setting was changed several times). Each change cancels this job and starts the wait again.
-                delay(PREWARM_DELAY_MS)
-                // Read the settings and history directly from their stores rather than the
-                // mirrored _uiState copy -- that copy is only updated by a separate collector, so
-                // right after a setting changes or history is cleared (or right at app launch,
-                // before that collector's first emission), it can still be one step stale.
-                // DataStore's Flow always reflects the latest committed value on a fresh read.
-                val history = conversationStore.recentTurns.first()
-                val settings = settingsStore.settings.first()
-                val systemInstruction = KnowledgeBaseProvider.buildSystemInstruction(
-                    settings.systemPrompt,
-                    AssistantOptions.languageLabel(settings.languageCode),
-                    settings.assistantName,
-                    AssistantOptions.voiceGender(settings.voiceName),
-                    if (settings.memoryEnabled) memoriesForPrompt(memoryStore.current()) else emptyList(),
-                    ownerName = settings.ownerName
-                )
-
-                if (generation != prewarmGeneration) return@launch
-                if (!isForeground || warmClient != null || _uiState.value.voiceState != VoiceState.IDLE) return@launch
-                connectLiveSession(
-                    apiKey, systemInstruction, settings, sessionStartHistory(history), isWarm = true
-                )
-            } finally {
-                // A newer prewarm may already own the flag; only the current generation resets it.
-                if (generation == prewarmGeneration) prewarmInFlight = false
-            }
-        }
-    }
-
-    private fun runPendingGoAway() {
-        goAwayJob?.cancel()
-        goAwayJob = null
-        val close = pendingGoAway ?: return
-        pendingGoAway = null
-        close()
-    }
-
-    private fun releaseResources() {
-        goAwayJob?.cancel()
-        goAwayJob = null
-        pendingGoAway = null
-        timers.cancelSpeakingWatchdog()
-        liveClient?.latency?.close(if (userInitiatedStop) "stopped" else "failed")
-        tools.shutdown()
-        timers.cancelIdle()
-        timers.cancelTurnTimeout()
-        micStreamer?.stop()
-        micStreamer = null
-        _uiState.update { it.copy(isMicMuted = false) }
-        audioPlayer?.stop()
-        audioPlayer = null
-        liveClient?.close()
-        liveClient = null
-        releaseCommunicationAudio()
-        // Every session boundary (error, close, mic/player-start failure, manual stop, turn
-        // timeout) goes through here -- discard any partial transcript rather than let it bleed
-        // into whatever turn comes next (e.g. after an auto-reconnect). An interrupted turn was
-        // never genuinely completed, so it isn't finalized/persisted either.
-        userTextBuffer.clear()
-        assistantTextBuffer.clear()
-    }
-
-    /** Fires when the reply watchdog (see [SessionTimers]) elapses with no audio/toolCall/turnComplete/error
-     *  for the turn currently being waited on -- surfaces a real error instead of leaving the UI
-     *  stuck on PROCESSING until the much longer, silent idle timeout eventually resets it. */
-    private fun onTurnTimedOut() {
-        if (_uiState.value.voiceState != VoiceState.PROCESSING) return
-        // No input transcript arrived for this turn: the local amplitude heuristic fired on noise
-        // (a cough, background chatter) that the server's VAD rightly ignored, so no reply is
-        // coming. Quietly resume listening instead of killing the session with an error.
-        if (userTextBuffer.isBlank()) {
-            liveClient?.latency?.cancel("noise_timeout")
-            speech.reset()
-            _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-            return
-        }
-        // Seen live: the server transcribes the question and then sends nothing, while a new
-        // connection a moment later answers normally. Reconnect once and ask again, so the user
-        // doesn't have to tap the mic and repeat themselves.
-        val question = userTextBuffer.toString().trim()
-        if (!silentTurnRetried && question.isNotEmpty() && isNetworkAvailable()) {
-            Log.w("AssistantError", "No reply after ${SessionTimers.TURN_RESPONSE_TIMEOUT_MS}ms; reconnecting and asking again")
-            silentTurnRetried = true
-            retryQuestion = question
-            // Resuming would put us back into the server session that stopped answering.
-            sessionResumptionHandle = null
-            releaseResources()
-            _uiState.update { it.copy(voiceState = VoiceState.RESETTING) }
-            startSession(isAutoReconnect = true)
-            return
-        }
-        silentTurnRetried = false
-        retryQuestion = null
-        Log.w("AssistantError", "Turn timed out after ${SessionTimers.TURN_RESPONSE_TIMEOUT_MS}ms with no server response")
-        releaseResources()
-        _uiState.update {
-            it.copy(
-                voiceState = VoiceState.ERROR,
-                errorMessage = "The assistant didn't respond in time. Please try again."
-            )
-        }
-    }
-
-    /** Mic level handling; [SpeechDetector] decides, this acts on it. */
-    private fun onMicAmplitude(amp: Float) {
-        if (_uiState.value.isMicMuted) return
-        val voiceState = _uiState.value.voiceState
-        if (voiceState != VoiceState.SPEAKING) _voiceLevel.value = amp
-        when (val result = speech.onAmplitude(amp, voiceState)) {
-            is SpeechDetector.Result.Speech -> {
-                if (result.inConversation) liveClient?.latency?.turn()?.speech(result.at, "rms")
-                if (result.wasProcessing) {
-                    timers.cancelTurnTimeout()
-                    _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-                }
-            }
-            is SpeechDetector.Result.SilenceEnded -> {
-                Log.i("AssistantLatency", "local speech end after ${result.silenceMs}ms silence")
-                liveClient?.latency?.turn()?.event("local_silence_detected", mapOf(
-                    "silence_ms" to result.silenceMs
-                ))
-                // UI/watchdog only. Keep streaming and let server VAD finalize the turn, as
-                // stopping here can discard short speech and clip the next utterance.
-                timers.startTurnTimeout()
-                _uiState.update { it.copy(voiceState = VoiceState.PROCESSING) }
-            }
-            SpeechDetector.Result.Quiet -> Unit
-        }
-    }
-
-    /** Silences Ultron for the length of a phone call (ringing or answered) without ending the session. */
-    private fun pauseForCall() {
-        if (pausedByCall) return
-        pausedByCall = true
-        micStreamer?.setCallPaused(true)
-        audioPlayer?.clearQueueForInterruption()
-        timers.cancelIdle()
-        callWatchJob?.cancel()
-        callWatchJob = viewModelScope.launch {
-            // The call ends when the audio mode leaves ringing/in-call. Two clean checks in a row avoid
-            // resuming in the short gap between the ringtone and the call itself.
-            var clear = 0
-            while (clear < 2) {
-                delay(1_000)
-                clear = if (audio.isPhoneCallMode()) 0 else clear + 1
-            }
-            resumeAfterCall()
-        }
-    }
-
-    private fun resumeAfterCall() {
-        if (!pausedByCall) return
-        pausedByCall = false
-        callWatchJob = null
-        if (!isSessionActive(_uiState.value.voiceState)) return
-        // The call took the audio mode and focus; claim them back for the voice session.
-        audio.reclaim()
-        micStreamer?.setCallPaused(false)
-        timers.resetIdle()
-        _uiState.update { it.copy(voiceState = VoiceState.LISTENING) }
-    }
-
-    private fun releaseCommunicationAudio() {
-        audio.release()
-        pausedByCall = false
-        callWatchJob?.cancel()
-        callWatchJob = null
-    }
-
-    /** Called when the Activity actually stops (not just loses focus, e.g. a permission
-     *  dialog) -- Android will block background mic use anyway, so a session left running here
-     *  would otherwise sit silently stuck in a "Listening..."/"Speaking..." state. */
+    /** Called when the Activity actually stops (not just loses focus, e.g. a permission dialog). */
     fun onAppBackgrounded() {
         clearAdminDrafts()
         assistPending = false
-        isForeground = false
-        warmClient?.close()
-        warmClient = null
-        isPrewarmReady = false
-        if (isSessionActive(_uiState.value.voiceState)) {
-            // The microphone foreground service (see AppForegroundService) keeps this session
-            // alive and visible in the notification; Stop there or the idle timeout ends it.
-            backgroundSessionAllowed = true
-        } else if (_uiState.value.voiceState != VoiceState.IDLE) {
-            stopSession()
-        }
+        session.onAppBackgrounded()
     }
 
     /** The subscription screen opened or closed the app: warm up a session, or end everything that is running. */
     fun onAccessChanged(unlocked: Boolean) {
         if (unlocked) {
-            prewarmIfPossible()
+            session.prewarmIfPossible()
             startPendingAssist()
             return
         }
         assistPending = false
-        if (isSessionActive(_uiState.value.voiceState)) stopSession()
-        cancelInFlightPrewarm()
-        warmClient?.close()
-        warmClient = null
-        isPrewarmReady = false
-        activateWarmOnReady = false
+        session.onAccessLocked()
     }
 
     /** Called when the Activity comes back to the foreground -- re-arm the warm session so the
      *  next mic tap is fast again. */
     fun onAppForegrounded() {
-        isForeground = true
-        backgroundSessionAllowed = false
-        prewarmIfPossible()
+        session.onAppForegrounded()
         startPendingAssist()
     }
 
     /** Resume also covers returning from dialogs without an intervening Activity stop. */
     fun onAppResumed() {
-        prewarmIfPossible()
+        session.prewarmIfPossible()
         checkForUpdate(manual = false)
     }
 
@@ -1839,10 +923,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (com.assistant.app.AssistantNotificationListener.onNotification === notificationAnnouncer) {
             com.assistant.app.AssistantNotificationListener.onNotification = null
         }
-        prewarmJob?.cancel()
-        stopSession()
-        warmClient?.close()
-        warmClient = null
-        isPrewarmReady = false
+        session.onCleared()
     }
 }
