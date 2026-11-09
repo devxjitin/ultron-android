@@ -9,6 +9,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.assistant.app.viewmodel.VoiceState
 import kotlin.math.PI
 import kotlin.math.sin
@@ -31,13 +34,19 @@ fun VoiceRibbon(voiceState: VoiceState, amplitude: () -> Float, modifier: Modifi
     // The flow only runs during a session; an idle or errored screen holds still instead of redrawing every frame.
     val flowing = voiceState != VoiceState.IDLE && voiceState != VoiceState.ERROR
     val phase = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(flowing) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(flowing, lifecycle) {
         if (!flowing) return@LaunchedEffect
-        var last = withFrameNanos { it }
-        while (true) {
-            val now = withFrameNanos { it }
-            phase.floatValue = (phase.floatValue + (now - last) / 1e9f * (2 * PI).toFloat() / 6.5f) % (2 * PI).toFloat()
-            last = now
+        // A session can be started from the lock screen and keep running while the app is stopped. A frame
+        // request left waiting from then can stay stuck after unlock and freeze the ribbon, so the loop is
+        // cancelled whenever the app leaves the screen and begins again with a fresh frame request on return.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var last = withFrameNanos { it }
+            while (true) {
+                val now = withFrameNanos { it }
+                phase.floatValue = (phase.floatValue + (now - last) / 1e9f * (2 * PI).toFloat() / 6.5f) % (2 * PI).toFloat()
+                last = now
+            }
         }
     }
     val level = animateFloatAsState(
