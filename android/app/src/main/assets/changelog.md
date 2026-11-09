@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.0 - 2026-11-09
+
+### Added
+- After an update, Ultron opens by itself and shows a card with what changed.
+- While a voice session runs, a ring around the mic button fills up to show how much of the model's 65k context is used. It turns amber, then red, as it nears full.
+
 ## 1.22.1 - 2026-11-09
 
 ### Changed

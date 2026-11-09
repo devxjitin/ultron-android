@@ -74,6 +74,8 @@ class GeminiLiveClient(
         /** The latest handle that lets a dropped connection continue this conversation; see
          *  [connect]'s resumeHandle. */
         fun onResumptionHandle(handle: String) {}
+        /** Tokens the session has used so far, as the server counts them; see [LiveContext]. */
+        fun onContextUsage(totalTokens: Int) {}
     }
 
     /** One function-call request from the model, as received in a `toolCall` message. */
@@ -290,9 +292,11 @@ class GeminiLiveClient(
             .put("inputAudioTranscription", JSONObject())
             .put("outputAudioTranscription", JSONObject())
             .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", liveFunctionDeclarations(settings))))
-            // Without compression the 128k-token context (audio + every knowledge-search result)
+            // Without compression the context window (audio + every knowledge-search result)
             // fills up and the server ends the session; the sliding window drops the oldest turns.
-            .put("contextWindowCompression", JSONObject().put("slidingWindow", JSONObject()))
+            .put("contextWindowCompression", JSONObject()
+                .put("triggerTokens", LiveContext.COMPRESS_AT_TOKENS)
+                .put("slidingWindow", JSONObject()))
             // Makes the server send resumption handles; a reconnect passes the latest one back.
             .put("sessionResumption", JSONObject().apply { if (resumeHandle != null) put("handle", resumeHandle) })
             // Gemini 3.8 only accepts seeded history (sendHistory) when this is set.
@@ -462,6 +466,10 @@ class GeminiLiveClient(
             val timeLeftMs = timeLeftText.removeSuffix("s").toDoubleOrNull()?.let { s -> (s * 1000).toLong() } ?: -1L
             val closeNow = { webSocket?.close(1000, "server goAway"); Unit }
             actions.add { listener?.onGoAway(timeLeftMs, closeNow) ?: closeNow() }
+        }
+
+        json.optJSONObject("usageMetadata")?.optInt("totalTokenCount", 0)?.takeIf { it > 0 }?.let { total ->
+            actions.add { listener?.onContextUsage(total) }
         }
 
         json.optJSONObject("sessionResumptionUpdate")?.let {

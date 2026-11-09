@@ -40,6 +40,10 @@ data class AssistantUiState(
     val isMicMuted: Boolean = false,
     /** A newer build waiting on the AWS update server; shown in a dialog until installed or dismissed. */
     val updateInfo: com.assistant.app.network.UpdateInfo? = null,
+    /** Tokens the live session has used so far; 0 when no session is running. Drawn as a ring around the mic. */
+    val liveContextTokens: Int = 0,
+    /** Changes since the version the user last saw; the "What's new" card shows while this is not empty. */
+    val whatsNew: List<com.assistant.app.data.ChangelogEntry> = emptyList(),
     /** 0..1 while that build downloads; null otherwise. */
     val updateDownloadProgress: Float? = null,
     val updateCheckState: UpdateCheckState = UpdateCheckState.IDLE,

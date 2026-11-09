@@ -366,6 +366,11 @@ internal class VoiceSessionController(
                 beginStreaming(client, reusedWarm = isWarm)
             }
 
+            override fun onContextUsage(totalTokens: Int) {
+                if (liveClient !== client) return
+                uiState.update { it.copy(liveContextTokens = totalTokens) }
+            }
+
             override fun onAudioChunk(pcm: ByteArray, receivedAtMs: Long) {
                 if (liveClient !== client) return
                 // A tool result can be followed by a separate model turn. Its first audio is the
@@ -554,7 +559,7 @@ internal class VoiceSessionController(
                     currentState == VoiceState.ERROR -> Unit // already surfaced by onError
                     currentState == VoiceState.IDLE -> Unit // already stopped/never started streaming
                     userInitiatedStop -> uiState.update {
-                        it.copy(voiceState = VoiceState.IDLE)
+                        it.copy(voiceState = VoiceState.IDLE, liveContextTokens = 0)
                     }
                     !isNetworkAvailable() -> uiState.update {
                         it.copy(
@@ -755,7 +760,7 @@ internal class VoiceSessionController(
         retryQuestion = null
         silentTurnRetried = false
         uiState.update {
-            it.copy(voiceState = VoiceState.IDLE)
+            it.copy(voiceState = VoiceState.IDLE, liveContextTokens = 0)
         }
         // The history stays on the device for the history tools, but the next session starts fresh and is not seeded with it.
         rewarmAfterStop()

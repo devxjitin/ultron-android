@@ -33,13 +33,18 @@ import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantAmber
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantTextPrimary
+import com.assistant.app.network.LiveContext
 import com.assistant.app.viewmodel.VoiceState
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 @Composable
 fun MicButton(
     voiceState: VoiceState,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Tokens the live session has used so far; drawn as a ring that fills up, 0 hides it. */
+    contextTokens: Int = 0,
     /** Violet-to-pink gradient (like the voice ribbon) instead of the default dark button, e.g.
      *  inside the nav bar. The gradient follows the ribbon's colours for the current state. */
     accent: Boolean = false
@@ -68,10 +73,26 @@ fun MicButton(
         label = "micPressScale"
     )
 
-    Box(modifier = modifier.size(72.dp), contentAlignment = Alignment.Center) {
+    val contextFraction by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (active) LiveContext.fraction(contextTokens) else 0f,
+        animationSpec = tween(400),
+        label = "micContextFill"
+    )
+    val ringDescription = if (active && contextTokens > 0) {
+        "Context ${(contextFraction * 100).toInt()} percent full, ${LiveContext.label(contextTokens)} tokens"
+    } else null
+
+    Box(
+        modifier = modifier.size(72.dp).then(
+            if (ringDescription != null) Modifier.semantics { stateDescription = ringDescription } else Modifier
+        ),
+        contentAlignment = Alignment.Center
+    ) {
         if (voiceState == VoiceState.LISTENING) {
             PulseRing(color = if (accentIdle) gradientLeft else containerColor)
         }
+
+        if (active && contextTokens > 0) ContextRing(contextFraction)
 
         FloatingActionButton(
             onClick = onClick,
@@ -112,6 +133,27 @@ fun MicButton(
                 )
             }
         }
+    }
+}
+
+/** A thin ring around the button that fills clockwise with the share of the context window in use. */
+@Composable
+private fun ContextRing(fraction: Float) {
+    val color = when (LiveContext.level(fraction)) {
+        LiveContext.Level.NORMAL -> AssistantAccent
+        LiveContext.Level.WARNING -> AssistantAmber
+        LiveContext.Level.CRITICAL -> AssistantError
+    }
+    val track = AssistantTextPrimary.copy(alpha = 0.15f)
+    Canvas(modifier = Modifier.size(72.dp)) {
+        val stroke = 3.dp.toPx()
+        val inset = stroke / 2f
+        val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+        val topLeft = Offset(inset, inset)
+        drawArc(color = track, startAngle = 0f, sweepAngle = 360f, useCenter = false, topLeft = topLeft, size = arcSize,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke))
+        drawArc(color = color, startAngle = -90f, sweepAngle = 360f * fraction, useCenter = false, topLeft = topLeft, size = arcSize,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
     }
 }
 
