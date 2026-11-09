@@ -671,12 +671,14 @@ enum class DeviceTool(
     SHARE_FILE(
         "share_file", "Share a file", "Send a found photo, video or document into an app such as WhatsApp.",
         "Hands a file from the latest search_files list to another app through Android sharing, for example to send a photo " +
-            "on WhatsApp. Give its number, the app name and, for WhatsApp, the person's phone number with country code so their " +
-            "chat opens directly. The app then shows a preview: press its Send button with the screen tools.",
+            "on WhatsApp. Give its number, the app name and, for WhatsApp, the person's phone number with country code: the chat " +
+            "opens directly and this tool presses Send itself. Only status=sent means it went; status=opened or not_sent means " +
+            "it did not, so finish it with the screen tools and never say it was sent before the file shows in the chat.",
         listOf(
             ToolParam("number", ToolParamType.INTEGER, "Number of the file in the latest search_files list."),
             ToolParam("app", ToolParamType.STRING, "App to send it with, for example WhatsApp. Leave out to show the share sheet.", required = false),
-            ToolParam("phone", ToolParamType.STRING, "WhatsApp only: the person's number with country code.", required = false)
+            ToolParam("phone", ToolParamType.STRING, "WhatsApp only: the person's number with country code.", required = false),
+            ToolParam("caption", ToolParamType.STRING, "Optional caption, only when the user gave one.", required = false)
         )
     ),
     SHARE_TEXT(

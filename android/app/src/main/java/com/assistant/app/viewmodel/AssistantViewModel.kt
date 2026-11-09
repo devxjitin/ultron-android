@@ -392,16 +392,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(page = AppPage.HOME) }
     }
 
-    /** Opens a full page. From another full page it switches directly; from home it first ends any live session,
-     *  because the page covers the status line and Stop control and the mic must not keep streaming behind it. */
+    /** Opens a full page. A live session keeps running behind it: the pages show a slim live bar with the status,
+     *  Mute and Stop, so the mic is never streaming without a visible way to end it. */
     private fun openPage(page: AppPage) {
         if (page == AppPage.STORAGE) refreshCacheSize()
         if (page == AppPage.STORAGE || page == AppPage.HISTORY) refreshPastConversations()
         if (page == AppPage.STORAGE || page == AppPage.KNOWLEDGE) refreshImages()
-        val current = _uiState.value
-        if (current.page == AppPage.HOME && current.voiceState != VoiceState.IDLE && current.voiceState != VoiceState.ERROR) {
-            session.stopSession()
-        }
         _uiState.update { it.copy(page = page) }
     }
 

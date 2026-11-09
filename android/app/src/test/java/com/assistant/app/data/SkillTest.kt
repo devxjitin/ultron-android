@@ -124,6 +124,12 @@ class BuiltInSkillAssetsTest {
         }
     }
 
+    @Test fun whatsappFileSendIsOnlyReportedAfterTheToolSaysSent() {
+        val body = File(root, "whatsapp/SKILL.md").readText()
+        assertTrue(body.contains("status=sent"))
+        assertTrue(body.contains("Never say \"sent\" while the preview is still on screen"))
+    }
+
     @Test fun skillsAreFiledUnderCategories() {
         val parsed = SkillParser.parse("---\nname: demo\ncategory: Messaging\ndescription: d\n---\nbody")!!
         assertEquals("Messaging", parsed.category)
