@@ -133,10 +133,9 @@ fun AssistantScreen(
         // so it keeps showing the sub-page it was last on instead of jumping to another one mid-animation.
         val lastSettingsPage = remember { arrayOf(AppPage.SETTINGS) }
         if (uiState.page in SETTINGS_PAGES) lastSettingsPage[0] = uiState.page
-        // A live session keeps running behind the other pages, so they show a slim bar under the top bar for it.
-        val liveBarVisible = currentTab != NavTab.HOME && uiState.voiceState != VoiceState.IDLE && uiState.voiceState != VoiceState.ERROR
-        // Space the pages leave free at the top for the slim top bar (and the live bar below it).
-        val topReserve = if (liveBarVisible) AppTopBarHeight + LiveBarHeight else AppTopBarHeight
+        // A live session keeps running behind the other pages without showing anything there.
+        // Space the pages leave free at the top for the slim top bar.
+        val topReserve = AppTopBarHeight
         // The request form (one screen for a skill, one for a connector) opens from the Help & support page.
         var requestType by remember { mutableStateOf<String?>(null) }
         var requestSending by remember { mutableStateOf(false) }
@@ -442,16 +441,6 @@ fun AssistantScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
-        if (liveBarVisible) {
-            LiveSessionBar(
-                uiState = uiState,
-                strings = strings,
-                onMuteToggled = actions.onMuteToggled,
-                onStop = actions.onMicTapped,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = AppTopBarHeight)
-            )
-        }
-
         // Above the top bar, so the picture's close button is never covered by the bar's buttons.
         uiState.shownImage?.let { shown ->
             androidx.compose.runtime.key(shown.id) { ImageOverlay(shown.uri, shown.title, actions.onDismissShownImage) }
@@ -557,52 +546,6 @@ fun AssistantScreen(
                 }
             ) { main() }
         }
-    }
-}
-
-private val LiveBarHeight = 44.dp
-
-/** Shown on every page other than Home while a voice session runs: its state, Mute and Stop. */
-@Composable
-private fun LiveSessionBar(
-    uiState: AssistantUiState,
-    strings: VisitorStrings,
-    onMuteToggled: () -> Unit,
-    onStop: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val state = uiState.voiceState
-    val label = when {
-        state == VoiceState.CONNECTING -> "Connecting…"
-        state == VoiceState.RESETTING -> "Refreshing…"
-        uiState.isMicMuted && state == VoiceState.LISTENING -> strings.micMuted
-        state == VoiceState.LISTENING -> strings.listening
-        state == VoiceState.PROCESSING -> uiState.activeTool?.let { "Using: $it" } ?: strings.thinking
-        state == VoiceState.SPEAKING -> strings.speaking
-        else -> ""
-    }
-    val live = state in setOf(VoiceState.LISTENING, VoiceState.PROCESSING, VoiceState.SPEAKING)
-    Row(
-        modifier.fillMaxWidth().height(LiveBarHeight).padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-            .background(AssistantAccent.copy(alpha = 0.16f))
-            .border(androidx.compose.foundation.BorderStroke(1.dp, AssistantAccent.copy(alpha = 0.5f)),
-                androidx.compose.foundation.shape.RoundedCornerShape(50))
-            .padding(start = 16.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = com.assistant.app.ui.theme.AssistantTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        if (live) {
-            IconButton(onClick = onMuteToggled) {
-                Icon(
-                    imageVector = if (uiState.isMicMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                    contentDescription = if (uiState.isMicMuted) strings.unmute else strings.mute,
-                    tint = if (uiState.isMicMuted) AssistantError else AssistantTextSecondary
-                )
-            }
-        }
-        TextButton(onClick = onStop) { Text("Stop", color = AssistantError) }
     }
 }
 
