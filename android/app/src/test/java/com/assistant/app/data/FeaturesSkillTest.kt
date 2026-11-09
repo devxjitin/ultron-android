@@ -28,4 +28,11 @@ class FeaturesSkillTest {
         val missing = skills.filter { it !in text }
         assertTrue("skills missing from the features skill: $missing", missing.isEmpty())
     }
+
+    @Test fun `names every whatsapp task`() {
+        val text = skillFile.readText()
+        val tasks = File(skillFile.parentFile.parentFile, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }
+        val missing = tasks.filter { it !in text }
+        assertTrue("whatsapp tasks missing from the features skill: $missing", missing.isEmpty())
+    }
 }
