@@ -46,3 +46,6 @@ mcp/web-search/function.zip
 sites/*.tar.gz
 sites/*.zip
 .firebase/
+
+# Separate repo (devxjitin/ultron-website)
+sites/ultron-showcase/
