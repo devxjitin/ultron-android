@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.22.1 - 2026-11-09
+
+### Changed
+- WhatsApp: calls, photos, videos, documents, location, live location, replies and statuses are now separate skills, so Ultron picks the exact one you ask for.
+
 ## 1.22.0 - 2026-11-09
 
 ### Added
