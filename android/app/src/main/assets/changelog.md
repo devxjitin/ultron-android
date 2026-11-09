@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.20.1 - 2026-11-09
+
+### Improved
+- WhatsApp messages are now faster and safer: when the person is in your contacts, Ultron opens their chat straight from the number instead of searching inside WhatsApp. People who are only in WhatsApp are still found through its search, and Ultron tells you if WhatsApp is not installed.
+
 ## 1.20.0 - 2026-11-09
 
 ### Added
