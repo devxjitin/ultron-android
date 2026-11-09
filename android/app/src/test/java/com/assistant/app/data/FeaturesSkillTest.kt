@@ -21,4 +21,11 @@ class FeaturesSkillTest {
         val missing = DeviceTool.entries.map { it.functionName }.filter { it !in text }
         assertTrue("tools missing from the features skill: $missing", missing.isEmpty())
     }
+
+    @Test fun `lists every other built-in skill`() {
+        val text = skillFile.readText()
+        val skills = skillFile.parentFile.parentFile.listFiles()!!.filter { it.isDirectory && it.name != "ultron-features" }.map { it.name }
+        val missing = skills.filter { it !in text }
+        assertTrue("skills missing from the features skill: $missing", missing.isEmpty())
+    }
 }

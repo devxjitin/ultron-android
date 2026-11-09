@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.1 - 2026-11-09
+
+### Changed
+- WhatsApp skills are now six separate skills under one WhatsApp heading on the Skills page, each with its own switch, instead of one skill with six tasks inside.
+- The assistant's own ability list now names every skill, so it finds the right one when you ask.
+
 ## 1.23.0 - 2026-11-09
 
 ### Added

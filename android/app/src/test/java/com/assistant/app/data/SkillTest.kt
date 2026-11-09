@@ -102,12 +102,20 @@ class BuiltInSkillAssetsTest {
         }
     }
 
-    @Test fun whatsappShipsItsTasksAndEachFits() {
-        val names = File(root, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }.toSet()
-        assertEquals(setOf("send_message", "read_messages", "call", "send_media", "status", "search_chat"), names)
+    @Test fun whatsappShipsAsSeparateSkillsAndEachFits() {
+        val names = root.listFiles()!!.filter { it.isDirectory && it.name.startsWith("whatsapp") }.map { it.name }.toSet()
+        assertEquals(
+            setOf("whatsapp-send-message", "whatsapp-read-messages", "whatsapp-call", "whatsapp-send-media", "whatsapp-status", "whatsapp-search-chat"),
+            names
+        )
         names.forEach { name ->
-            val body = SkillParser.parse(File(root, "whatsapp/tasks/$name.md").readText())!!.body
-            assertTrue("$name is too long", body.length < MAX_SKILL_BODY_CHARS)
+            val text = File(root, "$name/SKILL.md").readText()
+            val skill = SkillParser.parse(text, name)!!
+            assertEquals(name, skill.name)
+            assertEquals("WhatsApp", skill.category)
+            assertTrue("$name is too long", skill.body.length < MAX_SKILL_BODY_CHARS)
+            val description = text.lines().first { it.startsWith("description:") }.removePrefix("description:").trim()
+            assertTrue("$name description is cut at 300 characters", description.length <= 300)
         }
     }
 
