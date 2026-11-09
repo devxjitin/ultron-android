@@ -104,7 +104,7 @@ class BuiltInSkillAssetsTest {
 
     @Test fun whatsappShipsItsTasksAndEachFits() {
         val names = File(root, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }.toSet()
-        assertEquals(setOf("send_message", "read_messages", "call", "send_media"), names)
+        assertEquals(setOf("send_message", "read_messages", "call", "send_media", "status", "search_chat"), names)
         names.forEach { name ->
             val body = SkillParser.parse(File(root, "whatsapp/tasks/$name.md").readText())!!.body
             assertTrue("$name is too long", body.length < MAX_SKILL_BODY_CHARS)

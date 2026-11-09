@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.22.0 - 2026-11-09
+
+### Added
+- WhatsApp: Ultron can now tell you who posted a status, show you their status, post a photo or text to your status, and search inside a chat for something like an address, a link or a file.
+
 ## 1.21.0 - 2026-11-09
 
 ### Added
