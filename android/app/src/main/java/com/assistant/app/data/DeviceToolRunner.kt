@@ -322,6 +322,7 @@ class DeviceToolRunner(
             DeviceTool.LIST_APPS -> extras.listApps(text("filter"))
             DeviceTool.OPEN_URL -> extras.openUrl(text("url") ?: return MISSING)
             DeviceTool.SHARE_TEXT -> extras.shareText(text("text") ?: return MISSING)
+            DeviceTool.SHARE_FILE -> shareFile(number("number"), text("app"), text("phone"))
             DeviceTool.POWER_MENU -> globalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, "Power menu")
             DeviceTool.SPLIT_SCREEN -> globalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, "Split screen")
             DeviceTool.SWIPE -> {
@@ -1392,6 +1393,31 @@ class DeviceToolRunner(
         }
     }
 
+    /** Sends a search_files result into another app; for WhatsApp a phone number opens that person's chat straight away. */
+    private fun shareFile(number: Int?, appName: String?, phone: String?): String {
+        fileAccessMissing()?.let { return it }
+        val file = number?.let { lastFiles.getOrNull(it - 1) }
+            ?: return "status=invalid\nCall search_files first and give a number from its list."
+        val send = Intent(Intent.ACTION_SEND).setType(file.mime).putExtra(Intent.EXTRA_STREAM, file.uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // ClipData carries the read grant through the chooser as well.
+        send.clipData = ClipData.newRawUri(file.name, file.uri)
+        if (appName == null) {
+            start(Intent.createChooser(send, "Share with").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            return "status=ok\nThe share sheet is open with ${file.name}."
+        }
+        val (packageName, label) = findLauncherApp(appName) ?: return "status=not_found\nNo installed app matches \"$appName\"."
+        send.setPackage(packageName)
+        val digits = phone?.filter { it.isDigit() }?.takeIf { it.length >= 8 }
+        val direct = digits != null && packageName.startsWith("com.whatsapp")
+        // WhatsApp reads this extra and opens the chat of that number instead of its own contact picker.
+        if (direct) send.putExtra("jid", "$digits@s.whatsapp.net")
+        start(send)
+        return "status=ok\n$label opened with ${file.name} ready. " +
+            (if (direct) "It should be in that person's chat: read_screen, check the name, then press Send."
+            else "Pick the person in $label's list, then press Send.")
+    }
+
     private fun showPicture(query: String?, fileNumber: Int?, action: String?): String {
         if (action == "close") {
             showImage(null, "")
@@ -1450,7 +1476,7 @@ class DeviceToolRunner(
             DeviceTool.READ_NOTIFICATIONS, DeviceTool.OPEN_APP,
             DeviceTool.OPEN_APP_SETTINGS, DeviceTool.CREATE_EVENT, DeviceTool.CANCEL_EVENT,
             DeviceTool.LIST_APPS, DeviceTool.NOW_PLAYING,
-            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.SHOW_IMAGE, DeviceTool.LIST_FOLDER
+            DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.SHARE_FILE, DeviceTool.SHOW_IMAGE, DeviceTool.LIST_FOLDER
         )
         const val MISSING ="status=invalid\nA required value was missing."
     }

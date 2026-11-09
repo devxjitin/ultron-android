@@ -149,7 +149,7 @@ object ConnectorRegistry {
             id = "files", name = "Files", description = "Browse folders, find any file and open it.",
             subtitle = "On your phone", category = ConnectorCategory.PERSONAL, kind = ConnectorKind.PHONE,
             permissions = allFilesPermissions(), access = SpecialAccess.ALL_FILES, defaultOn = false,
-            tools = listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.LIST_FOLDER)
+            tools = listOf(DeviceTool.SEARCH_FILES, DeviceTool.OPEN_FILE, DeviceTool.LIST_FOLDER, DeviceTool.SHARE_FILE)
         ),
         ConnectorSpec(
             id = "images", name = "Pictures", description = "Show pictures you saved in Ultron, or photos from your phone.",

@@ -668,6 +668,17 @@ enum class DeviceTool(
         "Opens an http or https link in the user's browser or the app that handles it. Only open links the user asked for.",
         listOf(ToolParam("url", ToolParamType.STRING, "Full web address starting with http or https."))
     ),
+    SHARE_FILE(
+        "share_file", "Share a file", "Send a found photo, video or document into an app such as WhatsApp.",
+        "Hands a file from the latest search_files list to another app through Android sharing, for example to send a photo " +
+            "on WhatsApp. Give its number, the app name and, for WhatsApp, the person's phone number with country code so their " +
+            "chat opens directly. The app then shows a preview: press its Send button with the screen tools.",
+        listOf(
+            ToolParam("number", ToolParamType.INTEGER, "Number of the file in the latest search_files list."),
+            ToolParam("app", ToolParamType.STRING, "App to send it with, for example WhatsApp. Leave out to show the share sheet.", required = false),
+            ToolParam("phone", ToolParamType.STRING, "WhatsApp only: the person's number with country code.", required = false)
+        )
+    ),
     SHARE_TEXT(
         "share_text", "Share text", "Open the Android share sheet with some text.",
         "Opens the share sheet with the text so the user can pick an app and a person. Nothing is sent until the user chooses.",
