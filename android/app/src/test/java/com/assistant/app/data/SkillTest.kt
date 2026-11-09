@@ -102,11 +102,13 @@ class BuiltInSkillAssetsTest {
         }
     }
 
-    @Test fun whatsappShipsOnlySendMessage() {
-        val names = File(root, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }
-        assertEquals(listOf("send_message"), names)
-        val body = SkillParser.parse(File(root, "whatsapp/tasks/send_message.md").readText())!!.body
-        assertTrue(body.length < MAX_SKILL_BODY_CHARS)
+    @Test fun whatsappShipsItsTasksAndEachFits() {
+        val names = File(root, "whatsapp/tasks").listFiles()!!.map { it.name.removeSuffix(".md") }.toSet()
+        assertEquals(setOf("send_message", "read_messages", "call", "send_media"), names)
+        names.forEach { name ->
+            val body = SkillParser.parse(File(root, "whatsapp/tasks/$name.md").readText())!!.body
+            assertTrue("$name is too long", body.length < MAX_SKILL_BODY_CHARS)
+        }
     }
 
     @Test fun skillsAreFiledUnderCategories() {

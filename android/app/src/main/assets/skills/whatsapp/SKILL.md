@@ -1,8 +1,8 @@
 ---
 name: whatsapp
 category: Messaging
-summary: Send WhatsApp messages by voice.
-description: Operate WhatsApp on this phone. Currently sends a WhatsApp text message to a contact by name.
+summary: Send, read and reply to WhatsApp messages, call, and share photos or location.
+description: Operate WhatsApp on this phone: send a text message, read new messages aloud and reply, start a voice or video call, and send a photo, video, document or location to a contact.
 ---
 # WhatsApp, shared rules
 

@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.21.0 - 2026-11-09
+
+### Added
+- WhatsApp: Ultron can now read your new messages aloud and reply to them, start WhatsApp voice and video calls, and send a photo, video, document or your location to someone.
+- A found photo or file can be sent straight into an app such as WhatsApp, opening the right chat when the person is in your contacts.
+
 ## 1.20.1 - 2026-11-09
 
 ### Improved
