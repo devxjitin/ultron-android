@@ -196,8 +196,14 @@ internal class VoiceSessionController(
         execute = execute
     )
 
-    /** The last few exchanges are replayed into every new Live session; anything older is looked up with the history tools. */
-    private fun sessionStartHistory(history: List<ConversationTurn>) = KnowledgeBaseProvider.liveHistoryTurns(history)
+    /** When the current mic session began; a reconnect inside it replays only the exchanges from after this. */
+    private var sessionStartedAtMs = 0L
+
+    /** A new session starts fresh, with no earlier exchanges replayed into it (older ones can still be looked up with the
+     *  history tools). Only a reconnect inside a running session replays that session's own exchanges, so it carries on. */
+    private fun sessionStartHistory(history: List<ConversationTurn>, isAutoReconnect: Boolean) =
+        if (isAutoReconnect) KnowledgeBaseProvider.liveHistoryTurns(history.filter { it.timestampMillis >= sessionStartedAtMs })
+        else emptyList()
 
 
     /** A warm session was opened with whatever settings were current at the time -- if the user
@@ -243,6 +249,7 @@ internal class VoiceSessionController(
 
         if (!isAutoReconnect) {
             historySessionId = java.util.UUID.randomUUID().toString()
+            sessionStartedAtMs = System.currentTimeMillis()
             retryQuestion = null
             silentTurnRetried = false
             markVoiceUsageStart()
@@ -307,7 +314,7 @@ internal class VoiceSessionController(
                 ownerName = settings.ownerName
             )
             connectLiveSession(
-                apiKey, systemInstruction, settings, sessionStartHistory(history),
+                apiKey, systemInstruction, settings, sessionStartHistory(history, isAutoReconnect),
                 resumeHandle = if (isAutoReconnect) sessionResumptionHandle else null
             )
         }
@@ -750,8 +757,7 @@ internal class VoiceSessionController(
         uiState.update {
             it.copy(voiceState = VoiceState.IDLE)
         }
-        // The history stays on the device for a while (see ConversationStore.HISTORY_TTL_MS), so the
-        // next session can pick the conversation up, e.g. "make that one 7 o'clock".
+        // The history stays on the device for the history tools, but the next session starts fresh and is not seeded with it.
         rewarmAfterStop()
     }
 
@@ -820,7 +826,7 @@ internal class VoiceSessionController(
                 if (generation != prewarmGeneration) return@launch
                 if (!isForeground || warmClient != null || uiState.value.voiceState != VoiceState.IDLE) return@launch
                 connectLiveSession(
-                    apiKey, systemInstruction, settings, sessionStartHistory(history), isWarm = true
+                    apiKey, systemInstruction, settings, sessionStartHistory(history, isAutoReconnect = false), isWarm = true
                 )
             } finally {
                 // A newer prewarm may already own the flag; only the current generation resets it.
