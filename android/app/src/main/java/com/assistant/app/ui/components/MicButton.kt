@@ -44,22 +44,9 @@ fun MicButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     /** Tokens the live session has used so far; drawn as a ring that fills up, 0 hides it. */
-    contextTokens: Int = 0,
-    /** Violet-to-pink gradient (like the voice ribbon) instead of the default dark button, e.g.
-     *  inside the nav bar. The gradient follows the ribbon's colours for the current state. */
-    accent: Boolean = false
+    contextTokens: Int = 0
 ) {
     val active = voiceState != VoiceState.IDLE && voiceState != VoiceState.ERROR
-    val accentIdle = accent
-    val containerColor by animateColorAsState(
-        targetValue = when (voiceState) {
-            VoiceState.ERROR -> AssistantError
-            VoiceState.CONNECTING, VoiceState.RESETTING -> AssistantAmber
-            else -> if (accent) AssistantAccent else com.assistant.app.ui.theme.AssistantSurfaceElevated
-        },
-        label = "micButtonColor"
-    )
-
     // Same colours as the voice ribbon for the current state, so the button follows the wave.
     val (ribbonLeft, ribbonRight) = ribbonColors(voiceState)
     val gradientLeft by animateColorAsState(ribbonLeft, tween(900), label = "micGradientLeft")
@@ -89,7 +76,7 @@ fun MicButton(
         contentAlignment = Alignment.Center
     ) {
         if (voiceState == VoiceState.LISTENING) {
-            PulseRing(color = if (accentIdle) gradientLeft else containerColor)
+            PulseRing(color = gradientLeft)
         }
 
         if (active && contextTokens > 0) ContextRing(contextFraction)
@@ -99,24 +86,11 @@ fun MicButton(
             modifier = Modifier
                 .size(60.dp)
                 .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
-                .then(
-                    if (accentIdle) {
-                        Modifier.background(
-                            Brush.linearGradient(listOf(gradientLeft, gradientRight)),
-                            CircleShape
-                        )
-                    } else {
-                        Modifier
-                    }
-                ),
+                .background(Brush.linearGradient(listOf(gradientLeft, gradientRight)), CircleShape),
             shape = CircleShape,
-            containerColor = if (accentIdle) androidx.compose.ui.graphics.Color.Transparent else containerColor,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
             contentColor = androidx.compose.ui.graphics.Color.White,
-            elevation = if (accentIdle) {
-                FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
-            } else {
-                FloatingActionButtonDefaults.elevation()
-            },
+            elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
             interactionSource = interactionSource
         ) {
             if (voiceState == VoiceState.CONNECTING || voiceState == VoiceState.RESETTING) {

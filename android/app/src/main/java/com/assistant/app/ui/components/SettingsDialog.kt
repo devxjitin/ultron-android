@@ -455,7 +455,7 @@ fun SettingsPage(
     if (confirmingUnsavedChanges || pendingNavigation != null) {
         AlertDialog(
             onDismissRequest = cancelUnsavedPrompt,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = com.assistant.app.ui.theme.SheetShape,
             containerColor = AssistantSurfaceElevated,
             tonalElevation = 6.dp,
             title = { Text("Save changes?") },
@@ -489,7 +489,7 @@ fun SettingsPage(
     if (confirmingRemove) {
         AlertDialog(
             onDismissRequest = { confirmingRemove = false },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = com.assistant.app.ui.theme.SheetShape,
             containerColor = AssistantSurfaceElevated,
             tonalElevation = 6.dp,
             title = { Text("Remove API key?") },
@@ -515,7 +515,7 @@ fun SettingsPage(
     if (confirmingRemoveEmbeddingKey) {
         AlertDialog(
             onDismissRequest = { confirmingRemoveEmbeddingKey = false },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = com.assistant.app.ui.theme.SheetShape,
             containerColor = AssistantSurfaceElevated,
             tonalElevation = 6.dp,
             title = { Text("Remove knowledge API key?") },
@@ -559,7 +559,7 @@ fun SettingsPage(
     if (confirmingResetKnowledge) {
         AlertDialog(
             onDismissRequest = { confirmingResetKnowledge = false },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = com.assistant.app.ui.theme.SheetShape,
             containerColor = AssistantSurfaceElevated,
             tonalElevation = 6.dp,
             title = { Text("Reset knowledge?") },
@@ -584,7 +584,7 @@ fun SettingsPage(
         val docTitle = knowledgeDocuments.firstOrNull { it.id == docId }?.title.orEmpty()
         AlertDialog(
             onDismissRequest = { confirmingDeleteDocId = null },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = com.assistant.app.ui.theme.SheetShape,
             containerColor = AssistantSurfaceElevated,
             tonalElevation = 6.dp,
             title = { Text("Delete document?") },
@@ -749,7 +749,7 @@ internal fun SettingsDropdown(
 /** One knowledge document: icon tile, a one-line title with its size and date, and edit/delete actions. */
 @Composable
 private fun KnowledgeDocumentRow(doc: RagDocument, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
+    val shape = com.assistant.app.ui.theme.CardShape
     val updated = remember(doc.updatedAtMillis) {
         java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(doc.updatedAtMillis))
     }

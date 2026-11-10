@@ -42,6 +42,7 @@ import com.assistant.app.data.SessionGroup
 import com.assistant.app.data.StoredTurn
 import com.assistant.app.data.filterSessions
 import com.assistant.app.data.groupBySession
+import com.assistant.app.ui.theme.CardShape
 import com.assistant.app.ui.theme.AlertDialog
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantError
@@ -92,19 +93,16 @@ fun HistoryPage(
             onValueChange = { query = it.take(80) },
             placeholder = { Text("Search conversations", color = AssistantTextMuted, fontSize = 14.sp, maxLines = 1) },
             singleLine = true,
-            shape = RoundedCornerShape(18.dp),
+            shape = CardShape,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = AssistantFieldBackground, unfocusedContainerColor = AssistantFieldBackground,
                 focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                 cursorColor = AssistantAccent, focusedTextColor = AssistantTextPrimary, unfocusedTextColor = AssistantTextPrimary
             ),
-            modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
+            modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), CardShape)
         )
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "SESSIONS (${sessions.size})", color = AssistantTextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.sp, modifier = Modifier.weight(1f).padding(start = 4.dp)
-            )
+            PageLabel("Sessions (${sessions.size})", Modifier.weight(1f), top = 0.dp, bottom = 0.dp)
             TextButton(onClick = { confirmingClear = true }) { Text("Clear all", color = AssistantError, fontSize = 13.sp) }
         }
         if (sessions.isEmpty()) {
@@ -158,7 +156,7 @@ fun HistoryPage(
 @Composable
 private fun SessionCard(session: SessionGroup, open: Boolean, onToggle: () -> Unit, onDelete: () -> Unit) {
     val zone = ZoneId.systemDefault()
-    val shape = RoundedCornerShape(18.dp)
+    val shape = CardShape
     val start = timeFormatter.format(Instant.ofEpochMilli(session.startMillis).atZone(zone))
     val end = timeFormatter.format(Instant.ofEpochMilli(session.endMillis).atZone(zone))
     val range = if (start == end) start else "$start – $end"

@@ -28,6 +28,8 @@ class AssistantPalette(
     val amber: Color,
     val error: Color,
     val errorFill: Color,
+    val success: Color,
+    val info: Color,
     val textPrimary: Color,
     val textSecondary: Color,
     val textMuted: Color,
@@ -50,8 +52,11 @@ val LightPalette = AssistantPalette(
     accentFill = Color(0xFFB3202A),
     accentAlt = Color(0xFF6E1219),
     amber = Color(0xFF92400E),
-    error = Color(0xFFA8350A),
-    errorFill = Color(0xFFA8350A),
+    // Plum, not orange-red: clearly apart from the crimson brand accent and the brown warning, 6:1 on the cards.
+    error = Color(0xFF9F1D63),
+    errorFill = Color(0xFF9F1D63),
+    success = Color(0xFF1F7A3D),
+    info = Color(0xFF3D5A80),
     textPrimary = Color(0xFF1F1E1D),
     textSecondary = Color(0xFF5A5852),
     textMuted = Color(0xFF6E6B64),
@@ -75,6 +80,8 @@ val DarkPalette = AssistantPalette(
     amber = Color(0xFFE8B931),
     error = Color(0xFFFF9A3D),
     errorFill = Color(0xFFC2410C),
+    success = Color(0xFF4CC38A),
+    info = Color(0xFF8FB0D6),
     textPrimary = Color(0xFFEDEDEA),
     textSecondary = Color(0xFFA9A7A1),
     textMuted = Color(0xFF8A8882),
@@ -104,6 +111,8 @@ val AssistantAccentAlt: Color get() = ActivePalette.current.accentAlt
 val AssistantAmber: Color get() = ActivePalette.current.amber
 val AssistantError: Color get() = ActivePalette.current.error
 val AssistantErrorFill: Color get() = ActivePalette.current.errorFill
+val AssistantSuccess: Color get() = ActivePalette.current.success
+val AssistantInfo: Color get() = ActivePalette.current.info
 
 val AssistantTextPrimary: Color get() = ActivePalette.current.textPrimary
 val AssistantTextSecondary: Color get() = ActivePalette.current.textSecondary

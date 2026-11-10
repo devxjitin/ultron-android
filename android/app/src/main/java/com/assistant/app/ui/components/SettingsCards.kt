@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,6 +35,7 @@ import com.assistant.app.ui.theme.AssistantSelectedBg
 import com.assistant.app.ui.theme.AssistantSurface
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
+import com.assistant.app.ui.theme.CardShape
 import com.assistant.app.ui.theme.AssistantTextSecondary
 
 /** Heading above a group of settings. */
@@ -48,7 +48,7 @@ fun SettingsHeading(text: String) {
 /** A full-width card with a title, a hint and an on/off switch. */
 @Composable
 fun ToggleCard(title: String, checked: Boolean, onChange: (Boolean) -> Unit, hint: String = "") {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = CardShape
     Row(
         Modifier.fillMaxWidth().clip(shape).background(AssistantSurface, shape)
             .border(BorderStroke(1.dp, AssistantOutline), shape)
@@ -65,11 +65,7 @@ fun ToggleCard(title: String, checked: Boolean, onChange: (Boolean) -> Unit, hin
         Spacer(Modifier.size(12.dp))
         Switch(
             checked = checked, onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
-                uncheckedTrackColor = AssistantOutline, uncheckedBorderColor = AssistantOutline,
-                uncheckedThumbColor = Color.White
-            )
+            colors = assistantSwitchColors()
         )
     }
 }

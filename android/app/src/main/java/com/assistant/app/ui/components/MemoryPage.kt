@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Close
 import com.assistant.app.ui.theme.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -49,6 +48,7 @@ import com.assistant.app.ui.theme.AssistantAccentAlt
 import com.assistant.app.ui.theme.AssistantError
 import com.assistant.app.ui.theme.AssistantFieldBackground
 import com.assistant.app.ui.theme.AssistantOutline
+import com.assistant.app.ui.theme.CardShape
 import com.assistant.app.ui.theme.AssistantSurface
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
@@ -85,11 +85,7 @@ fun MemoryPage(
             Switch(
                 checked = enabled,
                 onCheckedChange = onEnabledChange,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
-                    uncheckedTrackColor = AssistantFieldBackground, uncheckedBorderColor = AssistantOutline,
-                    uncheckedThumbColor = AssistantTextMuted
-                )
+                colors = assistantSwitchColors()
             )
         }
 
@@ -100,9 +96,9 @@ fun MemoryPage(
                 onValueChange = { draft = it.take(MAX_MEMORY_TEXT_CHARS) },
                 placeholder = { Text("Add something to remember", color = AssistantTextMuted, fontSize = 14.sp, maxLines = 1) },
                 singleLine = true,
-                shape = RoundedCornerShape(18.dp),
+                shape = CardShape,
                 colors = fieldColors(),
-                modifier = Modifier.weight(1f).border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
+                modifier = Modifier.weight(1f).border(BorderStroke(1.dp, AssistantOutline), CardShape)
             )
             Spacer(Modifier.size(10.dp))
             Box(
@@ -117,10 +113,7 @@ fun MemoryPage(
 
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "SAVED (${memories.size})", color = AssistantTextMuted, fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f).padding(start = 4.dp)
-            )
+            PageLabel("Saved (${memories.size})", Modifier.weight(1f), top = 0.dp, bottom = 0.dp)
             if (memories.isNotEmpty()) {
                 TextButton(onClick = { confirmingClear = true }) { Text("Clear all", color = AssistantError, fontSize = 13.sp) }
             }
@@ -133,8 +126,8 @@ fun MemoryPage(
         }
         memories.asReversed().forEach { item ->
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(16.dp)).background(AssistantSurface)
-                    .border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(16.dp))
+                Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(CardShape).background(AssistantSurface)
+                    .border(BorderStroke(1.dp, AssistantOutline), CardShape)
                     .clickable { editing = item }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -148,14 +141,11 @@ fun MemoryPage(
         }
         if (removedByAssistant.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            Text(
-                "REMOVED BY THE ASSISTANT", color = AssistantTextMuted, fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-            )
+            PageLabel("Removed by the assistant", top = 0.dp)
             removedByAssistant.asReversed().forEach { item ->
                 Row(
-                    Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(16.dp)).background(AssistantSurface)
-                        .border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(16.dp))
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(CardShape).background(AssistantSurface)
+                        .border(BorderStroke(1.dp, AssistantOutline), CardShape)
                         .padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -176,7 +166,7 @@ fun MemoryPage(
             text = {
                 TextField(
                     value = text, onValueChange = { text = it.take(MAX_MEMORY_TEXT_CHARS) },
-                    shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth()
+                    shape = CardShape, colors = fieldColors(), modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {

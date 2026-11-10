@@ -3,6 +3,15 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.6 - 2026-11-10
+
+### Fixed
+- Toasts now tell success, information, warning and error apart: green for success, blue-grey for information, and a dark icon on the amber warning so it can be read.
+- Light theme: errors use a plum shade that no longer looks like the red brand colour, the home background stays warm instead of turning blue-grey, and the voice ribbon is stronger on the pale page.
+- Dark theme: default Material buttons, checkboxes and progress bars use the deeper red so white on them is readable.
+- Switches show a clear thumb and outline when off, on every page.
+- Cards, small items and dialogs share the same corner sizes, and section captions share one style.
+
 ## 1.23.5 - 2026-11-10
 
 ### Fixed

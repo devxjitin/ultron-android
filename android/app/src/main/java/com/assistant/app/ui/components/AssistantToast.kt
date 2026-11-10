@@ -32,13 +32,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.assistant.app.ui.theme.AssistantAccentFill
+import com.assistant.app.ui.theme.AssistantInfo
+import com.assistant.app.ui.theme.AssistantSuccess
 import com.assistant.app.ui.theme.AssistantAmber
 import com.assistant.app.ui.theme.AssistantErrorFill
-import com.assistant.app.ui.theme.AssistantPrimaryLight
 import com.assistant.app.ui.theme.AssistantSurfaceElevated
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.viewmodel.AppNotificationType
@@ -71,10 +72,10 @@ fun AssistantToastHost(
     ) {
         val shape = RoundedCornerShape(50)
         val (accentColor, icon) = when (type) {
-            AppNotificationType.SUCCESS -> AssistantPrimaryLight to Icons.Filled.Check
+            AppNotificationType.SUCCESS -> AssistantSuccess to Icons.Filled.Check
             AppNotificationType.ERROR -> AssistantErrorFill to Icons.Filled.Error
             AppNotificationType.WARNING -> AssistantAmber to Icons.Filled.Warning
-            AppNotificationType.INFO -> AssistantAccentFill to Icons.Filled.Info
+            AppNotificationType.INFO -> AssistantInfo to Icons.Filled.Info
         }
         Row(
             modifier = Modifier
@@ -93,7 +94,8 @@ fun AssistantToastHost(
                 Icon(
                     icon,
                     contentDescription = null,
-                    tint = Color.White,
+                    // Light fills (amber, green and blue-grey in the dark theme) need a dark icon to stay readable.
+                    tint = if (accentColor.luminance() > 0.3f) Color(0xFF1F1E1D) else Color.White,
                     modifier = Modifier.size(16.dp)
                 )
             }

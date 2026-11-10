@@ -12,17 +12,25 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.assistant.app.ui.theme.ActivePalette
 import com.assistant.app.viewmodel.VoiceState
 import kotlin.math.PI
 import kotlin.math.sin
 
 /** The ribbon's gradient end colours for a state; the mic button uses the same so they match. */
-fun ribbonColors(voiceState: VoiceState): Pair<Color, Color> = when (voiceState) {
-    VoiceState.LISTENING -> Color(0xFFC4232C) to Color(0xFFFF5A4D)
-    VoiceState.SPEAKING -> Color(0xFF5E7A99) to Color(0xFFA9B8C8)
-    VoiceState.ERROR -> Color(0xFFD9650F) to Color(0xFFFFB347)
-    else -> Color(0xFF7A1218) to Color(0xFFC4232C)
-}
+fun ribbonColors(voiceState: VoiceState): Pair<Color, Color> =
+    if (ActivePalette.current.dark) when (voiceState) {
+        VoiceState.LISTENING -> Color(0xFFC4232C) to Color(0xFFFF5A4D)
+        VoiceState.SPEAKING -> Color(0xFF5E7A99) to Color(0xFFA9B8C8)
+        VoiceState.ERROR -> Color(0xFFD9650F) to Color(0xFFFFB347)
+        else -> Color(0xFF7A1218) to Color(0xFFC4232C)
+    } else when (voiceState) {
+        // Deeper pairs for the pale page, where the dark-theme tints almost vanish.
+        VoiceState.LISTENING -> Color(0xFF9B1B24) to Color(0xFFD63A3A)
+        VoiceState.SPEAKING -> Color(0xFF2F4A6B) to Color(0xFF5C7FA6)
+        VoiceState.ERROR -> Color(0xFFB04F00) to Color(0xFFE08A1E)
+        else -> Color(0xFF6E1219) to Color(0xFFB3202A)
+    }
 
 /** A tapered, luminous ribbon, drawn locally and driven by real microphone/playback levels. */
 @Composable
@@ -55,11 +63,14 @@ fun VoiceRibbon(voiceState: VoiceState, amplitude: () -> Float, modifier: Modifi
         tween(160), label = "ribbonLevel"
     )
     val path = remember { Path() }
+    val darkTheme = ActivePalette.current.dark
     Canvas(modifier) {
         val samples = 64
         val layers = 10
         val p = phase.floatValue
         val strength = level.value
+        // The pale page needs a stronger wash than the near-black one.
+        val layerBoost = if (darkTheme) 1f else 1.7f
         val gradient = Brush.horizontalGradient(listOf(Color.Transparent, left, right, Color.Transparent))
         fun y(t: Float): Float = size.height * (0.5f +
             sin(t * 5.2f - p) * (0.16f + strength * 0.16f) +
@@ -82,7 +93,7 @@ fun VoiceRibbon(voiceState: VoiceState, amplitude: () -> Float, modifier: Modifi
                 path.lineTo(size.width * t, y(t) + width * 0.65f)
             }
             path.close()
-            drawPath(path, gradient, alpha = 0.08f + (1f - spread) * 0.11f)
+            drawPath(path, gradient, alpha = ((0.08f + (1f - spread) * 0.11f) * layerBoost).coerceAtMost(1f))
         }
         path.reset()
         for (i in 0..samples) {

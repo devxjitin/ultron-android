@@ -39,6 +39,11 @@ import com.assistant.app.ui.theme.AssistantSurface
 import com.assistant.app.ui.theme.AssistantTextMuted
 import com.assistant.app.ui.theme.AssistantTextPrimary
 import com.assistant.app.ui.theme.AssistantTextSecondary
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import com.assistant.app.ui.theme.AssistantAccentFill
+import com.assistant.app.ui.theme.CardShape
 import java.util.Locale
 
 /** The scrolling column every full page of the menu is built on, with the same side margins as Memory. */
@@ -53,21 +58,32 @@ fun PageColumn(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
 /** A flat rounded card, a shade off the page, the container used for each group on a page. */
 @Composable
 fun PageCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = CardShape
     Column(
         modifier.fillMaxWidth().clip(shape).background(AssistantSurface).padding(16.dp),
         content = content
     )
 }
 
-/** Plain grey caption above a card. */
+/** The one section caption used on every page: sentence case, 13sp, grey unless a page passes [color]. */
 @Composable
-fun PageLabel(text: String, modifier: Modifier = Modifier) {
+fun PageLabel(
+    text: String, modifier: Modifier = Modifier, color: Color = AssistantTextSecondary,
+    top: Dp = 20.dp, bottom: Dp = 8.dp
+) {
     Text(
-        text, color = AssistantTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-        modifier = modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp)
+        text, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+        modifier = modifier.padding(start = 4.dp, top = top, bottom = bottom)
     )
 }
+
+/** Shared on/off switch colours: a muted thumb and outlined track when off, so the off state shows on a light card. */
+@Composable
+fun assistantSwitchColors() = SwitchDefaults.colors(
+    checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White, checkedBorderColor = AssistantAccentFill,
+    uncheckedTrackColor = AssistantFieldBackground, uncheckedBorderColor = AssistantTextMuted,
+    uncheckedThumbColor = AssistantTextMuted
+)
 
 /** A label on the left and its value on the right. */
 @Composable
