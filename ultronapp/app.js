@@ -94,8 +94,14 @@ function renderDashboard() {
   const expiring = licenses.filter((l) => l.state === "active" && l.expiresAt && l.expiresAt - t <= 30 * DAY)
     .sort((a, b) => a.expiresAt - b.expiresAt);
   const stat = (label, n, cls = "") => h("div", { class: `stat ${cls}` }, h("b", {}, String(n)), h("span", {}, label));
-  // Revoked keys are not counted as revenue (a revoked key is usually a refund).
-  const paid = licenses.filter((l) => l.state !== "revoked");
+  // Revoked keys are not counted as revenue (a revoked key is usually a refund) -- except a key that was
+  // replaced after the buyer lost it: its payment stands as long as the replacement chain still ends in a live key.
+  const replacement = new Map(licenses.filter((l) => l.reissuedFrom).map((l) => [l.reissuedFrom, l]));
+  const stillHeld = (l) => {
+    for (let i = 0; i < licenses.length && l; i++, l = replacement.get(l.id)) if (l.state !== "revoked") return true;
+    return false;
+  };
+  const paid = licenses.filter(stillHeld);
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000;
   const sum = (rows) => rows.reduce((total, l) => total + (l.amount || 0), 0);
   $("stats").replaceChildren(

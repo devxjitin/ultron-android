@@ -56,6 +56,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.MAX_SKILL_BODY_CHARS
+import com.assistant.app.data.MAX_SKILL_FILE_BYTES
+import com.assistant.app.data.readAtMost
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.assistant.app.data.SkillEntry
 import com.assistant.app.data.SkillParser
 import com.assistant.app.data.draftFromMarkdown
@@ -287,22 +293,32 @@ private fun SkillEditor(
     var body by remember(entry) { mutableStateOf(entry?.group?.body.orEmpty()) }
     var error by remember(entry) { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var reading by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val read = runCatching {
-            val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (c.moveToFirst() && i >= 0) c.getString(i) else null
-            }.orEmpty()
-            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
-            fileName to text
-        }.getOrNull()
-        if (read == null || read.second.isBlank()) {
-            error = "Could not read that file. Use a .md or .txt file."
-        } else {
-            val draft = SkillParser.draftFromMarkdown(read.second, read.first)
-            name = draft.name; description = draft.description; body = draft.instruction
-            error = null
+        reading = true
+        error = null
+        scope.launch {
+            // The provider may be a slow cloud stream, so the read stays off the UI thread and is size-capped.
+            val read = withContext(Dispatchers.IO) {
+                runCatching {
+                    val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                        val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (c.moveToFirst() && i >= 0) c.getString(i) else null
+                    }.orEmpty()
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_SKILL_FILE_BYTES) }
+                    bytes?.let { fileName to it.toString(Charsets.UTF_8) }
+                }.getOrNull()
+            }
+            reading = false
+            if (read == null || read.second.isBlank()) {
+                error = "Could not read that file. Use a .md or .txt file under 256 KB."
+            } else {
+                val draft = SkillParser.draftFromMarkdown(read.second, read.first)
+                name = draft.name; description = draft.description; body = draft.instruction
+                error = null
+            }
         }
     }
     AlertDialog(
@@ -310,8 +326,11 @@ private fun SkillEditor(
         title = { Text(if (entry == null) "New skill" else "Edit skill") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextButton(onClick = { picker.launch(arrayOf("text/markdown", "text/plain", "text/x-markdown", "application/octet-stream")) }) {
-                    Text("Upload .md file")
+                TextButton(
+                    enabled = !reading,
+                    onClick = { picker.launch(arrayOf("text/markdown", "text/plain", "text/x-markdown", "application/octet-stream")) }
+                ) {
+                    Text(if (reading) "Reading file…" else "Upload .md file")
                 }
                 SkillField(name, { name = it.take(48) }, "Name", "e.g. trip-planner", enabled = entry == null, singleLine = true)
                 SkillField(description, { description = it.take(300) }, "Description", "What it is for")

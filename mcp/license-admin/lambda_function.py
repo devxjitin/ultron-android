@@ -123,6 +123,7 @@ def _public(item, now):
         "note": str(item.get("note", "")),
         "emailedAt": int(item.get("emailedAt", 0)),
         "amount": int(item.get("amount", 0)),
+        "reissuedFrom": str(item.get("reissuedFrom", "")),
     }
 
 
@@ -247,7 +248,10 @@ def reissue(event, now, license_id):
     if not all(fields.get(f) for f in REQUIRED_DETAILS):
         return _resp(400, {"error": "details_missing"})
     # A replacement carries no amount: the buyer already paid for the key it replaces.
-    keys, items = _make_keys(1, {**fields, "reissuedFrom": license_id}, str(old.get("plan", "")), int(old.get("durationDays", 0)), now, 0)
+    # A key already running keeps its end date, so a lost-key replacement never restarts the purchased term.
+    # An unused key (expiresAt 0) still starts its term at first activation; so does a lifetime key.
+    carried = {"expiresAt": int(old["expiresAt"])} if int(old.get("expiresAt", 0)) else {}
+    keys, items = _make_keys(1, {**fields, **carried, "reissuedFrom": license_id}, str(old.get("plan", "")), int(old.get("durationDays", 0)), now, 0)
     # Only once the new key exists is the old one switched off, so a failure never leaves the buyer with nothing.
     _apply(license_id, {"status": "revoked"}, now)
     emailed = _send_keys(keys, items)

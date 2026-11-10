@@ -18,6 +18,9 @@ data class SkillGroup(val name: String, val description: String, val body: Strin
 const val USE_SKILL_TOOL = "use_skill"
 /** Most characters of one skill body returned to the model. */
 const val MAX_SKILL_BODY_CHARS = 8_000
+
+/** Largest skill file the picker will read; the body is cut to [MAX_SKILL_BODY_CHARS] anyway. */
+const val MAX_SKILL_FILE_BYTES = 256 * 1024
 private const val MAX_SKILL_DESCRIPTION_CHARS = 300
 const val OWN_SKILLS_CATEGORY = "My skills"
 /** Skills that stay on: the assistant relies on them to describe itself honestly. */

@@ -11,6 +11,7 @@ import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.data.knowledgeKeyFor
 import com.assistant.app.data.AccessGate
+import com.assistant.app.data.readAtMost
 import com.assistant.app.data.ApiKeyStore
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.ConversationHistoryIndexer
@@ -435,8 +436,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
-                    val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    if (bytes == null || bytes.size > MAX_PICKED_IMAGE_BYTES) null else imageLibrary.add(bytes, title, description)
+                    val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PICKED_IMAGE_BYTES) }
+                    if (bytes == null) null else imageLibrary.add(bytes, title, description)
                 } catch (e: Exception) {
                     null
                 }
