@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -168,18 +167,14 @@ private fun SkillSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     Switch(
         checked = checked,
         onCheckedChange = onChange,
-        colors = SwitchDefaults.colors(
-            checkedTrackColor = AssistantAccentFill, checkedThumbColor = Color.White,
-            uncheckedTrackColor = AssistantFieldBackground, uncheckedBorderColor = AssistantOutline,
-            uncheckedThumbColor = AssistantTextMuted
-        )
+        colors = assistantSwitchColors()
     )
 }
 
 /** One skill in the list: name, description, a switch (not for the one that always stays on) and Edit for your own. */
 @Composable
 private fun SkillCard(entry: SkillEntry, onToggle: (Boolean) -> Unit, onEdit: () -> Unit, onOpen: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = com.assistant.app.ui.theme.CardShape
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape).clickable(onClick = onOpen)
             .background(AssistantSurface).border(BorderStroke(1.dp, AssistantOutline), shape).padding(16.dp)

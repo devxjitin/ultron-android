@@ -69,7 +69,7 @@ fun KnowledgeDocEditDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        shape = com.assistant.app.ui.theme.SheetShape,
         containerColor = AssistantSurfaceElevated,
         tonalElevation = 6.dp,
         title = { Text(if (existing == null) "Add document" else if (viewing) title.ifBlank { "Document" } else "Edit document") },

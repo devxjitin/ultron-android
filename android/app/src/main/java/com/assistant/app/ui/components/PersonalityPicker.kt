@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.assistant.app.data.Personalities
 import com.assistant.app.data.Personality
+import com.assistant.app.ui.theme.CardShape
 import com.assistant.app.ui.theme.AssistantAccent
 import com.assistant.app.ui.theme.AssistantOutline
 import com.assistant.app.ui.theme.AssistantSurface
@@ -45,7 +46,7 @@ fun PersonalityPicker(selectedId: String, onSelect: (String) -> Unit, modifier: 
 
 @Composable
 private fun PersonalityCard(personality: Personality, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = CardShape
     val border by animateColorAsState(if (selected) AssistantAccent else AssistantOutline, label = "personalityBorder")
     Row(
         Modifier.fillMaxWidth().clip(shape).background(AssistantSurface, shape)

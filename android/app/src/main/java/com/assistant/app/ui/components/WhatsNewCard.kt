@@ -49,10 +49,7 @@ fun WhatsNewCard(entries: List<ChangelogEntry>, onDismiss: () -> Unit) {
                             }
                         }
                         entry.sections.forEach { section ->
-                            Text(
-                                section.title.uppercase(), color = AssistantAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 1.sp, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
-                            )
+                            PageLabel(section.title, color = AssistantAccent, top = 12.dp, bottom = 2.dp)
                             section.items.forEach { item ->
                                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.Start) {
                                     Text("•", color = AssistantTextMuted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(end = 10.dp))

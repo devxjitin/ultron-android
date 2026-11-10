@@ -425,7 +425,6 @@ fun AssistantScreen(
                         else -> actions.onRequestPermission()
                     }
                 },
-                accent = true,
                 modifier = Modifier.padding(bottom = 28.dp)
             )
         }

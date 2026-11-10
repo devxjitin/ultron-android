@@ -49,8 +49,9 @@ private val White = Color.White
 private fun colorSchemeFor(p: AssistantPalette) =
     if (p.dark) {
         darkColorScheme(
-            primary = p.accent, onPrimary = White,
-            secondary = p.accent, onSecondary = White,
+            // accentFill, not accent: white on the bright dark-theme red is only 3:1, on the deep red it is 5.5:1.
+            primary = p.accentFill, onPrimary = White,
+            secondary = p.accentFill, onSecondary = White,
             tertiary = p.amber, onTertiary = Color.Black,
             background = p.background, onBackground = p.textPrimary,
             surface = p.surface, onSurface = p.textPrimary,
@@ -87,6 +88,11 @@ private fun colorSchemeFor(p: AssistantPalette) =
 
 /** Every button is a full pill. */
 val AppButtonShape = RoundedCornerShape(50)
+
+/** Corner radii used app-wide: cards 16dp, small items (chips, rows inside a card) 12dp, sheets and dialogs 24dp. */
+val CardShape = RoundedCornerShape(16.dp)
+val SmallShape = RoundedCornerShape(12.dp)
+val SheetShape = RoundedCornerShape(24.dp)
 
 // Softer, rounder corners everywhere: text fields, buttons, menus and dialogs all read these.
 private val AssistantShapes = Shapes(

@@ -70,6 +70,7 @@ import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.Tune
+import com.assistant.app.ui.theme.CardShape
 import com.assistant.app.ui.theme.AppButtonShape
 import com.assistant.app.ui.theme.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -311,7 +312,7 @@ fun ConnectorsPage(
             placeholder = { Text("Search connectors", color = AssistantTextMuted) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = AssistantTextMuted) },
             singleLine = true,
-            shape = RoundedCornerShape(18.dp),
+            shape = CardShape,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = AssistantFieldBackground,
                 unfocusedContainerColor = AssistantFieldBackground,
@@ -321,7 +322,7 @@ fun ConnectorsPage(
                 focusedTextColor = AssistantTextPrimary,
                 unfocusedTextColor = AssistantTextPrimary
             ),
-            modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), RoundedCornerShape(18.dp))
+            modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, AssistantOutline), CardShape)
         )
         Spacer(Modifier.height(10.dp))
         CategoryChips(
@@ -391,8 +392,7 @@ private fun localAccessGranted(context: Context, kind: Kind.Local, @Suppress("UN
 
 @Composable
 private fun SectionHeading(text: String) {
-    Text(text.uppercase(), color = AssistantTextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 10.dp))
+    PageLabel(text, top = 6.dp, bottom = 10.dp)
 }
 
 @Composable
