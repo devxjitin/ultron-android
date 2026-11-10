@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.7 - 2026-11-10
+
+### Fixed
+- Admin dashboard: the main button keeps readable white text on red in dark mode, and the notice toast stands out in both themes.
+
 ## 1.23.6 - 2026-11-10
 
 ### Fixed
