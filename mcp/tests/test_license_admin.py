@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -265,6 +266,20 @@ class AdminTests(unittest.TestCase):
                          (new["name"], new["email"], new["plan"], new["durationDays"], new["reissuedFrom"]))
         self.assertEqual(2, len(self.mail.sent))
         self.assertIn(answer["keys"][0], self.mail.sent[1]["Message"]["Body"]["Text"]["Data"])
+
+    def test_reissue_of_a_running_key_keeps_its_end_date(self):
+        old = self.create()
+        old_id = old["licenses"][0]["id"]
+        ends = int(time.time()) + 86_400
+        self.table.items[old_id]["expiresAt"] = ends
+        answer = call(request("POST", f"/v1/admin/licenses/{old_id}/reissue"))[1]
+        self.assertEqual(ends, self.table.items[adm.key_hash(answer["keys"][0])]["expiresAt"])
+        self.assertEqual(old_id, answer["licenses"][0]["reissuedFrom"])
+
+    def test_reissue_of_an_unused_key_starts_its_term_at_activation(self):
+        old = self.create()
+        answer = call(request("POST", f"/v1/admin/licenses/{old['licenses'][0]['id']}/reissue"))[1]
+        self.assertEqual(0, self.table.items[adm.key_hash(answer["keys"][0])]["expiresAt"])
 
     def test_reissue_of_an_unknown_key_is_not_found(self):
         self.assertEqual(404, call(request("POST", "/v1/admin/licenses/" + "0" * 64 + "/reissue"))[0])
