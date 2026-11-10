@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.5 - 2026-11-10
+
+### Fixed
+- Adding a picture or uploading a skill file no longer freezes or crashes the app when the file is very large or slow to open. Pictures over 25 MB and skill files over 256 KB are refused up front.
+
 ## 1.23.4 - 2026-11-09
 
 ### Changed
