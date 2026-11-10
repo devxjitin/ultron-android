@@ -29,6 +29,7 @@ import com.assistant.app.util.playbackHasReached
  * order they arrive. A small channel decouples network callbacks from the audio thread.
  */
 class AudioPlayer(
+    /** The 0..1 wave level of what is being heard right now (see [PlaybackLevels]), about every 20 ms; 0 when silent. */
     private val onPlaybackAmplitude: (Float) -> Unit = {},
     /** Fired once playback has actually finished (queue empty AND AudioTrack has caught up to
      *  everything written), not just when chunks stop arriving -- callers should treat this as
@@ -61,6 +62,8 @@ class AudioPlayer(
         /** Absolute ceiling on a drain wait even if the playback head keeps creeping forward. */
         const val MAX_DRAIN_MS = 15000L
         const val BYTES_PER_FRAME = 2 // 16-bit mono PCM
+        /** How finely the wave level follows the voice, and how often it is reported. */
+        const val LEVEL_SLICE_MS = 20
     }
 
     private val sampleRate = GeminiLiveClient.OUTPUT_SAMPLE_RATE_HZ
@@ -87,6 +90,7 @@ class AudioPlayer(
     private val turnCompleteRequested = AtomicBoolean(false)
     private val playbackFailed = AtomicBoolean(false)
     @Volatile private var totalFramesWritten = 0L
+    private val levels by lazy { PlaybackLevels(sampleRate * LEVEL_SLICE_MS / 1000) }
     // [onPlaybackAmplitude]/[onPlaybackIdle] are consumed by the ViewModel, which mutates plain
     // (unsynchronized) fields on the assumption it's only ever called from the main thread. The
     // player loop below runs on an IO dispatcher, so callbacks fired from inside it are posted
@@ -148,6 +152,7 @@ class AudioPlayer(
             return false
         }
         track = audioTrack
+        startLevelTicker()
 
         var prebufferMs = INITIAL_PREBUFFER_MS
         var lastUnderrunCount = 0
@@ -168,6 +173,7 @@ class AudioPlayer(
                 val chunk = packet.pcm
                 try {
                     synchronized(trackLock) {
+                        levels.add(totalFramesWritten, chunk)
                         var offset = 0
                         while (offset < chunk.size) {
                             val frameBeforeWrite = totalFramesWritten
@@ -211,8 +217,6 @@ class AudioPlayer(
                     return false
                 }
                 if (playbackFailed.get()) return false
-                val amplitude = rmsAmplitude(chunk)
-                mainHandler.post { onPlaybackAmplitude(amplitude) }
                 return true
             }
 
@@ -330,6 +334,21 @@ class AudioPlayer(
         return true
     }
 
+    /** Reports the wave level of what is playing right now, only when it changes, so the wave follows the heard voice. */
+    private fun startLevelTicker() {
+        scope.launch {
+            var reported = 0f
+            while (isActive) {
+                delay(LEVEL_SLICE_MS.toLong())
+                val level = levels.levelAt(playbackHeadFrames())
+                if (level != reported) {
+                    reported = level
+                    mainHandler.post { onPlaybackAmplitude(level) }
+                }
+            }
+        }
+    }
+
     /** Waits (with a timeout safety cap) for AudioTrack to actually finish playing everything
      *  written so far, then fires [onPlaybackIdle]. Only called once the caller has confirmed
      *  via [notifyTurnComplete] that no more chunks are coming for this turn. */
@@ -389,6 +408,7 @@ class AudioPlayer(
         while (queue.tryReceive().isSuccess) { /* drain */ }
         resetBufferingRequested.set(true)
         turnCompleteRequested.set(false)
+        levels.clear()
         // pause/flush/play run under trackLock, which the player thread holds during a blocking
         // write() -- do them off the main thread so a barge-in can't freeze the UI, and only
         // report idle (unmute, back to LISTENING) once the track has really been flushed.
@@ -405,6 +425,7 @@ class AudioPlayer(
                             // playback actually is now, so a later notifyTurnComplete() doesn't wait on
                             // frames that were just thrown away.
                             totalFramesWritten = it.playbackHeadPosition.toLong()
+                            levels.clear()
                         } catch (_: IllegalStateException) {
                             // released or broken underneath us; the player loop reports real failures
                         }
