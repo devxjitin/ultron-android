@@ -3,6 +3,11 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.23.8 - 2026-11-10
+
+### Changed
+- The voice wave now reacts clearly to your voice and to the assistant's: it rises quickly with every word and settles back smoothly. Quiet speech already lifts it, and the assistant's wave is timed to what you hear instead of running ahead of it.
+
 ## 1.23.7 - 2026-11-10
 
 ### Fixed
