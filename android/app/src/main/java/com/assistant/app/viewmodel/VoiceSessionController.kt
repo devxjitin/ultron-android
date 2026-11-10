@@ -8,6 +8,7 @@ import com.assistant.app.AppForegroundService
 import com.assistant.app.BuildConfig
 import com.assistant.app.audio.AudioPlayer
 import com.assistant.app.audio.MicStreamer
+import com.assistant.app.audio.visualLevel
 import com.assistant.app.data.AccessGate
 import com.assistant.app.data.AppSettingsStore
 import com.assistant.app.data.AssistantOptions
@@ -918,7 +919,7 @@ internal class VoiceSessionController(
     private fun onMicAmplitude(amp: Float) {
         if (uiState.value.isMicMuted) return
         val voiceState = uiState.value.voiceState
-        if (voiceState != VoiceState.SPEAKING) voiceLevel.value = amp
+        if (voiceState != VoiceState.SPEAKING) voiceLevel.value = visualLevel(amp)
         when (val result = speech.onAmplitude(amp, voiceState)) {
             is SpeechDetector.Result.Speech -> {
                 if (result.inConversation) liveClient?.latency?.turn()?.speech(result.at, "rms")

@@ -69,4 +69,36 @@ class PcmAmplitudeTest {
         applyPcmGain(result, 1f)
         assertEquals(original.toList(), result.toList())
     }
+
+    @Test
+    fun `visual level is zero for silence and room noise`() {
+        assertEquals(0f, visualLevel(0f), 0f)
+        assertEquals(0f, visualLevel(0.002f), 0f)
+        assertEquals(0f, visualLevel(Float.NaN), 0f)
+    }
+
+    @Test
+    fun `visual level lifts normal speech to a clearly visible height`() {
+        assertTrue(visualLevel(0.02f) in 0.3f..0.5f)
+        assertTrue(visualLevel(0.1f) in 0.65f..0.85f)
+    }
+
+    @Test
+    fun `visual level is capped at one and never goes down as the sound gets louder`() {
+        assertEquals(1f, visualLevel(0.9f), 0f)
+        var last = -1f
+        for (i in 1..100) {
+            val level = visualLevel(i / 100f)
+            assertTrue(level >= last)
+            last = level
+        }
+    }
+
+    @Test
+    fun `rms of a byte range ignores the rest of the buffer`() {
+        val loud = Short.MAX_VALUE
+        val bytes = pcm16Of(0, 0, loud, loud)
+        assertEquals(0f, rmsAmplitude(bytes, 0, 4), 0f)
+        assertEquals(1f, rmsAmplitude(bytes, 4, 8), 0.001f)
+    }
 }
