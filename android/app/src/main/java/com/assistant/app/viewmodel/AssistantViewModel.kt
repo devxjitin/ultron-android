@@ -794,6 +794,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether knowledge search lets Gemini Decisions pick the passages. Read at search time; nothing to rebuild. */
+    fun onDecisionsRerankToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Smarter document search on" else "Smarter document search off") {
+            settingsStore.setDecisionsRerankEnabled(enabled)
+        }
+    }
+
     /** Whether a notification that arrives during a voice session is read out. Local only; nothing to rebuild. */
     fun onAnnounceNotificationsToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Notifications will be read out" else "Notifications won't be read out") {

@@ -16,6 +16,8 @@ private const val NEIGHBOR_CHAR_BUDGET = 3_000
 /** Upper bound on chunks retrieved for "list everything" style questions. */
 private const val MAX_LIST_CHUNK_LIMIT = 20
 private const val RRF_K = 60
+/** Candidates fetched when a reranker will pick the final chunks. */
+private const val RERANK_POOL = 20
 private val listQueryRegex = Regex(
     "\\b(all|every|list|complete|entire|full|schedule|timetable|remaining|saare|sabhi)\\b|सभी|सारे|पूरा|पूरी",
     RegexOption.IGNORE_CASE
@@ -73,7 +75,12 @@ internal fun assembleContext(
 class RagSearchEngine(
     private val documentStore: RagDocumentStore,
     private val embeddingClient: GeminiEmbeddingClient,
-    private val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT
+    private val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
+    /**
+     * Optional second pass over the fused candidates. Returns the chunks worth keeping (empty means nothing answers the
+     * question), or null when it could not run, in which case the normal top chunks are used.
+     */
+    private val rerank: (suspend (query: String, candidates: List<RagChunk>) -> List<RagChunk>?)? = null
 ) {
 
     /** Embeds the query in the current model space; fails fast if stored chunks need migration first. */
@@ -100,7 +107,9 @@ class RagSearchEngine(
         val limit = if (isListQuery(query)) {
             minOf(retrievalChunkLimit * 2, MAX_LIST_CHUNK_LIMIT)
         } else retrievalChunkLimit
-        var matches = documentStore.nearestChunks(queryEmbedding, limit, trace)
+        // A reranker needs a wider pool to choose from than the final answer will use.
+        val poolLimit = if (rerank != null) maxOf(limit, RERANK_POOL) else limit
+        var matches = documentStore.nearestChunks(queryEmbedding, poolLimit, trace)
         // A document edit can land between loading the chunks and the vector lookup. Reload so keyword ranking
         // and the final text come from the same revision as the vector matches (the query is not embedded again).
         var attempts = 0
@@ -108,11 +117,11 @@ class RagSearchEngine(
             val reloaded = documentStore.chunksWithRevision(trace)
             revision = reloaded.first
             chunks = reloaded.second
-            matches = documentStore.nearestChunks(queryEmbedding, limit, trace)
+            matches = documentStore.nearestChunks(queryEmbedding, poolLimit, trace)
         }
         if (chunks.isEmpty()) return@coroutineScope emptyList()
-        val keywordKeys = withContext(Dispatchers.Default) { Bm25Cache.forChunks(chunks).search(query, limit) }
-        val fusedKeys = fuseRankings(matches.chunks.map { it.key() }, keywordKeys, limit = limit)
+        val keywordKeys = withContext(Dispatchers.Default) { Bm25Cache.forChunks(chunks).search(query, poolLimit) }
+        val fusedKeys = fuseRankings(matches.chunks.map { it.key() }, keywordKeys, limit = poolLimit)
         if (trace != null && rankingStartedAt != null) trace.event("ranking_complete", mapOf(
             "duration_ms" to (trace.now() - rankingStartedAt), "match_count" to fusedKeys.size,
             "vector_count" to matches.chunks.size, "keyword_count" to keywordKeys.size,
@@ -121,7 +130,14 @@ class RagSearchEngine(
         if (fusedKeys.isEmpty()) return@coroutineScope emptyList()
 
         val byKey = chunks.associateBy { it.key() }
-        val topChunks = fusedKeys.mapNotNull { byKey[it] }
+        val pool = fusedKeys.mapNotNull { byKey[it] }
+        val reranked = rerank?.let { rerankFn ->
+            try { rerankFn(query, pool) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+        }
+        trace?.event("rerank", mapOf("ran" to (reranked != null), "kept" to (reranked?.size ?: -1)))
+        // Null: the reranker could not run, so keep today's result. Empty: nothing answers the question.
+        if (reranked != null && reranked.isEmpty()) return@coroutineScope emptyList()
+        val topChunks = reranked ?: pool.take(limit)
         assembleContext(topChunks, chunks, matches.documents.associate { it.id to it.title })
     }
 

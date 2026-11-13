@@ -99,6 +99,7 @@ fun SettingsPage(
     onMicSensitivitySelected: (MicSensitivity) -> Unit,
     onBargeInToggled: (Boolean) -> Unit,
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
+    onDecisionsRerankToggled: (Boolean) -> Unit = {},
     onOwnerNameChanged: (String) -> Unit = {},
     onPersonalitySelected: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, Int) -> Unit,
@@ -292,7 +293,8 @@ fun SettingsPage(
                 0 -> Column {
                     GeneralSettingsContent(
                         settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
-                        onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected
+                        onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected,
+                        onDecisionsRerankToggled
                     )
                     // The old Developer page now lives at the end of Settings.
                     Spacer(Modifier.height(24.dp))
@@ -637,7 +639,8 @@ private fun GeneralSettingsContent(
     onBargeInToggled: (Boolean) -> Unit,
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit,
-    onPersonalitySelected: (String) -> Unit
+    onPersonalitySelected: (String) -> Unit,
+    onDecisionsRerankToggled: (Boolean) -> Unit
 ) {
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
@@ -700,6 +703,12 @@ private fun GeneralSettingsContent(
             title = "Read out notifications",
             hint = "Tells you about new notifications while you talk. The text is shared with Gemini.",
             checked = settings.announceNotificationsEnabled, onChange = onAnnounceNotificationsToggled
+        )
+        Spacer(Modifier.height(12.dp))
+        ToggleCard(
+            title = "Smarter document search",
+            hint = "Asks Gemini which passages really answer your question. Adds about a second to document searches. The passages are sent to Gemini, using your own key.",
+            checked = settings.decisionsRerankEnabled, onChange = onDecisionsRerankToggled
         )
         DefaultAssistantSection()
     }

@@ -378,6 +378,7 @@ fun AssistantScreen(
                     onMicSensitivitySelected = actions.onMicSensitivitySelected,
                     onBargeInToggled = actions.onBargeInToggled,
                     onAnnounceNotificationsToggled = actions.onAnnounceNotificationsToggled,
+                    onDecisionsRerankToggled = actions.onDecisionsRerankToggled,
                     onOwnerNameChanged = actions.onOwnerNameChanged,
                     onPersonalitySelected = actions.onPersonalitySelected,
                     onClearApiKey = actions.onClearApiKey,
