@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.24.1 - 2026-11-13
+
+### Changed
+- Long voice sessions now tidy their memory earlier, at 60% of the model's context instead of 90%, so replies stay fast and accurate. The ring around the mic button turns amber and red earlier to match.
+- The About page and Ultron's own answer to "who made you" now name Nandivex Technologies, with Chandra Prakash as founder, Jitin as co-founder and Sonia as co-builder.
+
 ## 1.24.0 - 2026-11-13
 
 ### Added

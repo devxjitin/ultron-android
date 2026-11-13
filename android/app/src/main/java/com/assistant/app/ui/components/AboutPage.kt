@@ -145,8 +145,11 @@ fun AboutPage(
 
         PageLabel("Developer")
         PageCard {
-            Text("Jitin Kumar Sengar", color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text("devxjitin@gmail.com", color = AssistantTextMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
+            Text("Nandivex Technologies", color = AssistantTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text("Founder: Chandra Prakash", color = AssistantTextSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
+            Text("Co-founder: Jitin", color = AssistantTextSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
+            Text("Co-builder: Sonia", color = AssistantTextSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
+            Text("devxjitin@gmail.com", color = AssistantTextMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
         }
 
         PageLabel("Privacy")
