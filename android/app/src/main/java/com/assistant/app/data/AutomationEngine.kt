@@ -91,7 +91,8 @@ object AutomationEngine {
     }
 
     fun listScheduled(context: Context): String {
-        val items = AutomationStore(context).schedules().sortedBy { it.atMillis }
+        // Alarms and timers are saved the same way but have their own list, cancel and change tools.
+        val items = AutomationStore(context).schedules().filterNot(::isClock).sortedBy { it.atMillis }
         if (items.isEmpty()) return "status=empty\nNo reminders are waiting."
         return "status=ok\n" + items.joinToString("\n") {
             // A reminder reads as its own text; anything else saved by an older build keeps its tool name.
@@ -110,6 +111,24 @@ object AutomationEngine {
         return "status=ok\nScheduled action #$id cancelled."
     }
 
+    /** Cancels a reminder by its number. An alarm or timer with that number is left alone. */
+    fun cancelReminder(context: Context, id: Int?): String {
+        if (id == null) return "status=invalid\nA required value was missing."
+        val item = AutomationStore(context).schedules().firstOrNull { it.id == id } ?: return "status=not_found\nNo reminder #$id."
+        if (isClock(item)) return "status=invalid\n#$id is an alarm or timer, not a reminder. Use cancel_alarm or cancel_timer for it."
+        return cancelScheduled(context, id)
+    }
+
+    /** True for one of the assistant's own alarms or timers, which ring instead of only showing a notification. */
+    internal fun isClock(action: ScheduledAction): Boolean = clockKind(action.toolName, action.argsJson) != null
+
+    /** "alarm" or "timer" when the saved action is one, else null. */
+    internal fun clockKind(toolName: String, argsJson: String): String? {
+        if (toolName != DeviceTool.SHOW_NOTIFICATION.functionName) return null
+        val kind = runCatching { JSONObject(argsJson).optString("kind") }.getOrDefault("")
+        return kind.takeIf { it == OwnClock.KIND_ALARM || it == OwnClock.KIND_TIMER }
+    }
+
     /** Changes the delay and/or text of a waiting reminder, keeping its number. */
     fun modifyReminder(context: Context, id: Int?, minutes: Int?, message: String?, atTime: String? = null, date: String? = null): String {
         val newTime = minutes != null || atTime != null
@@ -120,6 +139,7 @@ object AutomationEngine {
         val store = AutomationStore(context)
         val item = store.schedules().firstOrNull { it.id == id } ?: return "status=not_found\nNo scheduled action #$id."
         if (item.toolName != DeviceTool.SHOW_NOTIFICATION.functionName) return "status=invalid\n#$id is not a reminder."
+        if (isClock(item)) return "status=invalid\n#$id is an alarm or timer, not a reminder. Use modify_alarm, or cancel it and set a new one."
         val args = JSONObject(item.argsJson)
         if (message != null) args.put("message", message)
         val updated = item.copy(
@@ -243,6 +263,16 @@ object AutomationEngine {
         context.getSystemService(AlarmManager::class.java)
             .let { manager ->
                 val pending = pendingIntent(context, action.id)
+                // An alarm or timer is set the way a clock app sets one: Android wakes the phone for it even in deep sleep
+                // and shows the alarm icon. If that is refused, it is armed like a reminder below.
+                if (isClock(action)) {
+                    val show = PendingIntent.getActivity(
+                        context, 0, Intent(context, com.assistant.app.MainActivity::class.java),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                    val armed = runCatching { manager.setAlarmClock(AlarmManager.AlarmClockInfo(action.atMillis, show), pending) }.isSuccess
+                    if (armed) return@let
+                }
                 // Exact when Android allows it, so a reminder fires at the minute asked for instead of being batched.
                 val exact = Build.VERSION.SDK_INT < 31 || manager.canScheduleExactAlarms()
                 if (exact) runCatching { manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, action.atMillis, pending) }

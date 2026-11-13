@@ -261,7 +261,8 @@ enum class DeviceTool(
 
     SET_ALARM(
         "set_alarm", "Set alarm", "Set an alarm that rings with sound.",
-        "Sets an alarm for a time of day in 24-hour format. It is the assistant's own alarm: it rings with sound until dismissed, " +
+        "Sets an alarm for a time of day in 24-hour format, for waking up or ringing at a clock time. For \"in 10 minutes\" use set_timer; " +
+            "for \"remind me to ...\" use schedule_reminder. It is the assistant's own alarm: it rings on the alarm volume until stopped or snoozed, " +
             "and you can list, change and cancel it. Add repeat daily or weekly for an alarm that keeps ringing. " +
             "Setting the same time again replaces the old alarm. Act immediately, then say it is set.",
         listOf(
@@ -278,7 +279,8 @@ enum class DeviceTool(
     CANCEL_ALARM(
         "cancel_alarm", "Cancel alarm", "Cancel an alarm.",
         "Cancels an alarm for real, without opening any app: give hour and minute for a time, a label for a named alarm, " +
-            "or neither for the next alarm. Use this whenever the user asks to cancel, delete or turn off an alarm; never open the Clock app. " +
+            "or neither for the next alarm. While an alarm is ringing, calling it with nothing stops the ringing. " +
+            "Use this whenever the user asks to cancel, delete, stop or turn off an alarm; never open the Clock app. " +
             "The result says which alarm was removed, or lists the alarms that exist when none matched; tell the user exactly that.",
         listOf(
             ToolParam("hour", ToolParamType.INTEGER, "Hour 0-23 of the alarm to cancel.", required = false),
@@ -301,7 +303,8 @@ enum class DeviceTool(
     ),
     SET_TIMER(
         "set_timer", "Set timer", "Start a countdown timer that rings with sound.",
-        "Starts a countdown timer for the given number of seconds (up to 24 hours). It rings with sound until dismissed. " +
+        "Starts a countdown timer for the given number of seconds (up to 24 hours), for \"in 10 minutes\" or \"after half an hour\" with nothing to remember. " +
+            "It rings on the alarm volume until stopped. " +
             "Several timers can run at once; give each a label when the user names it.",
         listOf(
             ToolParam("seconds", ToolParamType.INTEGER, "Timer length in seconds."),
@@ -314,7 +317,7 @@ enum class DeviceTool(
     ),
     CANCEL_TIMER(
         "cancel_timer", "Cancel timer", "Stop a running timer.",
-        "Cancels a running timer for real. Give its label or number; with neither, the one ringing soonest is cancelled. " +
+        "Cancels a running timer for real. Give its label or number; with neither, a ringing timer is stopped, or else the one ringing soonest is cancelled. " +
             "Use this whenever the user asks to stop, cancel or delete a timer.",
         listOf(
             ToolParam("label", ToolParamType.STRING, "Name of the timer to cancel.", required = false),
@@ -324,7 +327,8 @@ enum class DeviceTool(
 
     SCHEDULE_REMINDER(
         "schedule_reminder", "Reminder", "Remind you at a time or after a while, with a sound.",
-        "Sets a reminder that pops up with a sound and vibration. Give minutes from now (up to a year), or at_time as HH:MM in 24-hour time, " +
+        "Sets a reminder: a message about something to do, which pops up with a sound and vibration. Use it when the user says what to be reminded of; " +
+            "use set_alarm or set_timer when they only want ringing. Give minutes from now (up to a year), or at_time as HH:MM in 24-hour time, " +
             "with an optional date (YYYY-MM-DD) for another day. Without a date, at_time means the next time the clock shows it. " +
             "Add repeat daily or weekly for a reminder that keeps coming. Call get_current_time first if the date or time is unclear.",
         listOf(
@@ -338,7 +342,7 @@ enum class DeviceTool(
 
     LIST_REMINDERS(
         "list_reminders", "List reminders", "See the reminders that are still waiting.",
-        "Lists the reminders that have not gone off yet, each with its number and time."
+        "Lists the reminders that have not gone off yet, each with its number and time. Alarms and timers are not in it; use list_alarms or list_timers."
     ),
 
     CANCEL_REMINDER(

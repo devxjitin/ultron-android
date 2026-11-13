@@ -179,7 +179,7 @@ class DeviceToolRunner(
                     .setPrimaryClip(ClipData.newPlainText("assistant", value))
                 "status=ok\nCopied to the clipboard."
             }
-            DeviceTool.SHOW_NOTIFICATION -> showNotification(text("title") ?: return MISSING, text("message") ?: return MISSING, args.optBoolean("urgent"), text("kind"))
+            DeviceTool.SHOW_NOTIFICATION -> showNotification(text("title") ?: return MISSING, text("message") ?: return MISSING, args.optBoolean("urgent"), text("kind"), text("label").orEmpty())
             DeviceTool.FLASHLIGHT -> flashlight(text("state"))
             DeviceTool.MEDIA_CONTROL -> mediaControl(text("command"))
             DeviceTool.OPEN_APP -> openApp(text("name") ?: return MISSING)
@@ -250,9 +250,7 @@ class DeviceToolRunner(
                 val due = runCatching { AutomationEngine.reminderTime(number("minutes"), text("at_time"), text("date")) }
                     .getOrElse { return "status=invalid\n${it.message}" }
                 val repeat = AutomationEngine.repeatMinutes(text("repeat"))
-                if (!NotificationManagerCompat.from(app).areNotificationsEnabled()) {
-                    return "status=unavailable\nNotifications are turned off for this app, so a reminder could not be shown."
-                }
+                notificationsMissing()?.let { return it }
                 // Saved like any scheduled action, so the reminder survives a restart of the phone.
                 val scheduled = AutomationEngine.scheduleAt(
                     app, DeviceTool.SHOW_NOTIFICATION,
@@ -264,7 +262,7 @@ class DeviceToolRunner(
                 else scheduled
             }
             DeviceTool.LIST_REMINDERS -> AutomationEngine.listScheduled(app)
-            DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelScheduled(app, number("id"))
+            DeviceTool.CANCEL_REMINDER -> AutomationEngine.cancelReminder(app, number("id"))
             DeviceTool.MODIFY_REMINDER -> AutomationEngine.modifyReminder(app, number("id"), number("minutes"), text("message"), text("at_time"), text("date"))
             DeviceTool.STEPS -> steps()
             DeviceTool.LIGHT -> lightLevel()
@@ -445,16 +443,23 @@ class DeviceToolRunner(
             }
             DeviceTool.MOST_USED_APPS -> mostUsedApps((number("days") ?: 1).coerceIn(1, 7), (number("limit") ?: 5).coerceIn(1, 10))
             DeviceTool.APP_USAGE -> appUsage(text("name") ?: return MISSING, (number("days") ?: 1).coerceIn(1, 7))
-            DeviceTool.SET_ALARM -> OwnClock.setAlarm(
-                app, number("hour") ?: return MISSING, number("minute") ?: return MISSING, text("label") ?: "", text("repeat")
-            )
+            DeviceTool.SET_ALARM -> {
+                val hour = number("hour") ?: return MISSING
+                val minute = number("minute") ?: return MISSING
+                notificationsMissing()?.let { return it }
+                OwnClock.setAlarm(app, hour, minute, text("label") ?: "", text("repeat"))
+            }
             DeviceTool.LIST_ALARMS -> OwnClock.list(app, OwnClock.KIND_ALARM)
             DeviceTool.CANCEL_ALARM -> OwnClock.cancel(app, OwnClock.KIND_ALARM, number("id"), number("hour"), number("minute"), text("label"))
             DeviceTool.MODIFY_ALARM -> OwnClock.modifyAlarm(
                 app, number("hour") ?: return MISSING, number("minute") ?: return MISSING,
                 number("new_hour") ?: return MISSING, number("new_minute") ?: return MISSING, text("label")
             )
-            DeviceTool.SET_TIMER -> OwnClock.setTimer(app, number("seconds") ?: return MISSING, text("label") ?: "")
+            DeviceTool.SET_TIMER -> {
+                val seconds = number("seconds") ?: return MISSING
+                notificationsMissing()?.let { return it }
+                OwnClock.setTimer(app, seconds, text("label") ?: "")
+            }
             DeviceTool.LIST_TIMERS -> OwnClock.list(app, OwnClock.KIND_TIMER)
             DeviceTool.CANCEL_TIMER -> OwnClock.cancel(app, OwnClock.KIND_TIMER, number("id"), null, null, text("label"))
             DeviceTool.OPEN_SETTINGS -> {
@@ -1157,9 +1162,21 @@ class DeviceToolRunner(
         }
     }
 
-    private fun showNotification(title: String, message: String, urgent: Boolean, kind: String? = null): String =
-        if (AlertNotifications.show(app, title, message, urgent, kind)) "status=ok\nNotification shown."
+    private fun showNotification(title: String, message: String, urgent: Boolean, kind: String? = null, label: String = ""): String =
+        if (AlertNotifications.show(app, title, message, urgent, kind, label)) "status=ok\nNotification shown."
         else "status=unavailable\nNotifications are turned off for this app."
+
+    /**
+     * Alarms, timers and reminders need Ultron's notifications: that is where they show and where Stop is. Returns a tool
+     * result asking for them (Android 13+ shows its own dialog), or null when they are on.
+     */
+    private fun notificationsMissing(): String? {
+        if (NotificationManagerCompat.from(app).areNotificationsEnabled()) return null
+        if (Build.VERSION.SDK_INT >= 33) missingPermission(Manifest.permission.POST_NOTIFICATIONS)?.let { return it }
+        start(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, app.packageName))
+        return "status=permission_needed\nNotifications are turned off for Ultron, so nothing was set: it could not ring or show. " +
+            "Ultron's notification settings were opened; the user must turn them on, then ask again."
+    }
 
     private fun flashlight(state: String?): String {
         if (state != "on" && state != "off") return "status=invalid\nState must be on or off."

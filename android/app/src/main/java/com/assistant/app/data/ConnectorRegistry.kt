@@ -204,13 +204,13 @@ object ConnectorRegistry {
             "Nothing leaves your phone."
         ),
         "alarms" to ConnectorInfo(
-            "Sets alarms and timers in your clock app, and lets you change or cancel alarms.",
-            "Nothing to allow.",
+            "Ultron's own alarms and timers. They ring on the alarm volume until you stop or snooze them, and you can list, change and cancel them by voice. They do not use the clock app.",
+            "Keep notifications on for Ultron. On Xiaomi, Oppo, Vivo and Realme phones also allow Autostart for Ultron, or the phone may stop it from ringing.",
             "Nothing leaves your phone."
         ),
         "reminders" to ConnectorInfo(
-            "Reminds you at a time or after a while, once or every day or week. It rings and vibrates.",
-            "Keep notifications on for Ultron.",
+            "Ultron's own reminders: a message at a time or after a while, once or every day or week, with a sound and vibration.",
+            "Keep notifications on for Ultron. On Xiaomi, Oppo, Vivo and Realme phones also allow Autostart for Ultron.",
             "Nothing leaves your phone."
         ),
         "calendar" to ConnectorInfo(

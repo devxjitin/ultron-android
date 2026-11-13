@@ -1,6 +1,7 @@
 package com.assistant.app.data
 
 import android.content.Context
+import com.assistant.app.AlarmRingService
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
@@ -44,6 +45,18 @@ object OwnClock {
         return "status=ok\nTimer started for ${spoken(seconds)}" + (if (label.isBlank()) "." else " (\"$label\").")
     }
 
+    /** Rings the same alarm again in [minutes], as a single alarm that shows in the list until it rings. */
+    fun snooze(context: Context, label: String, minutes: Int) {
+        val at = System.currentTimeMillis() + minutes * 60_000L
+        val args = JSONObject().put("title", "Alarm").put("message", label.ifBlank { clockTime(at) })
+            .put("urgent", true).put("kind", KIND_ALARM).put("label", label)
+        AutomationEngine.scheduleAt(context, DeviceTool.SHOW_NOTIFICATION, args.toString(), at, 0)
+    }
+
+    /** "07:30 AM" for a moment in time, as shown on the ringing screen. */
+    fun clockTime(millis: Long): String = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale.ENGLISH))
+
     fun list(context: Context, kind: String): String {
         val found = items(context, kind)
         val noun = if (kind == KIND_ALARM) "alarms" else "timers"
@@ -55,6 +68,12 @@ object OwnClock {
     fun cancel(context: Context, kind: String, id: Int?, hour: Int?, minute: Int?, label: String?): String {
         val found = items(context, kind)
         val noun = if (kind == KIND_ALARM) "alarm" else "timer"
+        // "Stop the alarm" while one is ringing means the sound, not the next alarm on the list.
+        val ringing = AlarmRingService.current.value
+        if (ringing != null && ringing.kind == kind && id == null && hour == null && label.isNullOrBlank()) {
+            AlarmRingService.stop(context)
+            return "status=ok\nStopped the ringing $noun."
+        }
         val matches = when {
             id != null -> found.filter { it.id == id }
             hour != null -> found.filter { hourMinute(it.atMillis) == hour to (minute ?: 0) }
