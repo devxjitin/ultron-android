@@ -119,6 +119,8 @@ data class AssistantSettings(
     val decisionsMemoryEnabled: Boolean = false,
     /** Off by default. When on, a tap or typing step on another app is checked against what the user said; a clear mismatch is blocked and a risky step adds a warning. */
     val decisionsActionCheckEnabled: Boolean = false,
+    /** Off by default. When on, the screen is checked after a tap or typing step (Android 11+) and the result says whether it worked and what to do next. */
+    val decisionsScreenCheckEnabled: Boolean = false,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
 )
@@ -137,6 +139,7 @@ class AppSettingsStore(private val context: Context) {
     private val decisionsRerankKey = booleanPreferencesKey("decisions_rerank")
     private val decisionsMemoryKey = booleanPreferencesKey("decisions_memory")
     private val decisionsActionCheckKey = booleanPreferencesKey("decisions_action_check")
+    private val decisionsScreenCheckKey = booleanPreferencesKey("decisions_screen_check")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
     private val personalityKey = stringPreferencesKey("personality")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
@@ -166,6 +169,7 @@ class AppSettingsStore(private val context: Context) {
             decisionsRerankEnabled = prefs[decisionsRerankKey] ?: false,
             decisionsMemoryEnabled = prefs[decisionsMemoryKey] ?: false,
             decisionsActionCheckEnabled = prefs[decisionsActionCheckKey] ?: false,
+            decisionsScreenCheckEnabled = prefs[decisionsScreenCheckKey] ?: false,
             personalityId = Personalities.byId(prefs[personalityKey]).id,
             systemPrompt = Personalities.byId(prefs[personalityKey]).prompt,
             assistantName = DEFAULT_ASSISTANT_NAME,
@@ -211,6 +215,10 @@ class AppSettingsStore(private val context: Context) {
 
     suspend fun setMemoryEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[memoryEnabledKey] = enabled }
+    }
+
+    suspend fun setDecisionsScreenCheckEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[decisionsScreenCheckKey] = enabled }
     }
 
     suspend fun setDecisionsActionCheckEnabled(enabled: Boolean) {

@@ -102,6 +102,7 @@ fun SettingsPage(
     onDecisionsRerankToggled: (Boolean) -> Unit = {},
     onDecisionsMemoryToggled: (Boolean) -> Unit = {},
     onDecisionsActionCheckToggled: (Boolean) -> Unit = {},
+    onDecisionsScreenCheckToggled: (Boolean) -> Unit = {},
     onOwnerNameChanged: (String) -> Unit = {},
     onPersonalitySelected: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, Int) -> Unit,
@@ -296,7 +297,7 @@ fun SettingsPage(
                     GeneralSettingsContent(
                         settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
                         onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected,
-                        onDecisionsRerankToggled, onDecisionsMemoryToggled, onDecisionsActionCheckToggled
+                        onDecisionsRerankToggled, onDecisionsMemoryToggled, onDecisionsActionCheckToggled, onDecisionsScreenCheckToggled
                     )
                     // The old Developer page now lives at the end of Settings.
                     Spacer(Modifier.height(24.dp))
@@ -644,7 +645,8 @@ private fun GeneralSettingsContent(
     onPersonalitySelected: (String) -> Unit,
     onDecisionsRerankToggled: (Boolean) -> Unit,
     onDecisionsMemoryToggled: (Boolean) -> Unit,
-    onDecisionsActionCheckToggled: (Boolean) -> Unit
+    onDecisionsActionCheckToggled: (Boolean) -> Unit,
+    onDecisionsScreenCheckToggled: (Boolean) -> Unit
 ) {
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
@@ -725,6 +727,12 @@ private fun GeneralSettingsContent(
             title = "Check screen actions",
             hint = "Before it taps or types in another app, Gemini checks the step matches what you asked. A step that clearly does not is stopped; risky steps are still done, and it tells you. Adds about a second per step. The step text is sent to Gemini, using your own key.",
             checked = settings.decisionsActionCheckEnabled, onChange = onDecisionsActionCheckToggled
+        )
+        Spacer(Modifier.height(12.dp))
+        ToggleCard(
+            title = "Check the screen after each step",
+            hint = "After it taps or types in another app, a small picture of the screen goes to Gemini to see whether the step worked and what is in the way, such as a login or a pop-up. Needs Android 11 or newer. Adds about two seconds per step. Never sent for protected apps or password screens. Uses your own key.",
+            checked = settings.decisionsScreenCheckEnabled, onChange = onDecisionsScreenCheckToggled
         )
         DefaultAssistantSection()
     }

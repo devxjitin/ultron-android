@@ -35,11 +35,19 @@ internal class ToolRunner(
     /** Called with the fact after a note is newly saved, so older notes it duplicates or replaces can be tidied in the background. */
     private val onMemorySaved: (String) -> Unit = {},
     /** Checks a tap or typing step before it runs; null when the setting is off. Must return Proceed if it cannot decide. */
-    private val checkAction: suspend (DeviceTool, JSONObject) -> ActionVerdict = { _, _ -> ActionVerdict.Proceed }
+    private val checkAction: suspend (DeviceTool, JSONObject) -> ActionVerdict = { _, _ -> ActionVerdict.Proceed },
+    /** Looks at the screen after a step that worked; returns a line to add to the result, or null. */
+    private val checkScreenAfter: suspend (DeviceTool, JSONObject) -> String? = { _, _ -> null }
 ) {
     companion object {
         /** Screen steps that carry text, so they can be checked against what the user asked for. */
         val CHECKED_TOOLS = setOf(DeviceTool.CLICK_TEXT, DeviceTool.TYPE_TEXT)
+
+        /** Screen steps after which the screen can be checked to see whether the step worked. */
+        val STEP_TOOLS = setOf(
+            DeviceTool.CLICK_TEXT, DeviceTool.CLICK_ITEM, DeviceTool.TAP_POSITION, DeviceTool.TYPE_TEXT,
+            DeviceTool.PRESS_ENTER, DeviceTool.SWIPE, DeviceTool.LONG_PRESS
+        )
 
         /** What the home screen shows while a tool runs, e.g. "Set alarm". */
         fun displayName(functionName: String): String = when {
@@ -135,8 +143,10 @@ internal class ToolRunner(
         }
         val verdict = if (tool in CHECKED_TOOLS) checkAction(tool, args) else ActionVerdict.Proceed
         if (verdict is ActionVerdict.Block) return "status=blocked\n${verdict.reason}"
-        val result = UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
-        return if (verdict is ActionVerdict.Warn) "$result\nwarning=${verdict.note}" else result
+        var result = UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
+        if (verdict is ActionVerdict.Warn) result = "$result\nwarning=${verdict.note}"
+        if (tool in STEP_TOOLS && result.startsWith("status=ok")) checkScreenAfter(tool, args)?.let { result = "$result\n$it" }
+        return result
     }
 
     private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {

@@ -32,7 +32,9 @@ import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.MemoryStore
 import com.assistant.app.decisions.ActionChecker
 import com.assistant.app.decisions.ActionVerdict
+import com.assistant.app.decisions.DecisionInput
 import com.assistant.app.decisions.DecisionsClient
+import com.assistant.app.decisions.ScreenChecker
 import com.assistant.app.decisions.MemoryTidier
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
@@ -800,6 +802,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether the screen is checked after each tap or typing step. Read at action time. */
+    fun onDecisionsScreenCheckToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Screen check on" else "Screen check off") {
+            settingsStore.setDecisionsScreenCheckEnabled(enabled)
+        }
+    }
+
     /** Whether tap and typing steps are checked against what the user said. Read at action time. */
     fun onDecisionsActionCheckToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Action check on" else "Action check off") {
@@ -862,8 +871,40 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         },
         onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() },
         onMemorySaved = { fact -> tidyMemoryInBackground(fact) },
-        checkAction = { tool, args -> checkScreenAction(tool, args) }
+        checkAction = { tool, args -> checkScreenAction(tool, args) },
+        checkScreenAfter = { tool, args -> checkScreenAfterStep(tool, args) }
     )
+
+    private var cachedScreenChecker: Pair<String, ScreenChecker>? = null
+    private var failedScreenSteps = 0
+
+    /**
+     * After a step that worked, looks at the screen (Android 11+, never a protected window or a password screen) and
+     * returns a line saying whether the step worked, what blocks it and what to do next. Null means no advice.
+     */
+    private suspend fun checkScreenAfterStep(tool: DeviceTool, args: JSONObject): String? {
+        if (!_uiState.value.settings.decisionsScreenCheckEnabled) return null
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return null
+        val service = AssistantAccessibilityService.instance ?: return null
+        if (service.focusedFieldIsPassword()) return null
+        return try {
+            kotlinx.coroutines.delay(600) // let the next screen finish appearing
+            val shot = service.takeShot() as? AssistantAccessibilityService.Shot.Ok ?: return null
+            if (com.assistant.app.data.ScreenImage.looksBlank(shot.bitmap)) return null
+            val jpeg = com.assistant.app.data.ScreenImage.toJpeg(shot.bitmap, maxSide = 720)
+            val checker = cachedScreenChecker?.takeIf { it.first == key }?.second
+                ?: ScreenChecker(DecisionsClient(key)).also { cachedScreenChecker = key to it }
+            val goal = session.currentUserRequest().ifBlank { "unknown" }
+            val verdict = checker.check("${tool.functionName} $args".take(200), goal, DecisionInput.Image(jpeg, resolution = "low"))
+                ?: return null
+            failedScreenSteps = if (verdict.succeeded) 0 else failedScreenSteps + 1
+            checker.limited(verdict, failedScreenSteps).toResultLine()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private var cachedActionChecker: Pair<String, ActionChecker>? = null
 
