@@ -1,0 +1,3 @@
+{"utterance": "Rahul ko WhatsApp pe bol do ki main late hoon", "main_connector": "whatsapp", "needed_connectors": ["whatsapp", "contacts"]}
+{"utterance": "What's on my calendar tomorrow?", "main_connector": "calendar", "needed_connectors": ["calendar"]}
+{"utterance": "Tell me a joke", "main_connector": "none", "needed_connectors": []}
