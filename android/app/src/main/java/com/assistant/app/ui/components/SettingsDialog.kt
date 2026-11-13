@@ -103,6 +103,7 @@ fun SettingsPage(
     onDecisionsMemoryToggled: (Boolean) -> Unit = {},
     onDecisionsActionCheckToggled: (Boolean) -> Unit = {},
     onDecisionsScreenCheckToggled: (Boolean) -> Unit = {},
+    onDecisionsSkillToggled: (Boolean) -> Unit = {},
     onOwnerNameChanged: (String) -> Unit = {},
     onPersonalitySelected: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, Int) -> Unit,
@@ -297,7 +298,7 @@ fun SettingsPage(
                     GeneralSettingsContent(
                         settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
                         onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected,
-                        onDecisionsRerankToggled, onDecisionsMemoryToggled, onDecisionsActionCheckToggled, onDecisionsScreenCheckToggled
+                        onDecisionsRerankToggled, onDecisionsMemoryToggled, onDecisionsActionCheckToggled, onDecisionsScreenCheckToggled, onDecisionsSkillToggled
                     )
                     // The old Developer page now lives at the end of Settings.
                     Spacer(Modifier.height(24.dp))
@@ -646,7 +647,8 @@ private fun GeneralSettingsContent(
     onDecisionsRerankToggled: (Boolean) -> Unit,
     onDecisionsMemoryToggled: (Boolean) -> Unit,
     onDecisionsActionCheckToggled: (Boolean) -> Unit,
-    onDecisionsScreenCheckToggled: (Boolean) -> Unit
+    onDecisionsScreenCheckToggled: (Boolean) -> Unit,
+    onDecisionsSkillToggled: (Boolean) -> Unit
 ) {
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
@@ -733,6 +735,12 @@ private fun GeneralSettingsContent(
             title = "Check the screen after each step",
             hint = "After it taps or types in another app, a small picture of the screen goes to Gemini to see whether the step worked and what is in the way, such as a login or a pop-up. Needs Android 11 or newer. Adds about two seconds per step. Never sent for protected apps or password screens. Uses your own key.",
             checked = settings.decisionsScreenCheckEnabled, onChange = onDecisionsScreenCheckToggled
+        )
+        Spacer(Modifier.height(12.dp))
+        ToggleCard(
+            title = "Match skills to requests",
+            hint = "If the assistant asks for a skill that does not exist, Gemini picks the closest one to what you said. Only runs then. Your request is sent to Gemini, using your own key.",
+            checked = settings.decisionsSkillEnabled, onChange = onDecisionsSkillToggled
         )
         DefaultAssistantSection()
     }

@@ -382,6 +382,7 @@ fun AssistantScreen(
                     onDecisionsMemoryToggled = actions.onDecisionsMemoryToggled,
                     onDecisionsActionCheckToggled = actions.onDecisionsActionCheckToggled,
                     onDecisionsScreenCheckToggled = actions.onDecisionsScreenCheckToggled,
+                    onDecisionsSkillToggled = actions.onDecisionsSkillToggled,
                     onOwnerNameChanged = actions.onOwnerNameChanged,
                     onPersonalitySelected = actions.onPersonalitySelected,
                     onClearApiKey = actions.onClearApiKey,

@@ -411,6 +411,7 @@ class MainActivity : ComponentActivity() {
                             onDecisionsMemoryToggled = { enabled -> viewModel.onDecisionsMemoryToggled(enabled) },
                             onDecisionsActionCheckToggled = { enabled -> viewModel.onDecisionsActionCheckToggled(enabled) },
                             onDecisionsScreenCheckToggled = { enabled -> viewModel.onDecisionsScreenCheckToggled(enabled) },
+                            onDecisionsSkillToggled = { enabled -> viewModel.onDecisionsSkillToggled(enabled) },
                             onAnnounceNotificationsToggled = { enabled -> viewModel.onAnnounceNotificationsToggled(enabled) },
                             onPersonalitySelected = { id -> viewModel.onPersonalitySelected(id) },
                             onOwnerNameChanged = { name -> viewModel.onOwnerNameChanged(name) },

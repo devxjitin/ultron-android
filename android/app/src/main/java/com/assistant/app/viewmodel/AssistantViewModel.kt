@@ -35,6 +35,7 @@ import com.assistant.app.decisions.ActionVerdict
 import com.assistant.app.decisions.DecisionInput
 import com.assistant.app.decisions.DecisionsClient
 import com.assistant.app.decisions.ScreenChecker
+import com.assistant.app.decisions.SkillMatcher
 import com.assistant.app.decisions.MemoryTidier
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
@@ -802,6 +803,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether a wrong skill name is answered with the closest matching skill. Read at tool time. */
+    fun onDecisionsSkillToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Skill matching on" else "Skill matching off") {
+            settingsStore.setDecisionsSkillEnabled(enabled)
+        }
+    }
+
     /** Whether the screen is checked after each tap or typing step. Read at action time. */
     fun onDecisionsScreenCheckToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Screen check on" else "Screen check off") {
@@ -872,8 +880,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() },
         onMemorySaved = { fact -> tidyMemoryInBackground(fact) },
         checkAction = { tool, args -> checkScreenAction(tool, args) },
-        checkScreenAfter = { tool, args -> checkScreenAfterStep(tool, args) }
+        checkScreenAfter = { tool, args -> checkScreenAfterStep(tool, args) },
+        suggestSkill = { suggestSkillForRequest() }
     )
+
+    private var cachedSkillMatcher: Pair<String, SkillMatcher>? = null
+
+    /** The skill that fits what the user just said, for a wrong skill name. Off by default; any problem means no suggestion. */
+    private suspend fun suggestSkillForRequest(): String? {
+        if (!_uiState.value.settings.decisionsSkillEnabled) return null
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return null
+        val matcher = cachedSkillMatcher?.takeIf { it.first == key }?.second
+            ?: SkillMatcher(DecisionsClient(key)).also { cachedSkillMatcher = key to it }
+        return try {
+            matcher.suggest(session.currentUserRequest(), com.assistant.app.data.SkillRegistry.all())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private var cachedScreenChecker: Pair<String, ScreenChecker>? = null
     private var failedScreenSteps = 0

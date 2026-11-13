@@ -37,7 +37,9 @@ internal class ToolRunner(
     /** Checks a tap or typing step before it runs; null when the setting is off. Must return Proceed if it cannot decide. */
     private val checkAction: suspend (DeviceTool, JSONObject) -> ActionVerdict = { _, _ -> ActionVerdict.Proceed },
     /** Looks at the screen after a step that worked; returns a line to add to the result, or null. */
-    private val checkScreenAfter: suspend (DeviceTool, JSONObject) -> String? = { _, _ -> null }
+    private val checkScreenAfter: suspend (DeviceTool, JSONObject) -> String? = { _, _ -> null },
+    /** Names the skill that fits the user's request when the model asked for one that does not exist; null when unsure. */
+    private val suggestSkill: suspend () -> String? = { null }
 ) {
     companion object {
         /** Screen steps that carry text, so they can be checked against what the user asked for. */
@@ -69,12 +71,19 @@ internal class ToolRunner(
         } else if (call.name == SET_PERSONALITY_TOOL) {
             runToolSafely(call.name) { runPersonalityTool(call.args) }
         } else if (call.name == USE_SKILL_TOOL) {
-            SkillRegistry.use(call.args.optString("skill"), call.args.optString("task"))
+            runSkillTool(call.args.optString("skill"), call.args.optString("task"))
         } else if (call.name != "search_knowledge_base") {
             "status=unknown_tool\nThere is no tool named ${call.name}. Do not call it again; tell the user you cannot do that with the tools you have."
         } else {
             knowledge.runSearchTool(call.args.optString("query"), call.id, trace)
         }
+    }
+
+    private suspend fun runSkillTool(skill: String, task: String): String {
+        val result = SkillRegistry.use(skill, task)
+        if (!result.startsWith("status=not_found\nNo skill with that name")) return result
+        val suggestion = suggestSkill() ?: return result
+        return "$result\nThe closest skill to the user's request is $suggestion. Call $USE_SKILL_TOOL with that name if it fits."
     }
 
     /** save_memory / forget_memory, called by the voice model. Memory is kept on this device only. */

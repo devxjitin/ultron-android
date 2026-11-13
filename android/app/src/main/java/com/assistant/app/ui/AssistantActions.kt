@@ -72,6 +72,7 @@ class AssistantActions(
     val onDecisionsMemoryToggled: (Boolean) -> Unit = {},
     val onDecisionsActionCheckToggled: (Boolean) -> Unit = {},
     val onDecisionsScreenCheckToggled: (Boolean) -> Unit = {},
+    val onDecisionsSkillToggled: (Boolean) -> Unit = {},
     val onOwnerNameChanged: (String) -> Unit = {},
     val onPersonalitySelected: (String) -> Unit = {},
     val onSaveDeveloperChanges: (String, String, Int) -> Unit,
