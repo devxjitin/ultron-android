@@ -113,6 +113,16 @@ data class AssistantSettings(
     val documentFormatPrompt: String = DEFAULT_DOCUMENT_FORMAT_PROMPT,
     /** Number of ranked knowledge chunks returned to the voice model per query. */
     val retrievalChunkLimit: Int = DEFAULT_RETRIEVAL_CHUNK_LIMIT,
+    /** Off by default. When on, knowledge search asks the Gemini Decisions API which chunks really answer the question. */
+    val decisionsRerankEnabled: Boolean = false,
+    /** Off by default. When on, a newly saved memory note is checked against older ones and duplicates or contradicted notes are removed (restorable). */
+    val decisionsMemoryEnabled: Boolean = false,
+    /** Off by default. When on, a tap or typing step on another app is checked against what the user said; a clear mismatch is blocked and a risky step adds a warning. */
+    val decisionsActionCheckEnabled: Boolean = false,
+    /** Off by default. When on, the screen is checked after a tap or typing step (Android 11+) and the result says whether it worked and what to do next. */
+    val decisionsScreenCheckEnabled: Boolean = false,
+    /** Off by default. When on, a request for a skill that does not exist is answered with the closest matching skill. */
+    val decisionsSkillEnabled: Boolean = false,
     /** Device tools the voice model is allowed to call; each is switched on/off in Settings. */
     val enabledDeviceTools: Set<DeviceTool> = effectiveDeviceTools(null),
 )
@@ -128,6 +138,11 @@ class AppSettingsStore(private val context: Context) {
     private val bargeInKey = booleanPreferencesKey("barge_in_enabled")
     private val announceNotificationsKey = booleanPreferencesKey("announce_notifications")
     private val memoryEnabledKey = booleanPreferencesKey("memory_enabled")
+    private val decisionsRerankKey = booleanPreferencesKey("decisions_rerank")
+    private val decisionsMemoryKey = booleanPreferencesKey("decisions_memory")
+    private val decisionsActionCheckKey = booleanPreferencesKey("decisions_action_check")
+    private val decisionsScreenCheckKey = booleanPreferencesKey("decisions_screen_check")
+    private val decisionsSkillKey = booleanPreferencesKey("decisions_skill")
     private val systemPromptKey = stringPreferencesKey("system_prompt")
     private val personalityKey = stringPreferencesKey("personality")
     /** Set while the stored agent prompt is the one drafted from the knowledge documents (not typed by the user). */
@@ -154,6 +169,11 @@ class AppSettingsStore(private val context: Context) {
             bargeInEnabled = prefs[bargeInKey] ?: true,
             announceNotificationsEnabled = prefs[announceNotificationsKey] ?: false,
             memoryEnabled = prefs[memoryEnabledKey] ?: true,
+            decisionsRerankEnabled = prefs[decisionsRerankKey] ?: false,
+            decisionsMemoryEnabled = prefs[decisionsMemoryKey] ?: false,
+            decisionsActionCheckEnabled = prefs[decisionsActionCheckKey] ?: false,
+            decisionsScreenCheckEnabled = prefs[decisionsScreenCheckKey] ?: false,
+            decisionsSkillEnabled = prefs[decisionsSkillKey] ?: false,
             personalityId = Personalities.byId(prefs[personalityKey]).id,
             systemPrompt = Personalities.byId(prefs[personalityKey]).prompt,
             assistantName = DEFAULT_ASSISTANT_NAME,
@@ -199,6 +219,26 @@ class AppSettingsStore(private val context: Context) {
 
     suspend fun setMemoryEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[memoryEnabledKey] = enabled }
+    }
+
+    suspend fun setDecisionsSkillEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[decisionsSkillKey] = enabled }
+    }
+
+    suspend fun setDecisionsScreenCheckEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[decisionsScreenCheckKey] = enabled }
+    }
+
+    suspend fun setDecisionsActionCheckEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[decisionsActionCheckKey] = enabled }
+    }
+
+    suspend fun setDecisionsMemoryEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[decisionsMemoryKey] = enabled }
+    }
+
+    suspend fun setDecisionsRerankEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[decisionsRerankKey] = enabled }
     }
 
     suspend fun setOwnerName(name: String) {

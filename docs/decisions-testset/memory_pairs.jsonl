@@ -1,0 +1,2 @@
+{"new_note": "User's sister is called Neha", "stored_note": "Sister's name is Neha", "duplicate": true, "contradicts": false}
+{"new_note": "User moved to Pune", "stored_note": "User lives in Delhi", "duplicate": false, "contradicts": true}

@@ -24,10 +24,19 @@ import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
 import com.assistant.app.data.DeveloperSaveFailedException
+import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.data.DeviceTool
+import org.json.JSONObject
 import com.assistant.app.data.Personalities
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.MemoryStore
+import com.assistant.app.decisions.ActionChecker
+import com.assistant.app.decisions.ActionVerdict
+import com.assistant.app.decisions.DecisionInput
+import com.assistant.app.decisions.DecisionsClient
+import com.assistant.app.decisions.ScreenChecker
+import com.assistant.app.decisions.SkillMatcher
+import com.assistant.app.decisions.MemoryTidier
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
 import com.assistant.app.data.MicSensitivity
@@ -794,6 +803,41 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether a wrong skill name is answered with the closest matching skill. Read at tool time. */
+    fun onDecisionsSkillToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Skill matching on" else "Skill matching off") {
+            settingsStore.setDecisionsSkillEnabled(enabled)
+        }
+    }
+
+    /** Whether the screen is checked after each tap or typing step. Read at action time. */
+    fun onDecisionsScreenCheckToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Screen check on" else "Screen check off") {
+            settingsStore.setDecisionsScreenCheckEnabled(enabled)
+        }
+    }
+
+    /** Whether tap and typing steps are checked against what the user said. Read at action time. */
+    fun onDecisionsActionCheckToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Action check on" else "Action check off") {
+            settingsStore.setDecisionsActionCheckEnabled(enabled)
+        }
+    }
+
+    /** Whether new memory notes are checked against old ones for duplicates and contradictions. Read at save time. */
+    fun onDecisionsMemoryToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Memory tidying on" else "Memory tidying off") {
+            settingsStore.setDecisionsMemoryEnabled(enabled)
+        }
+    }
+
+    /** Whether knowledge search lets Gemini Decisions pick the passages. Read at search time; nothing to rebuild. */
+    fun onDecisionsRerankToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Smarter document search on" else "Smarter document search off") {
+            settingsStore.setDecisionsRerankEnabled(enabled)
+        }
+    }
+
     /** Whether a notification that arrives during a voice session is read out. Local only; nothing to rebuild. */
     fun onAnnounceNotificationsToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Notifications will be read out" else "Notifications won't be read out") {
@@ -833,8 +877,101 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 currentSessionId = session.historySessionId
             )
         },
-        onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() }
+        onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() },
+        onMemorySaved = { fact -> tidyMemoryInBackground(fact) },
+        checkAction = { tool, args -> checkScreenAction(tool, args) },
+        checkScreenAfter = { tool, args -> checkScreenAfterStep(tool, args) },
+        suggestSkill = { suggestSkillForRequest() }
     )
+
+    private var cachedSkillMatcher: Pair<String, SkillMatcher>? = null
+
+    /** The skill that fits what the user just said, for a wrong skill name. Off by default; any problem means no suggestion. */
+    private suspend fun suggestSkillForRequest(): String? {
+        if (!_uiState.value.settings.decisionsSkillEnabled) return null
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return null
+        val matcher = cachedSkillMatcher?.takeIf { it.first == key }?.second
+            ?: SkillMatcher(DecisionsClient(key)).also { cachedSkillMatcher = key to it }
+        return try {
+            matcher.suggest(session.currentUserRequest(), com.assistant.app.data.SkillRegistry.all())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private var cachedScreenChecker: Pair<String, ScreenChecker>? = null
+    private var failedScreenSteps = 0
+
+    /**
+     * After a step that worked, looks at the screen (Android 11+, never a protected window or a password screen) and
+     * returns a line saying whether the step worked, what blocks it and what to do next. Null means no advice.
+     */
+    private suspend fun checkScreenAfterStep(tool: DeviceTool, args: JSONObject): String? {
+        if (!_uiState.value.settings.decisionsScreenCheckEnabled) return null
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return null
+        val service = AssistantAccessibilityService.instance ?: return null
+        if (service.focusedFieldIsPassword()) return null
+        return try {
+            kotlinx.coroutines.delay(600) // let the next screen finish appearing
+            val shot = service.takeShot() as? AssistantAccessibilityService.Shot.Ok ?: return null
+            if (com.assistant.app.data.ScreenImage.looksBlank(shot.bitmap)) return null
+            val jpeg = com.assistant.app.data.ScreenImage.toJpeg(shot.bitmap, maxSide = 720)
+            val checker = cachedScreenChecker?.takeIf { it.first == key }?.second
+                ?: ScreenChecker(DecisionsClient(key)).also { cachedScreenChecker = key to it }
+            val goal = session.currentUserRequest().ifBlank { "unknown" }
+            val verdict = checker.check("${tool.functionName} $args".take(200), goal, DecisionInput.Image(jpeg, resolution = "low"))
+                ?: return null
+            failedScreenSteps = if (verdict.succeeded) 0 else failedScreenSteps + 1
+            checker.limited(verdict, failedScreenSteps).toResultLine()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private var cachedActionChecker: Pair<String, ActionChecker>? = null
+
+    /** Checks a tap or typing step against what the user said. Off by default; any problem means Proceed. */
+    private suspend fun checkScreenAction(tool: DeviceTool, args: JSONObject): ActionVerdict {
+        if (!_uiState.value.settings.decisionsActionCheckEnabled) return ActionVerdict.Proceed
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return ActionVerdict.Proceed
+        val service = AssistantAccessibilityService.instance ?: return ActionVerdict.Proceed
+        // Never send what is typed into, or tapped on, a password field.
+        if (service.focusedFieldIsPassword()) return ActionVerdict.Proceed
+        val (action, target) = when (tool) {
+            DeviceTool.CLICK_TEXT -> "tap" to args.optString("text")
+            DeviceTool.TYPE_TEXT -> "type" to args.optString("text")
+            else -> return ActionVerdict.Proceed
+        }
+        val checker = cachedActionChecker?.takeIf { it.first == key }?.second
+            ?: ActionChecker(DecisionsClient(key)).also { cachedActionChecker = key to it }
+        return try {
+            checker.check(service.currentPackage().orEmpty(), action, target, session.currentUserRequest())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ActionVerdict.Proceed
+        }
+    }
+
+    /** Removes older notes the new one duplicates or replaces. Off by default; a failed call changes nothing. */
+    private fun tidyMemoryInBackground(fact: String) {
+        if (!_uiState.value.settings.decisionsMemoryEnabled) return
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val removed = MemoryTidier(DecisionsClient(key)).tidy(memoryStore, fact)
+                if (removed.isNotEmpty()) withContext(Dispatchers.Main) { session.invalidateWarmSessionAndReprewarm() }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("AssistantMemory", "Memory tidy skipped", e)
+            }
+        }
+    }
 
     fun onSaveDeveloperChanges(
         apiKey: String,

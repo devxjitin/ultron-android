@@ -1,0 +1,3 @@
+{"app": "PhonePe", "visible_text": "Pay Rs 500", "action": "click", "user_request": "pay Rahul 500", "risky": true, "risk_kinds": ["money", "irreversible"], "matches_request": true}
+{"app": "Gmail", "visible_text": "Delete draft", "action": "click", "user_request": "discard the draft I was writing", "risky": false, "risk_kinds": [], "matches_request": true}
+{"app": "WhatsApp", "visible_text": "Send", "action": "click", "user_request": "message Mom I'm home", "risky": true, "risk_kinds": ["sends_to_other_person"], "matches_request": true}

@@ -12,6 +12,7 @@ import com.assistant.app.data.Personalities
 import com.assistant.app.data.SET_PERSONALITY_TOOL
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.UntrustedContent
+import com.assistant.app.decisions.ActionVerdict
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.network.GeminiLiveClient
 import com.assistant.app.util.LatencyTool
@@ -30,9 +31,26 @@ internal class ToolRunner(
     private val knowledge: KnowledgeManager,
     private val historyTools: () -> ConversationHistoryTools,
     /** A running or warm session was built with the old personality; discard it. */
-    private val onPersonalityChanged: () -> Unit
+    private val onPersonalityChanged: () -> Unit,
+    /** Called with the fact after a note is newly saved, so older notes it duplicates or replaces can be tidied in the background. */
+    private val onMemorySaved: (String) -> Unit = {},
+    /** Checks a tap or typing step before it runs; null when the setting is off. Must return Proceed if it cannot decide. */
+    private val checkAction: suspend (DeviceTool, JSONObject) -> ActionVerdict = { _, _ -> ActionVerdict.Proceed },
+    /** Looks at the screen after a step that worked; returns a line to add to the result, or null. */
+    private val checkScreenAfter: suspend (DeviceTool, JSONObject) -> String? = { _, _ -> null },
+    /** Names the skill that fits the user's request when the model asked for one that does not exist; null when unsure. */
+    private val suggestSkill: suspend () -> String? = { null }
 ) {
     companion object {
+        /** Screen steps that carry text, so they can be checked against what the user asked for. */
+        val CHECKED_TOOLS = setOf(DeviceTool.CLICK_TEXT, DeviceTool.TYPE_TEXT)
+
+        /** Screen steps after which the screen can be checked to see whether the step worked. */
+        val STEP_TOOLS = setOf(
+            DeviceTool.CLICK_TEXT, DeviceTool.CLICK_ITEM, DeviceTool.TAP_POSITION, DeviceTool.TYPE_TEXT,
+            DeviceTool.PRESS_ENTER, DeviceTool.SWIPE, DeviceTool.LONG_PRESS
+        )
+
         /** What the home screen shows while a tool runs, e.g. "Set alarm". */
         fun displayName(functionName: String): String = when {
             functionName == "search_knowledge_base" -> "Searching knowledge"
@@ -53,12 +71,19 @@ internal class ToolRunner(
         } else if (call.name == SET_PERSONALITY_TOOL) {
             runToolSafely(call.name) { runPersonalityTool(call.args) }
         } else if (call.name == USE_SKILL_TOOL) {
-            SkillRegistry.use(call.args.optString("skill"), call.args.optString("task"))
+            runSkillTool(call.args.optString("skill"), call.args.optString("task"))
         } else if (call.name != "search_knowledge_base") {
             "status=unknown_tool\nThere is no tool named ${call.name}. Do not call it again; tell the user you cannot do that with the tools you have."
         } else {
             knowledge.runSearchTool(call.args.optString("query"), call.id, trace)
         }
+    }
+
+    private suspend fun runSkillTool(skill: String, task: String): String {
+        val result = SkillRegistry.use(skill, task)
+        if (!result.startsWith("status=not_found\nNo skill with that name")) return result
+        val suggestion = suggestSkill() ?: return result
+        return "$result\nThe closest skill to the user's request is $suggestion. Call $USE_SKILL_TOOL with that name if it fits."
     }
 
     /** save_memory / forget_memory, called by the voice model. Memory is kept on this device only. */
@@ -77,6 +102,7 @@ internal class ToolRunner(
             }
         }
         val result = memoryStore.save(args.optString("fact"), args.optString("replaces").takeIf { it.isNotBlank() })
+        if (result.added) onMemorySaved(args.optString("fact"))
         return buildString {
             append("status=ok\n")
             append(if (result.added) "Saved to memory." else "That is already remembered or empty.")
@@ -124,7 +150,12 @@ internal class ToolRunner(
         if (tool == DeviceTool.SEARCH_CONVERSATION_HISTORY || tool == DeviceTool.RECENT_CONVERSATION) {
             return UntrustedContent.track(tool, runToolSafely(tool.functionName) { runHistoryTool(tool, args) })
         }
-        return UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
+        val verdict = if (tool in CHECKED_TOOLS) checkAction(tool, args) else ActionVerdict.Proceed
+        if (verdict is ActionVerdict.Block) return "status=blocked\n${verdict.reason}"
+        var result = UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
+        if (verdict is ActionVerdict.Warn) result = "$result\nwarning=${verdict.note}"
+        if (tool in STEP_TOOLS && result.startsWith("status=ok")) checkScreenAfter(tool, args)?.let { result = "$result\n$it" }
+        return result
     }
 
     private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {

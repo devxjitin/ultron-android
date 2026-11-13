@@ -112,6 +112,22 @@ class MemoryStore(private val context: Context) {
         }
     }
 
+    /**
+     * Removes notes the assistant found to be duplicated or contradicted by a newer one. Unlike [remove] they are
+     * kept in the restorable log, so the user can bring one back. Returns the notes that were removed.
+     */
+    suspend fun removeOutdated(ids: Set<String>): List<MemoryItem> {
+        var gone = emptyList<MemoryItem>()
+        context.memoryDataStore.edit { prefs ->
+            val existing = decode(prefs[itemsKey])
+            gone = existing.filter { it.id in ids }
+            if (gone.isEmpty()) return@edit
+            prefs[itemsKey] = encode(existing.filterNot { it.id in ids })
+            logRemoved(prefs, gone)
+        }
+        return gone
+    }
+
     suspend fun remove(id: String) {
         context.memoryDataStore.edit { prefs ->
             prefs[itemsKey] = encode(decode(prefs[itemsKey]).filterNot { it.id == id })
