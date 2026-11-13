@@ -28,6 +28,8 @@ import com.assistant.app.data.DeviceTool
 import com.assistant.app.data.Personalities
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.MemoryStore
+import com.assistant.app.decisions.DecisionsClient
+import com.assistant.app.decisions.MemoryTidier
 import com.assistant.app.data.DeviceToolRunner
 import com.assistant.app.data.saveDeveloperConfiguration
 import com.assistant.app.data.MicSensitivity
@@ -794,6 +796,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether new memory notes are checked against old ones for duplicates and contradictions. Read at save time. */
+    fun onDecisionsMemoryToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Memory tidying on" else "Memory tidying off") {
+            settingsStore.setDecisionsMemoryEnabled(enabled)
+        }
+    }
+
     /** Whether knowledge search lets Gemini Decisions pick the passages. Read at search time; nothing to rebuild. */
     fun onDecisionsRerankToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Smarter document search on" else "Smarter document search off") {
@@ -840,8 +849,25 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 currentSessionId = session.historySessionId
             )
         },
-        onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() }
+        onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() },
+        onMemorySaved = { fact -> tidyMemoryInBackground(fact) }
     )
+
+    /** Removes older notes the new one duplicates or replaces. Off by default; a failed call changes nothing. */
+    private fun tidyMemoryInBackground(fact: String) {
+        if (!_uiState.value.settings.decisionsMemoryEnabled) return
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val removed = MemoryTidier(DecisionsClient(key)).tidy(memoryStore, fact)
+                if (removed.isNotEmpty()) withContext(Dispatchers.Main) { session.invalidateWarmSessionAndReprewarm() }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("AssistantMemory", "Memory tidy skipped", e)
+            }
+        }
+    }
 
     fun onSaveDeveloperChanges(
         apiKey: String,

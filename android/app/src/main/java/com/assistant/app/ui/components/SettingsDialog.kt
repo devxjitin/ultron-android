@@ -100,6 +100,7 @@ fun SettingsPage(
     onBargeInToggled: (Boolean) -> Unit,
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onDecisionsRerankToggled: (Boolean) -> Unit = {},
+    onDecisionsMemoryToggled: (Boolean) -> Unit = {},
     onOwnerNameChanged: (String) -> Unit = {},
     onPersonalitySelected: (String) -> Unit = {},
     onSaveDeveloperChanges: (String, String, Int) -> Unit,
@@ -294,7 +295,7 @@ fun SettingsPage(
                     GeneralSettingsContent(
                         settings, onLiveModelSelected, onVoiceSelected, onLanguageSelected,
                         onMicSensitivitySelected, onBargeInToggled, onAnnounceNotificationsToggled, onOwnerNameChanged, onPersonalitySelected,
-                        onDecisionsRerankToggled
+                        onDecisionsRerankToggled, onDecisionsMemoryToggled
                     )
                     // The old Developer page now lives at the end of Settings.
                     Spacer(Modifier.height(24.dp))
@@ -640,7 +641,8 @@ private fun GeneralSettingsContent(
     onAnnounceNotificationsToggled: (Boolean) -> Unit,
     onOwnerNameChanged: (String) -> Unit,
     onPersonalitySelected: (String) -> Unit,
-    onDecisionsRerankToggled: (Boolean) -> Unit
+    onDecisionsRerankToggled: (Boolean) -> Unit,
+    onDecisionsMemoryToggled: (Boolean) -> Unit
 ) {
     val micHints = mapOf(
         MicSensitivity.LOW to "Cuts background noise",
@@ -709,6 +711,12 @@ private fun GeneralSettingsContent(
             title = "Smarter document search",
             hint = "Asks Gemini which passages really answer your question. Adds about a second to document searches. The passages are sent to Gemini, using your own key.",
             checked = settings.decisionsRerankEnabled, onChange = onDecisionsRerankToggled
+        )
+        Spacer(Modifier.height(12.dp))
+        ToggleCard(
+            title = "Tidy memory notes",
+            hint = "After a new note is saved, Gemini checks older notes and removes ones that say the same or are now out of date. You can restore them on the Memory page. Notes are sent to Gemini, using your own key.",
+            checked = settings.decisionsMemoryEnabled, onChange = onDecisionsMemoryToggled
         )
         DefaultAssistantSection()
     }

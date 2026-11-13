@@ -69,6 +69,7 @@ class AssistantActions(
     val onBargeInToggled: (Boolean) -> Unit,
     val onAnnounceNotificationsToggled: (Boolean) -> Unit,
     val onDecisionsRerankToggled: (Boolean) -> Unit = {},
+    val onDecisionsMemoryToggled: (Boolean) -> Unit = {},
     val onOwnerNameChanged: (String) -> Unit = {},
     val onPersonalitySelected: (String) -> Unit = {},
     val onSaveDeveloperChanges: (String, String, Int) -> Unit,

@@ -30,7 +30,9 @@ internal class ToolRunner(
     private val knowledge: KnowledgeManager,
     private val historyTools: () -> ConversationHistoryTools,
     /** A running or warm session was built with the old personality; discard it. */
-    private val onPersonalityChanged: () -> Unit
+    private val onPersonalityChanged: () -> Unit,
+    /** Called with the fact after a note is newly saved, so older notes it duplicates or replaces can be tidied in the background. */
+    private val onMemorySaved: (String) -> Unit = {}
 ) {
     companion object {
         /** What the home screen shows while a tool runs, e.g. "Set alarm". */
@@ -77,6 +79,7 @@ internal class ToolRunner(
             }
         }
         val result = memoryStore.save(args.optString("fact"), args.optString("replaces").takeIf { it.isNotBlank() })
+        if (result.added) onMemorySaved(args.optString("fact"))
         return buildString {
             append("status=ok\n")
             append(if (result.added) "Saved to memory." else "That is already remembered or empty.")
