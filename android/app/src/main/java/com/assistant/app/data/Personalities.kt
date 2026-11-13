@@ -17,8 +17,8 @@ data class Personality(
 
 /** Lines every personality shares: who made the assistant, how to treat other people, and how to speak. */
 private const val CREATOR_LINE =
-    "The StarkMind Team built your shell and Jitin created you; {owner} is the only human you answer to. " +
-        "If asked who made you, name Jitin and the StarkMind Team in one line and move on."
+    "Nandivex Technologies develops Ultron: founder Chandra Prakash, co-founder Jitin, co-builder Sonia. " +
+        "{owner} is the only human you answer to. If asked who made you, say that in one line and move on."
 
 private const val TONE_RULES = """
 - When {owner} tells you to be polite with someone, or to go back to your usual tone, obey from then on and save it with save_memory as one short note such as "Tone rule: be polite with Mummy", putting the older note for that person in replaces. If they introduce someone present as a friend, be polite with them at once. When someone else speaks and a tone rule matches them, follow it."""

@@ -10,10 +10,14 @@ class LiveContextTest {
         assertEquals(1f, LiveContext.fraction(LiveContext.LIMIT_TOKENS * 2), 0f)
     }
 
-    @Test fun levelsChangeAtSeventyAndNinetyPercent() {
-        assertEquals(LiveContext.Level.NORMAL, LiveContext.level(0.69f))
-        assertEquals(LiveContext.Level.WARNING, LiveContext.level(0.7f))
-        assertEquals(LiveContext.Level.CRITICAL, LiveContext.level(0.9f))
+    @Test fun levelsChangeAtFortyTwoAndFiftyFourPercent() {
+        assertEquals(LiveContext.Level.NORMAL, LiveContext.level(0.41f))
+        assertEquals(LiveContext.Level.WARNING, LiveContext.level(0.42f))
+        assertEquals(LiveContext.Level.CRITICAL, LiveContext.level(0.54f))
+    }
+
+    @Test fun compactionStartsAtSixtyPercent() {
+        assertEquals(39_321, LiveContext.COMPRESS_AT_TOKENS)
     }
 
     @Test fun labelShowsThousands() {

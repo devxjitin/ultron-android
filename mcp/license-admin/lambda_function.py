@@ -282,7 +282,7 @@ def _key_email(name, to, keys, plan, days, paid=0):
         f"Plan: {plan.title()}.{paid_text} Each key works on one phone at a time and {validity}.", "",
         "Getting started", *[f"{i}. {step}" for i, step in enumerate(steps, 1)], "",
         "Keep this email safe: anyone who has the key can use it." + (f" Need help? Write to {support}." if support else ""),
-        "", "Ultron by StarkMind",
+        "", "Ultron by Nandivex Technologies",
     ])
     esc = html.escape
     key_rows = "".join(
