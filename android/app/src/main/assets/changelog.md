@@ -3,6 +3,12 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.24.0 - 2026-11-13
+
+### Added
+- Five optional checks in Settings, all off by default, that use Gemini's Decisions API with your own key: smarter document search (picks the passages that really answer you), tidy memory notes (removes older notes a new one repeats or replaces; you can restore them), check screen actions (stops a tap or typing step that does not match what you asked), check the screen after each step (Android 11 or newer), and match skills to requests.
+- Each check's hint says what it sends to Gemini. Screen checks are skipped for password fields and for apps that block screenshots.
+
 ## 1.23.8 - 2026-11-10
 
 ### Changed

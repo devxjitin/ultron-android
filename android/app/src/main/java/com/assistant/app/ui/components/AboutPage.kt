@@ -152,7 +152,8 @@ fun AboutPage(
         PageLabel("Privacy")
         PageCard {
             Text(
-                "Your memories and settings stay on this phone. What you say goes to Gemini to reply.",
+                "Your memories and settings stay on this phone. What you say goes to Gemini to reply. " +
+                    "If you turn on the optional checks in Settings, the text, notes or small screen picture a check needs go to Gemini too.",
                 color = AssistantTextSecondary, fontSize = 14.sp, lineHeight = 21.sp
             )
         }
