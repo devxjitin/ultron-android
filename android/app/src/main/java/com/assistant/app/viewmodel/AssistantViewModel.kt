@@ -24,10 +24,14 @@ import com.assistant.app.data.ConversationTurn
 import com.assistant.app.data.UsageDay
 import com.assistant.app.data.UsageStore
 import com.assistant.app.data.DeveloperSaveFailedException
+import com.assistant.app.AssistantAccessibilityService
 import com.assistant.app.data.DeviceTool
+import org.json.JSONObject
 import com.assistant.app.data.Personalities
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.MemoryStore
+import com.assistant.app.decisions.ActionChecker
+import com.assistant.app.decisions.ActionVerdict
 import com.assistant.app.decisions.DecisionsClient
 import com.assistant.app.decisions.MemoryTidier
 import com.assistant.app.data.DeviceToolRunner
@@ -796,6 +800,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Whether tap and typing steps are checked against what the user said. Read at action time. */
+    fun onDecisionsActionCheckToggled(enabled: Boolean) {
+        launchPersist(if (enabled) "Action check on" else "Action check off") {
+            settingsStore.setDecisionsActionCheckEnabled(enabled)
+        }
+    }
+
     /** Whether new memory notes are checked against old ones for duplicates and contradictions. Read at save time. */
     fun onDecisionsMemoryToggled(enabled: Boolean) {
         launchPersist(if (enabled) "Memory tidying on" else "Memory tidying off") {
@@ -850,8 +861,34 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             )
         },
         onPersonalityChanged = { session.invalidateWarmSessionAndReprewarm() },
-        onMemorySaved = { fact -> tidyMemoryInBackground(fact) }
+        onMemorySaved = { fact -> tidyMemoryInBackground(fact) },
+        checkAction = { tool, args -> checkScreenAction(tool, args) }
     )
+
+    private var cachedActionChecker: Pair<String, ActionChecker>? = null
+
+    /** Checks a tap or typing step against what the user said. Off by default; any problem means Proceed. */
+    private suspend fun checkScreenAction(tool: DeviceTool, args: JSONObject): ActionVerdict {
+        if (!_uiState.value.settings.decisionsActionCheckEnabled) return ActionVerdict.Proceed
+        val key = resolveApiKey().takeIf { it.isNotBlank() } ?: return ActionVerdict.Proceed
+        val service = AssistantAccessibilityService.instance ?: return ActionVerdict.Proceed
+        // Never send what is typed into, or tapped on, a password field.
+        if (service.focusedFieldIsPassword()) return ActionVerdict.Proceed
+        val (action, target) = when (tool) {
+            DeviceTool.CLICK_TEXT -> "tap" to args.optString("text")
+            DeviceTool.TYPE_TEXT -> "type" to args.optString("text")
+            else -> return ActionVerdict.Proceed
+        }
+        val checker = cachedActionChecker?.takeIf { it.first == key }?.second
+            ?: ActionChecker(DecisionsClient(key)).also { cachedActionChecker = key to it }
+        return try {
+            checker.check(service.currentPackage().orEmpty(), action, target, session.currentUserRequest())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ActionVerdict.Proceed
+        }
+    }
 
     /** Removes older notes the new one duplicates or replaces. Off by default; a failed call changes nothing. */
     private fun tidyMemoryInBackground(fact: String) {

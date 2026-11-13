@@ -704,6 +704,9 @@ internal class VoiceSessionController(
         }
     }
 
+    /** What the user has said so far in this turn (transcribed), for checking tool steps against it. */
+    fun currentUserRequest(): String = userTextBuffer.toString().trim()
+
     private fun finalizeTurnIfAny() {
         val userText = userTextBuffer.toString().trim()
         val assistantText = assistantTextBuffer.toString().trim()

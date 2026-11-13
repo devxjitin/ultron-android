@@ -102,6 +102,10 @@ class AssistantAccessibilityService : AccessibilityService() {
     /** Package name of the app currently on screen, or null when nothing is readable. */
     fun currentPackage(): String? = frontRoot()?.packageName?.toString()
 
+    /** True while a password field has input focus; nothing about the screen is sent anywhere for checking then. */
+    fun focusedFieldIsPassword(): Boolean =
+        frontRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.isPassword == true
+
     /** A numbered list of what is visible, or null when the screen cannot be read. */
     fun readScreen(): String? {
         val root = frontRoot() ?: return null

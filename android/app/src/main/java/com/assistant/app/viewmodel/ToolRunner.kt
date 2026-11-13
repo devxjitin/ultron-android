@@ -12,6 +12,7 @@ import com.assistant.app.data.Personalities
 import com.assistant.app.data.SET_PERSONALITY_TOOL
 import com.assistant.app.data.SkillRegistry
 import com.assistant.app.data.UntrustedContent
+import com.assistant.app.decisions.ActionVerdict
 import com.assistant.app.data.USE_SKILL_TOOL
 import com.assistant.app.network.GeminiLiveClient
 import com.assistant.app.util.LatencyTool
@@ -32,9 +33,14 @@ internal class ToolRunner(
     /** A running or warm session was built with the old personality; discard it. */
     private val onPersonalityChanged: () -> Unit,
     /** Called with the fact after a note is newly saved, so older notes it duplicates or replaces can be tidied in the background. */
-    private val onMemorySaved: (String) -> Unit = {}
+    private val onMemorySaved: (String) -> Unit = {},
+    /** Checks a tap or typing step before it runs; null when the setting is off. Must return Proceed if it cannot decide. */
+    private val checkAction: suspend (DeviceTool, JSONObject) -> ActionVerdict = { _, _ -> ActionVerdict.Proceed }
 ) {
     companion object {
+        /** Screen steps that carry text, so they can be checked against what the user asked for. */
+        val CHECKED_TOOLS = setOf(DeviceTool.CLICK_TEXT, DeviceTool.TYPE_TEXT)
+
         /** What the home screen shows while a tool runs, e.g. "Set alarm". */
         fun displayName(functionName: String): String = when {
             functionName == "search_knowledge_base" -> "Searching knowledge"
@@ -127,7 +133,10 @@ internal class ToolRunner(
         if (tool == DeviceTool.SEARCH_CONVERSATION_HISTORY || tool == DeviceTool.RECENT_CONVERSATION) {
             return UntrustedContent.track(tool, runToolSafely(tool.functionName) { runHistoryTool(tool, args) })
         }
-        return UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
+        val verdict = if (tool in CHECKED_TOOLS) checkAction(tool, args) else ActionVerdict.Proceed
+        if (verdict is ActionVerdict.Block) return "status=blocked\n${verdict.reason}"
+        val result = UntrustedContent.track(tool, deviceToolRunner.run(tool, args))
+        return if (verdict is ActionVerdict.Warn) "$result\nwarning=${verdict.note}" else result
     }
 
     private suspend fun runHistoryTool(tool: DeviceTool, args: JSONObject): String = withContext(Dispatchers.IO) {

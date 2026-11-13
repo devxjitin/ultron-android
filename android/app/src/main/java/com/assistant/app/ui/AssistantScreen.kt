@@ -380,6 +380,7 @@ fun AssistantScreen(
                     onAnnounceNotificationsToggled = actions.onAnnounceNotificationsToggled,
                     onDecisionsRerankToggled = actions.onDecisionsRerankToggled,
                     onDecisionsMemoryToggled = actions.onDecisionsMemoryToggled,
+                    onDecisionsActionCheckToggled = actions.onDecisionsActionCheckToggled,
                     onOwnerNameChanged = actions.onOwnerNameChanged,
                     onPersonalitySelected = actions.onPersonalitySelected,
                     onClearApiKey = actions.onClearApiKey,
