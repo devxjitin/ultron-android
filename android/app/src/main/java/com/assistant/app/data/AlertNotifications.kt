@@ -4,9 +4,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import com.assistant.app.AlarmRingService
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Posts the assistant's own alert notifications (tool notifications and timed reminders). */
+/** Posts the assistant's own alert notifications (tool notifications and timed reminders) and starts alarms ringing. */
 object AlertNotifications {
     private const val CHANNEL_ID = "assistant_alerts"
 
@@ -17,10 +18,18 @@ object AlertNotifications {
     private val nextId = AtomicInteger(2000)
 
     /**
-     * Returns false when notifications are switched off for the app.
-     * An [urgent] alert (a reminder) pops over the screen, makes a sound and vibrates, and stays until it is dismissed.
+     * Returns false when nothing could be shown.
+     * An alarm or timer ([kind]) rings through [AlarmRingService] until it is stopped; if Android refuses to start that,
+     * it falls back to a notification. An [urgent] alert (a reminder) pops over the screen, makes a sound and vibrates.
      */
-    fun show(context: Context, title: String, message: String, urgent: Boolean = false, kind: String? = null): Boolean {
+    fun show(context: Context, title: String, message: String, urgent: Boolean = false, kind: String? = null, label: String = ""): Boolean {
+        val ringing = kind == OwnClock.KIND_ALARM || kind == OwnClock.KIND_TIMER
+        if (ringing && AlarmRingService.start(context, kind!!, label)) return true
+        return post(context, title, message, urgent, kind)
+    }
+
+    /** Posts the notification itself. Returns false when notifications are switched off for the app. */
+    fun post(context: Context, title: String, message: String, urgent: Boolean, kind: String?): Boolean {
         val manager = context.getSystemService(NotificationManager::class.java)
         if (!manager.areNotificationsEnabled()) return false
         val ringing = kind == OwnClock.KIND_ALARM || kind == OwnClock.KIND_TIMER
@@ -54,8 +63,8 @@ object AlertNotifications {
         if (ringing) builder.setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PUBLIC)
         else if (urgent) builder.setCategory(Notification.CATEGORY_REMINDER).setVisibility(Notification.VISIBILITY_PUBLIC)
         val notification = builder.build()
-        // An alarm keeps ringing until the notification is dismissed.
-        if (kind == OwnClock.KIND_ALARM) notification.flags = notification.flags or Notification.FLAG_INSISTENT
+        // Without the ringing service, the notification itself keeps sounding until it is dismissed.
+        if (ringing) notification.flags = notification.flags or Notification.FLAG_INSISTENT
         manager.notify(nextId.getAndIncrement(), notification)
         return true
     }

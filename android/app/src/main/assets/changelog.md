@@ -3,6 +3,17 @@
 The newest version goes first. The first "## x.y.z" heading below is the app's version: the build, the update
 notes and the About page all read it from here. A date after the version is optional.
 
+## 1.25.0 - 2026-11-13
+
+### Changed
+- Alarms and timers are now fully Ultron's own and ring like a real alarm: the sound plays on the alarm volume until you stop it, a Stop and Snooze screen shows over the lock screen, and the phone wakes for them even in deep sleep. They no longer depend on the clock app or on notification sounds.
+- Say "stop the alarm" or "stop the timer" while one is ringing and it goes quiet. Snooze rings again in 10 minutes. An alarm nobody answers stops after 5 minutes and leaves a note.
+
+### Fixed
+- Setting an alarm or timer while Ultron's notifications are off no longer says "set" and then stays silent. Ultron asks for notifications first.
+- Reminders, alarms and timers no longer mix: the reminder list shows only reminders, and cancelling or changing a reminder can no longer remove an alarm or timer.
+- The Alarms & timers connector page no longer says they are set in your clock app.
+
 ## 1.24.1 - 2026-11-13
 
 ### Changed
